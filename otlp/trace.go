@@ -21,9 +21,9 @@ const (
 	traceIDLongLength  = 16
 )
 
-type OTLPTranslator struct{}
+type TraceTranslator struct{}
 
-func (t *OTLPTranslator) TranslateHttpTraceRequest(req *http.Request, zstdDecoders chan *zstd.Decoder) ([]map[string]interface{}, error) {
+func (t *TraceTranslator) TranslateHttpTraceRequest(req *http.Request, zstdDecoders chan *zstd.Decoder) ([]map[string]interface{}, error) {
 	contentType := req.Header.Get("content-type")
 	if contentType != "application/protobuf" && contentType != "application/x-protobuf" {
 		return nil, errors.New("invalid content-type")
@@ -38,7 +38,7 @@ func (t *OTLPTranslator) TranslateHttpTraceRequest(req *http.Request, zstdDecode
 	return t.TranslateGrpcTraceRequest(request)
 }
 
-func (t *OTLPTranslator) TranslateGrpcTraceRequest(request *collectorTrace.ExportTraceServiceRequest) ([]map[string]interface{}, error) {
+func (t *TraceTranslator) TranslateGrpcTraceRequest(request *collectorTrace.ExportTraceServiceRequest) ([]map[string]interface{}, error) {
 	batch := []map[string]interface{}{}
 	for _, resourceSpan := range request.ResourceSpans {
 		resourceAttrs := make(map[string]interface{})
