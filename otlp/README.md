@@ -1,6 +1,6 @@
 # OTLP Translator
 
-This module provides an easy to use way of converting OTLP requests into easily ingestible data structures (eg `[]map[string]{}`).
+This module provides an easy to use way of converting OTLP requests into easily ingestible data structures (eg `[]map[string]interface{}`).
 This makes consuming the OTLP wire format easier and more consistent.
 
 ### Traces
