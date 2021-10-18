@@ -1,5 +1,5 @@
-# Default Community Health Files
+[![OSS Lifecycle](https://img.shields.io/osslifecycle/honeycombio/husky)](https://github.com/honeycombio/home/blob/main/honeycomb-oss-lifecycle-and-practices.md)
 
-This repository contains default community health files for repositories in the Honeycomb organization and will automatically be picked up if they are not overwritten.
+# Husky
 
-More details on this repository structure can be found here: https://docs.github.com/en/github/building-a-strong-community/creating-a-default-community-health-file
+A place to store translation modules to convert custom wire formats to Honeycomb formatted data structures.
