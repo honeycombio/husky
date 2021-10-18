@@ -1,13 +1,20 @@
 package otlp
 
 import (
+	"bytes"
+	"compress/gzip"
 	"context"
 	"encoding/hex"
+	"errors"
+	"io"
+	"io/ioutil"
+	"net/http"
 	"time"
 
+	"github.com/golang/protobuf/proto"
+	"github.com/klauspost/compress/zstd"
 	collectorTrace "go.opentelemetry.io/proto/otlp/collector/trace/v1"
 	trace "go.opentelemetry.io/proto/otlp/trace/v1"
-	"google.golang.org/grpc/metadata"
 )
 
 const (
@@ -15,31 +22,24 @@ const (
 	traceIDLongLength  = 16
 )
 
-type RequestInfo struct {
-	ApiKey     string
-	Dataset    string
-	ProxyToken string
-
-	UserAgent   string
-	ContentType string
-}
-
 type OTLPTranslator struct{}
 
-func (t *OTLPTranslator) GetRequestInfo(ctx context.Context) RequestInfo {
-	ri := RequestInfo{
-		ContentType: "application/grpc",
+func (t *OTLPTranslator) TranslateHttpTraceRequest(req *http.Request, zstdDecoders chan *zstd.Decoder) ([]map[string]interface{}, error) {
+	contentType := req.Header.Get("content-type")
+	if contentType != "application/protobuf" && contentType != "application/x-protobuf" {
+		return nil, errors.New("invalid content-type")
 	}
-	if md, ok := metadata.FromIncomingContext(ctx); ok {
-		ri.ApiKey = getValueFromMetadata(md, "x-honeycomb-team")
-		ri.Dataset = getValueFromMetadata(md, "x-honeycomb-dataset")
-		ri.ProxyToken = getValueFromMetadata(md, "x-honeycomb-proxy-token")
-		ri.UserAgent = getValueFromMetadata(md, "user-agent")
+
+	request, cleanup, err := parseOTLPBody(req, zstdDecoders)
+	defer cleanup()
+	if err != nil {
+		return nil, errors.New("parse error")
 	}
-	return ri
+
+	return t.TranslateGrpcTraceRequest(req.Context(), request)
 }
 
-func (t *OTLPTranslator) Translate(ctx context.Context, request *collectorTrace.ExportTraceServiceRequest) ([]map[string]interface{}, error) {
+func (t *OTLPTranslator) TranslateGrpcTraceRequest(ctx context.Context, request *collectorTrace.ExportTraceServiceRequest) ([]map[string]interface{}, error) {
 	batch := []map[string]interface{}{}
 	for _, resourceSpan := range request.ResourceSpans {
 		resourceAttrs := make(map[string]interface{})
@@ -220,4 +220,53 @@ func getSpanStatusCode(status *trace.Status) trace.Status_StatusCode {
 		return trace.Status_STATUS_CODE_ERROR
 	}
 	return status.Code
+}
+
+func parseOTLPBody(r *http.Request, zstdDecoders chan *zstd.Decoder) (request *collectorTrace.ExportTraceServiceRequest, cleanup func(), err error) {
+	cleanup = func() { /* empty cleanup */ }
+
+	defer r.Body.Close()
+	bodyBytes, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		return nil, cleanup, err
+	}
+	bodyReader := bytes.NewReader(bodyBytes)
+
+	var reader io.Reader
+	switch r.Header.Get("Content-Encoding") {
+	case "gzip":
+		var err error
+		reader, err = gzip.NewReader(bodyReader)
+		if err != nil {
+			return nil, cleanup, err
+		}
+	case "zstd":
+		zReader := <-zstdDecoders
+		cleanup = func() {
+			zReader.Reset(nil)
+			zstdDecoders <- zReader
+		}
+
+		err = zReader.Reset(bodyReader)
+		if err != nil {
+			return nil, cleanup, err
+		}
+
+		reader = zReader
+	default:
+		reader = bodyReader
+	}
+
+	bytes, err := ioutil.ReadAll(reader)
+	if err != nil {
+		return nil, cleanup, err
+	}
+
+	request = &collectorTrace.ExportTraceServiceRequest{}
+	err = proto.Unmarshal(bytes, request)
+	if err != nil {
+		return nil, cleanup, err
+	}
+
+	return request, cleanup, nil
 }

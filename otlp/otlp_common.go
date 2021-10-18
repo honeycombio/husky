@@ -1,9 +1,52 @@
 package otlp
 
 import (
+	"context"
+	"net/http"
+
 	common "go.opentelemetry.io/proto/otlp/common/v1"
 	"google.golang.org/grpc/metadata"
 )
+
+const (
+	apiKeyKey      = "x-honeycomb-team"
+	datasetKey     = "x-honeycomb-dataset"
+	proxytokenKey  = "x-honeycomb-proxy-token"
+	userAgentKey   = "user-agent"
+	contentTypeKey = "content-type"
+)
+
+type RequestInfo struct {
+	ApiKey     string
+	Dataset    string
+	ProxyToken string
+
+	UserAgent   string
+	ContentType string
+}
+
+func GetRequestInfoFromGrpcMetadata(ctx context.Context) RequestInfo {
+	ri := RequestInfo{
+		ContentType: "application/grpc",
+	}
+	if md, ok := metadata.FromIncomingContext(ctx); ok {
+		ri.ApiKey = getValueFromMetadata(md, apiKeyKey)
+		ri.Dataset = getValueFromMetadata(md, datasetKey)
+		ri.ProxyToken = getValueFromMetadata(md, proxytokenKey)
+		ri.UserAgent = getValueFromMetadata(md, userAgentKey)
+	}
+	return ri
+}
+
+func GetRequestInfoFromHttpHeaders(r *http.Request) RequestInfo {
+	return RequestInfo{
+		ApiKey:      r.Header.Get(apiKeyKey),
+		Dataset:     r.Header.Get(datasetKey),
+		ProxyToken:  r.Header.Get(proxytokenKey),
+		UserAgent:   r.Header.Get(userAgentKey),
+		ContentType: r.Header.Get(contentTypeKey),
+	}
+}
 
 func getValueFromMetadata(md metadata.MD, key string) string {
 	if vals := md.Get(key); len(vals) > 0 {
