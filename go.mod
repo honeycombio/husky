@@ -1,4 +1,4 @@
-module github.com/honeycombio/husky/otlp
+module github.com/honeycombio/husky
 
 go 1.17
 
