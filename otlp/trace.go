@@ -3,7 +3,6 @@ package otlp
 import (
 	"bytes"
 	"compress/gzip"
-	"context"
 	"encoding/hex"
 	"errors"
 	"io"
@@ -36,10 +35,10 @@ func (t *OTLPTranslator) TranslateHttpTraceRequest(req *http.Request, zstdDecode
 		return nil, errors.New("parse error")
 	}
 
-	return t.TranslateGrpcTraceRequest(req.Context(), request)
+	return t.TranslateGrpcTraceRequest(request)
 }
 
-func (t *OTLPTranslator) TranslateGrpcTraceRequest(ctx context.Context, request *collectorTrace.ExportTraceServiceRequest) ([]map[string]interface{}, error) {
+func (t *OTLPTranslator) TranslateGrpcTraceRequest(request *collectorTrace.ExportTraceServiceRequest) ([]map[string]interface{}, error) {
 	batch := []map[string]interface{}{}
 	for _, resourceSpan := range request.ResourceSpans {
 		resourceAttrs := make(map[string]interface{})
