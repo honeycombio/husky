@@ -8,12 +8,13 @@ import (
 	"io"
 	"io/ioutil"
 	"net/http"
+	"sync"
 	"time"
 
-	"github.com/golang/protobuf/proto"
 	"github.com/klauspost/compress/zstd"
 	collectorTrace "go.opentelemetry.io/proto/otlp/collector/trace/v1"
 	trace "go.opentelemetry.io/proto/otlp/trace/v1"
+	"google.golang.org/protobuf/proto"
 )
 
 const (
@@ -21,13 +22,19 @@ const (
 	traceIDLongLength  = 16
 )
 
-func TranslateHttpTraceRequest(req *http.Request, zstdDecoders chan *zstd.Decoder) ([]map[string]interface{}, error) {
+var decoderPool = sync.Pool{
+	New: func() interface{} {
+		return new(zstd.Decoder)
+	},
+}
+
+func TranslateHttpTraceRequest(req *http.Request) ([]map[string]interface{}, error) {
 	contentType := req.Header.Get("content-type")
 	if contentType != "application/protobuf" && contentType != "application/x-protobuf" {
 		return nil, errors.New("invalid content-type")
 	}
 
-	request, cleanup, err := parseOTLPBody(req, zstdDecoders)
+	request, cleanup, err := parseOTLPBody(req)
 	defer cleanup()
 	if err != nil {
 		return nil, errors.New("parse error")
@@ -219,7 +226,7 @@ func getSpanStatusCode(status *trace.Status) trace.Status_StatusCode {
 	return status.Code
 }
 
-func parseOTLPBody(r *http.Request, zstdDecoders chan *zstd.Decoder) (request *collectorTrace.ExportTraceServiceRequest, cleanup func(), err error) {
+func parseOTLPBody(r *http.Request) (request *collectorTrace.ExportTraceServiceRequest, cleanup func(), err error) {
 	cleanup = func() { /* empty cleanup */ }
 
 	defer r.Body.Close()
@@ -238,10 +245,10 @@ func parseOTLPBody(r *http.Request, zstdDecoders chan *zstd.Decoder) (request *c
 			return nil, cleanup, err
 		}
 	case "zstd":
-		zReader := <-zstdDecoders
+		zReader := decoderPool.Get().(*zstd.Decoder)
 		cleanup = func() {
 			zReader.Reset(nil)
-			zstdDecoders <- zReader
+			decoderPool.Put(zReader)
 		}
 
 		err = zReader.Reset(bodyReader)
