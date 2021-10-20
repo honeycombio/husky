@@ -8,7 +8,6 @@ import (
 	"io"
 	"io/ioutil"
 	"net/http"
-	"sync"
 	"time"
 
 	"github.com/klauspost/compress/zstd"
@@ -22,20 +21,13 @@ const (
 	traceIDLongLength  = 16
 )
 
-var decoderPool = sync.Pool{
-	New: func() interface{} {
-		return new(zstd.Decoder)
-	},
-}
-
 func TranslateHttpTraceRequest(req *http.Request) ([]map[string]interface{}, error) {
 	contentType := req.Header.Get("content-type")
 	if contentType != "application/protobuf" && contentType != "application/x-protobuf" {
 		return nil, errors.New("invalid content-type")
 	}
 
-	request, cleanup, err := parseOTLPBody(req)
-	defer cleanup()
+	request, err := parseOTLPBody(req)
 	if err != nil {
 		return nil, errors.New("parse error")
 	}
@@ -226,13 +218,11 @@ func getSpanStatusCode(status *trace.Status) trace.Status_StatusCode {
 	return status.Code
 }
 
-func parseOTLPBody(r *http.Request) (request *collectorTrace.ExportTraceServiceRequest, cleanup func(), err error) {
-	cleanup = func() { /* empty cleanup */ }
-
+func parseOTLPBody(r *http.Request) (request *collectorTrace.ExportTraceServiceRequest, err error) {
 	defer r.Body.Close()
 	bodyBytes, err := ioutil.ReadAll(r.Body)
 	if err != nil {
-		return nil, cleanup, err
+		return nil, err
 	}
 	bodyReader := bytes.NewReader(bodyBytes)
 
@@ -242,18 +232,13 @@ func parseOTLPBody(r *http.Request) (request *collectorTrace.ExportTraceServiceR
 		var err error
 		reader, err = gzip.NewReader(bodyReader)
 		if err != nil {
-			return nil, cleanup, err
+			return nil, err
 		}
 	case "zstd":
-		zReader := decoderPool.Get().(*zstd.Decoder)
-		cleanup = func() {
-			zReader.Reset(nil)
-			decoderPool.Put(zReader)
-		}
-
+		zReader := new(zstd.Decoder)
 		err = zReader.Reset(bodyReader)
 		if err != nil {
-			return nil, cleanup, err
+			return nil, err
 		}
 
 		reader = zReader
@@ -263,14 +248,14 @@ func parseOTLPBody(r *http.Request) (request *collectorTrace.ExportTraceServiceR
 
 	bytes, err := ioutil.ReadAll(reader)
 	if err != nil {
-		return nil, cleanup, err
+		return nil, err
 	}
 
 	request = &collectorTrace.ExportTraceServiceRequest{}
 	err = proto.Unmarshal(bytes, request)
 	if err != nil {
-		return nil, cleanup, err
+		return nil, err
 	}
 
-	return request, cleanup, nil
+	return request, nil
 }
