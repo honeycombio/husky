@@ -22,8 +22,8 @@ const (
 )
 
 func TranslateHttpTraceRequest(req *http.Request) ([]map[string]interface{}, error) {
-	contentType := req.Header.Get("content-type")
-	if contentType != "application/protobuf" && contentType != "application/x-protobuf" {
+	reqInfo := GetRequestInfoFromHttpHeaders(req)
+	if !reqInfo.HasValidContentType() {
 		return nil, errors.New("invalid content-type")
 	}
 

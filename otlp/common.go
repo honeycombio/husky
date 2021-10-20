@@ -25,6 +25,10 @@ type RequestInfo struct {
 	ContentType string
 }
 
+func (ri *RequestInfo) HasValidContentType() bool {
+	return ri.ContentType == "application/protobuf" || ri.ContentType == "application/x-protobuf"
+}
+
 func GetRequestInfoFromGrpcMetadata(ctx context.Context) RequestInfo {
 	ri := RequestInfo{
 		ContentType: "application/grpc",
