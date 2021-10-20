@@ -229,19 +229,15 @@ func parseOTLPBody(r *http.Request) (request *collectorTrace.ExportTraceServiceR
 	var reader io.Reader
 	switch r.Header.Get("Content-Encoding") {
 	case "gzip":
-		var err error
 		reader, err = gzip.NewReader(bodyReader)
 		if err != nil {
 			return nil, err
 		}
 	case "zstd":
-		zReader := new(zstd.Decoder)
-		err = zReader.Reset(bodyReader)
+		reader, err = zstd.NewReader(bodyReader)
 		if err != nil {
 			return nil, err
 		}
-
-		reader = zReader
 	default:
 		reader = bodyReader
 	}
