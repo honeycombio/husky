@@ -31,7 +31,7 @@ func (ri *RequestInfo) HasValidContentType() bool {
 
 func GetRequestInfoFromGrpcMetadata(ctx context.Context) RequestInfo {
 	ri := RequestInfo{
-		ContentType: "application/grpc",
+		ContentType: "application/protobuf",
 	}
 	if md, ok := metadata.FromIncomingContext(ctx); ok {
 		ri.ApiKey = getValueFromMetadata(md, apiKeyKey)
