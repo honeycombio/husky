@@ -3,3 +3,5 @@
 # Husky
 
 A place to store translation modules to convert custom wire formats to Honeycomb formatted data structures.
+
+- [OTLP](./otlp/README.md)
