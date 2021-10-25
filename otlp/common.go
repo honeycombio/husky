@@ -9,13 +9,13 @@ import (
 )
 
 const (
-	apiKeyKey          = "x-honeycomb-team"
-	datasetKey         = "x-honeycomb-dataset"
-	proxytokenKey      = "x-honeycomb-proxy-token"
-	userAgentKey       = "user-agent"
-	contentTypeKey     = "content-type"
-	contentEncoding    = "content-encoding"
-	gRPCAcceptEncoding = "grpc-accept-encoding"
+	apiKeyHeader             = "x-honeycomb-team"
+	datasetHeader            = "x-honeycomb-dataset"
+	proxyTokenHeader         = "x-honeycomb-proxy-token"
+	userAgentHeader          = "user-agent"
+	contentTypeHeader        = "content-type"
+	contentEncodingHeader    = "content-encoding"
+	gRPCAcceptEncodingHeader = "grpc-accept-encoding"
 )
 
 type RequestInfo struct {
@@ -38,25 +38,25 @@ func GetRequestInfoFromGrpcMetadata(ctx context.Context) RequestInfo {
 		ContentType: "application/protobuf",
 	}
 	if md, ok := metadata.FromIncomingContext(ctx); ok {
-		ri.ApiKey = getValueFromMetadata(md, apiKeyKey)
-		ri.Dataset = getValueFromMetadata(md, datasetKey)
-		ri.ProxyToken = getValueFromMetadata(md, proxytokenKey)
-		ri.UserAgent = getValueFromMetadata(md, userAgentKey)
-		ri.ContentEncoding = getValueFromMetadata(md, contentEncoding)
-		ri.GrpcAcceptEncoding = getValueFromMetadata(md, gRPCAcceptEncoding)
+		ri.ApiKey = getValueFromMetadata(md, apiKeyHeader)
+		ri.Dataset = getValueFromMetadata(md, datasetHeader)
+		ri.ProxyToken = getValueFromMetadata(md, proxyTokenHeader)
+		ri.UserAgent = getValueFromMetadata(md, userAgentHeader)
+		ri.ContentEncoding = getValueFromMetadata(md, contentEncodingHeader)
+		ri.GrpcAcceptEncoding = getValueFromMetadata(md, gRPCAcceptEncodingHeader)
 	}
 	return ri
 }
 
 func GetRequestInfoFromHttpHeaders(r *http.Request) RequestInfo {
 	return RequestInfo{
-		ApiKey:             r.Header.Get(apiKeyKey),
-		Dataset:            r.Header.Get(datasetKey),
-		ProxyToken:         r.Header.Get(proxytokenKey),
-		UserAgent:          r.Header.Get(userAgentKey),
-		ContentType:        r.Header.Get(contentTypeKey),
-		ContentEncoding:    r.Header.Get(contentEncoding),
-		GrpcAcceptEncoding: r.Header.Get(gRPCAcceptEncoding),
+		ApiKey:             r.Header.Get(apiKeyHeader),
+		Dataset:            r.Header.Get(datasetHeader),
+		ProxyToken:         r.Header.Get(proxyTokenHeader),
+		UserAgent:          r.Header.Get(userAgentHeader),
+		ContentType:        r.Header.Get(contentTypeHeader),
+		ContentEncoding:    r.Header.Get(contentEncodingHeader),
+		GrpcAcceptEncoding: r.Header.Get(gRPCAcceptEncodingHeader),
 	}
 }
 
