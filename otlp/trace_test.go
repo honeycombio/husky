@@ -12,7 +12,6 @@ import (
 
 	"github.com/honeycombio/husky/test"
 	"github.com/klauspost/compress/zstd"
-	"github.com/mitchellh/mapstructure"
 	"github.com/stretchr/testify/assert"
 	collectortrace "go.opentelemetry.io/proto/otlp/collector/trace/v1"
 	common "go.opentelemetry.io/proto/otlp/common/v1"
@@ -90,7 +89,7 @@ func TestTranslateGrpcTraceRequest(t *testing.T) {
 
 	// span
 	var ev event
-	mapstructure.Decode(events[0], &ev)
+	ev = getEventAtIndex(events, 0)
 	assert.Equal(t, starTimestamp.Nanosecond(), ev.time.Nanosecond())
 	assert.Equal(t, bytesToTraceID(traceID), ev.data["trace.trace_id"])
 	assert.Equal(t, hex.EncodeToString(spanID), ev.data["trace.span_id"])
@@ -103,7 +102,7 @@ func TestTranslateGrpcTraceRequest(t *testing.T) {
 	assert.Equal(t, "resource_attr_val", ev.data["resource_attr"])
 
 	// event
-	mapstructure.Decode(events[1], &ev)
+	ev = getEventAtIndex(events, 1)
 	assert.Equal(t, bytesToTraceID(traceID), ev.data["trace.trace_id"])
 	assert.Equal(t, hex.EncodeToString(spanID), ev.data["trace.parent_id"])
 	assert.Equal(t, "span_event", ev.data["name"])
@@ -113,7 +112,7 @@ func TestTranslateGrpcTraceRequest(t *testing.T) {
 	assert.Equal(t, "resource_attr_val", ev.data["resource_attr"])
 
 	// link
-	mapstructure.Decode(events[2], &ev)
+	ev = getEventAtIndex(events, 2)
 	assert.Equal(t, bytesToTraceID(traceID), ev.data["trace.trace_id"])
 	assert.Equal(t, hex.EncodeToString(spanID), ev.data["trace.parent_id"])
 	assert.Equal(t, bytesToTraceID(linkedTraceID), ev.data["trace.link.trace_id"])
@@ -211,7 +210,7 @@ func TestTranslateHttpTraceRequest(t *testing.T) {
 
 			// span
 			var ev event
-			mapstructure.Decode(events[0], &ev)
+			ev = getEventAtIndex(events, 0)
 			assert.Equal(t, starTimestamp.Nanosecond(), ev.time.Nanosecond())
 			assert.Equal(t, bytesToTraceID(traceID), ev.data["trace.trace_id"])
 			assert.Equal(t, hex.EncodeToString(spanID), ev.data["trace.span_id"])
@@ -224,7 +223,7 @@ func TestTranslateHttpTraceRequest(t *testing.T) {
 			assert.Equal(t, "resource_attr_val", ev.data["resource_attr"])
 
 			// event
-			mapstructure.Decode(events[1], &ev)
+			ev = getEventAtIndex(events, 1)
 			assert.Equal(t, bytesToTraceID(traceID), ev.data["trace.trace_id"])
 			assert.Equal(t, hex.EncodeToString(spanID), ev.data["trace.parent_id"])
 			assert.Equal(t, "span_event", ev.data["name"])
@@ -234,7 +233,7 @@ func TestTranslateHttpTraceRequest(t *testing.T) {
 			assert.Equal(t, "resource_attr_val", ev.data["resource_attr"])
 
 			// link
-			mapstructure.Decode(events[2], &ev)
+			ev = getEventAtIndex(events, 2)
 			assert.Equal(t, bytesToTraceID(traceID), ev.data["trace.trace_id"])
 			assert.Equal(t, hex.EncodeToString(spanID), ev.data["trace.parent_id"])
 			assert.Equal(t, bytesToTraceID(linkedTraceID), ev.data["trace.link.trace_id"])
@@ -244,5 +243,12 @@ func TestTranslateHttpTraceRequest(t *testing.T) {
 			assert.Equal(t, "span_link_attr_val", ev.data["span_link_attr"])
 			assert.Equal(t, "resource_attr_val", ev.data["resource_attr"])
 		})
+	}
+}
+
+func getEventAtIndex(events []map[string]interface{}, i int) event {
+	return event{
+		time: events[i]["time"].(time.Time),
+		data: events[i]["data"].(map[string]interface{}),
 	}
 }
