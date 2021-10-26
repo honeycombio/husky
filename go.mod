@@ -7,6 +7,7 @@ require (
 	github.com/golang/protobuf v1.5.2 // indirect
 	github.com/grpc-ecosystem/grpc-gateway v1.16.0 // indirect
 	github.com/klauspost/compress v1.13.6
+	github.com/mitchellh/mapstructure v1.4.2
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/stretchr/testify v1.7.0
 	go.opentelemetry.io/proto/otlp v0.9.0

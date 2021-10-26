@@ -12,6 +12,7 @@ import (
 
 	"github.com/honeycombio/husky/test"
 	"github.com/klauspost/compress/zstd"
+	"github.com/mitchellh/mapstructure"
 	"github.com/stretchr/testify/assert"
 	collectortrace "go.opentelemetry.io/proto/otlp/collector/trace/v1"
 	common "go.opentelemetry.io/proto/otlp/common/v1"
@@ -19,6 +20,11 @@ import (
 	trace "go.opentelemetry.io/proto/otlp/trace/v1"
 	"google.golang.org/protobuf/proto"
 )
+
+type event struct {
+	time time.Time
+	data map[string]interface{}
+}
 
 func TestTranslateGrpcTraceRequest(t *testing.T) {
 	traceID := test.RandomBytes(16)
@@ -83,38 +89,39 @@ func TestTranslateGrpcTraceRequest(t *testing.T) {
 	assert.Equal(t, 3, len(events))
 
 	// span
-	span := events[0]
-	assert.Equal(t, starTimestamp.Nanosecond(), span.timestamp.Nanosecond())
-	assert.Equal(t, bytesToTraceID(traceID), span.fields["trace.trace_id"])
-	assert.Equal(t, hex.EncodeToString(spanID), span.fields["trace.span_id"])
-	assert.Equal(t, "client", span.fields["type"])
-	assert.Equal(t, "client", span.fields["span.kind"])
-	assert.Equal(t, "test_span", span.fields["name"])
-	assert.Equal(t, float64(endTimestamp.Nanosecond()-starTimestamp.Nanosecond())/float64(time.Millisecond), span.fields["duration_ms"])
-	assert.Equal(t, trace.Status_STATUS_CODE_OK, span.fields["status_code"])
-	assert.Equal(t, "span_attr_val", span.fields["span_attr"])
-	assert.Equal(t, "resource_attr_val", span.fields["resource_attr"])
+	var ev event
+	mapstructure.Decode(events[0], &ev)
+	assert.Equal(t, starTimestamp.Nanosecond(), ev.time.Nanosecond())
+	assert.Equal(t, bytesToTraceID(traceID), ev.data["trace.trace_id"])
+	assert.Equal(t, hex.EncodeToString(spanID), ev.data["trace.span_id"])
+	assert.Equal(t, "client", ev.data["type"])
+	assert.Equal(t, "client", ev.data["span.kind"])
+	assert.Equal(t, "test_span", ev.data["name"])
+	assert.Equal(t, float64(endTimestamp.Nanosecond()-starTimestamp.Nanosecond())/float64(time.Millisecond), ev.data["duration_ms"])
+	assert.Equal(t, trace.Status_STATUS_CODE_OK, ev.data["status_code"])
+	assert.Equal(t, "span_attr_val", ev.data["span_attr"])
+	assert.Equal(t, "resource_attr_val", ev.data["resource_attr"])
 
 	// event
-	spanEvent := events[1]
-	assert.Equal(t, bytesToTraceID(traceID), spanEvent.fields["trace.trace_id"])
-	assert.Equal(t, hex.EncodeToString(spanID), spanEvent.fields["trace.parent_id"])
-	assert.Equal(t, "span_event", spanEvent.fields["name"])
-	assert.Equal(t, "test_span", spanEvent.fields["parent_name"])
-	assert.Equal(t, "span_event", spanEvent.fields["meta.annotation_type"])
-	assert.Equal(t, "span_event_attr_val", spanEvent.fields["span_event_attr"])
-	assert.Equal(t, "resource_attr_val", spanEvent.fields["resource_attr"])
+	mapstructure.Decode(events[1], &ev)
+	assert.Equal(t, bytesToTraceID(traceID), ev.data["trace.trace_id"])
+	assert.Equal(t, hex.EncodeToString(spanID), ev.data["trace.parent_id"])
+	assert.Equal(t, "span_event", ev.data["name"])
+	assert.Equal(t, "test_span", ev.data["parent_name"])
+	assert.Equal(t, "span_event", ev.data["meta.annotation_type"])
+	assert.Equal(t, "span_event_attr_val", ev.data["span_event_attr"])
+	assert.Equal(t, "resource_attr_val", ev.data["resource_attr"])
 
 	// link
-	spanLink := events[2]
-	assert.Equal(t, bytesToTraceID(traceID), spanLink.fields["trace.trace_id"])
-	assert.Equal(t, hex.EncodeToString(spanID), spanLink.fields["trace.parent_id"])
-	assert.Equal(t, bytesToTraceID(linkedTraceID), spanLink.fields["trace.link.trace_id"])
-	assert.Equal(t, hex.EncodeToString(linkedSpanID), spanLink.fields["trace.link.span_id"])
-	assert.Equal(t, "test_span", spanLink.fields["parent_name"])
-	assert.Equal(t, "link", spanLink.fields["meta.annotation_type"])
-	assert.Equal(t, "span_link_attr_val", spanLink.fields["span_link_attr"])
-	assert.Equal(t, "resource_attr_val", spanLink.fields["resource_attr"])
+	mapstructure.Decode(events[2], &ev)
+	assert.Equal(t, bytesToTraceID(traceID), ev.data["trace.trace_id"])
+	assert.Equal(t, hex.EncodeToString(spanID), ev.data["trace.parent_id"])
+	assert.Equal(t, bytesToTraceID(linkedTraceID), ev.data["trace.link.trace_id"])
+	assert.Equal(t, hex.EncodeToString(linkedSpanID), ev.data["trace.link.span_id"])
+	assert.Equal(t, "test_span", ev.data["parent_name"])
+	assert.Equal(t, "link", ev.data["meta.annotation_type"])
+	assert.Equal(t, "span_link_attr_val", ev.data["span_link_attr"])
+	assert.Equal(t, "resource_attr_val", ev.data["resource_attr"])
 }
 
 func TestTranslateHttpTraceRequest(t *testing.T) {
@@ -203,38 +210,39 @@ func TestTranslateHttpTraceRequest(t *testing.T) {
 			assert.Equal(t, 3, len(events))
 
 			// span
-			span := events[0]
-			assert.Equal(t, starTimestamp.Nanosecond(), span.timestamp.Nanosecond())
-			assert.Equal(t, bytesToTraceID(traceID), span.fields["trace.trace_id"])
-			assert.Equal(t, hex.EncodeToString(spanID), span.fields["trace.span_id"])
-			assert.Equal(t, "client", span.fields["type"])
-			assert.Equal(t, "client", span.fields["span.kind"])
-			assert.Equal(t, "test_span", span.fields["name"])
-			assert.Equal(t, float64(endTimestamp.Nanosecond()-starTimestamp.Nanosecond())/float64(time.Millisecond), span.fields["duration_ms"])
-			assert.Equal(t, trace.Status_STATUS_CODE_OK, span.fields["status_code"])
-			assert.Equal(t, "span_attr_val", span.fields["span_attr"])
-			assert.Equal(t, "resource_attr_val", span.fields["resource_attr"])
+			var ev event
+			mapstructure.Decode(events[0], &ev)
+			assert.Equal(t, starTimestamp.Nanosecond(), ev.time.Nanosecond())
+			assert.Equal(t, bytesToTraceID(traceID), ev.data["trace.trace_id"])
+			assert.Equal(t, hex.EncodeToString(spanID), ev.data["trace.span_id"])
+			assert.Equal(t, "client", ev.data["type"])
+			assert.Equal(t, "client", ev.data["span.kind"])
+			assert.Equal(t, "test_span", ev.data["name"])
+			assert.Equal(t, float64(endTimestamp.Nanosecond()-starTimestamp.Nanosecond())/float64(time.Millisecond), ev.data["duration_ms"])
+			assert.Equal(t, trace.Status_STATUS_CODE_OK, ev.data["status_code"])
+			assert.Equal(t, "span_attr_val", ev.data["span_attr"])
+			assert.Equal(t, "resource_attr_val", ev.data["resource_attr"])
 
 			// event
-			spanEvent := events[1]
-			assert.Equal(t, bytesToTraceID(traceID), spanEvent.fields["trace.trace_id"])
-			assert.Equal(t, hex.EncodeToString(spanID), spanEvent.fields["trace.parent_id"])
-			assert.Equal(t, "span_event", spanEvent.fields["name"])
-			assert.Equal(t, "test_span", spanEvent.fields["parent_name"])
-			assert.Equal(t, "span_event", spanEvent.fields["meta.annotation_type"])
-			assert.Equal(t, "span_event_attr_val", spanEvent.fields["span_event_attr"])
-			assert.Equal(t, "resource_attr_val", spanEvent.fields["resource_attr"])
+			mapstructure.Decode(events[1], &ev)
+			assert.Equal(t, bytesToTraceID(traceID), ev.data["trace.trace_id"])
+			assert.Equal(t, hex.EncodeToString(spanID), ev.data["trace.parent_id"])
+			assert.Equal(t, "span_event", ev.data["name"])
+			assert.Equal(t, "test_span", ev.data["parent_name"])
+			assert.Equal(t, "span_event", ev.data["meta.annotation_type"])
+			assert.Equal(t, "span_event_attr_val", ev.data["span_event_attr"])
+			assert.Equal(t, "resource_attr_val", ev.data["resource_attr"])
 
 			// link
-			spanLink := events[2]
-			assert.Equal(t, bytesToTraceID(traceID), spanLink.fields["trace.trace_id"])
-			assert.Equal(t, hex.EncodeToString(spanID), spanLink.fields["trace.parent_id"])
-			assert.Equal(t, bytesToTraceID(linkedTraceID), spanLink.fields["trace.link.trace_id"])
-			assert.Equal(t, hex.EncodeToString(linkedSpanID), spanLink.fields["trace.link.span_id"])
-			assert.Equal(t, "test_span", spanLink.fields["parent_name"])
-			assert.Equal(t, "link", spanLink.fields["meta.annotation_type"])
-			assert.Equal(t, "span_link_attr_val", spanLink.fields["span_link_attr"])
-			assert.Equal(t, "resource_attr_val", spanLink.fields["resource_attr"])
+			mapstructure.Decode(events[2], &ev)
+			assert.Equal(t, bytesToTraceID(traceID), ev.data["trace.trace_id"])
+			assert.Equal(t, hex.EncodeToString(spanID), ev.data["trace.parent_id"])
+			assert.Equal(t, bytesToTraceID(linkedTraceID), ev.data["trace.link.trace_id"])
+			assert.Equal(t, hex.EncodeToString(linkedSpanID), ev.data["trace.link.span_id"])
+			assert.Equal(t, "test_span", ev.data["parent_name"])
+			assert.Equal(t, "link", ev.data["meta.annotation_type"])
+			assert.Equal(t, "span_link_attr_val", ev.data["span_link_attr"])
+			assert.Equal(t, "resource_attr_val", ev.data["resource_attr"])
 		})
 	}
 }
