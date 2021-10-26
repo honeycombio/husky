@@ -26,7 +26,7 @@ type RequestInfo struct {
 	UserAgent          string
 	ContentType        string
 	ContentEncoding    string
-	GrpcAcceptEncoding string
+	GRPCAcceptEncoding string
 }
 
 func (ri *RequestInfo) HasValidContentType() bool {
@@ -43,7 +43,7 @@ func GetRequestInfoFromGrpcMetadata(ctx context.Context) RequestInfo {
 		ri.ProxyToken = getValueFromMetadata(md, proxyTokenHeader)
 		ri.UserAgent = getValueFromMetadata(md, userAgentHeader)
 		ri.ContentEncoding = getValueFromMetadata(md, contentEncodingHeader)
-		ri.GrpcAcceptEncoding = getValueFromMetadata(md, gRPCAcceptEncodingHeader)
+		ri.GRPCAcceptEncoding = getValueFromMetadata(md, gRPCAcceptEncodingHeader)
 	}
 	return ri
 }
@@ -56,7 +56,7 @@ func GetRequestInfoFromHttpHeaders(r *http.Request) RequestInfo {
 		UserAgent:          r.Header.Get(userAgentHeader),
 		ContentType:        r.Header.Get(contentTypeHeader),
 		ContentEncoding:    r.Header.Get(contentEncodingHeader),
-		GrpcAcceptEncoding: r.Header.Get(gRPCAcceptEncodingHeader),
+		GRPCAcceptEncoding: r.Header.Get(gRPCAcceptEncodingHeader),
 	}
 }
 
