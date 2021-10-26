@@ -12,10 +12,10 @@ import (
 
 func TestParseGrpcMetadataIntoRequestInfo(t *testing.T) {
 	ctx := metadata.NewIncomingContext(context.Background(), metadata.New(map[string]string{
-		apiKeyKey:     "test-api-key",
-		datasetKey:    "test-dataset",
-		proxytokenKey: "test-proxy-token",
-		userAgentKey:  "test-user-agent",
+		apiKeyHeader:     "test-api-key",
+		datasetHeader:    "test-dataset",
+		proxyTokenHeader: "test-proxy-token",
+		userAgentHeader:  "test-user-agent",
 	}))
 	ri := GetRequestInfoFromGrpcMetadata(ctx)
 
@@ -28,11 +28,11 @@ func TestParseGrpcMetadataIntoRequestInfo(t *testing.T) {
 
 func TestParseHttpHeadersIntoRequestInfo(t *testing.T) {
 	r, _ := http.NewRequest("POST", "/", nil)
-	r.Header.Set(apiKeyKey, "test-api-key")
-	r.Header.Set(datasetKey, "test-dataset")
-	r.Header.Set(proxytokenKey, "test-proxy-token")
-	r.Header.Set(userAgentKey, "test-user-agent")
-	r.Header.Set(contentTypeKey, "test-content-type")
+	r.Header.Set(apiKeyHeader, "test-api-key")
+	r.Header.Set(datasetHeader, "test-dataset")
+	r.Header.Set(proxyTokenHeader, "test-proxy-token")
+	r.Header.Set(userAgentHeader, "test-user-agent")
+	r.Header.Set(contentTypeHeader, "test-content-type")
 
 	ri := GetRequestInfoFromHttpHeaders(r)
 	assert.Equal(t, "test-api-key", ri.ApiKey)
