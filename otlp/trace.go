@@ -21,12 +21,7 @@ const (
 	traceIDLongLength  = 16
 )
 
-type Event struct {
-	timestamp time.Time
-	fields    map[string]interface{}
-}
-
-func TranslateHttpTraceRequest(req *http.Request) ([]Event, error) {
+func TranslateHttpTraceRequest(req *http.Request) ([]map[string]interface{}, error) {
 	reqInfo := GetRequestInfoFromHttpHeaders(req)
 	if !reqInfo.HasValidContentType() {
 		return nil, errors.New("invalid content-type")
@@ -40,8 +35,8 @@ func TranslateHttpTraceRequest(req *http.Request) ([]Event, error) {
 	return TranslateGrpcTraceRequest(request)
 }
 
-func TranslateGrpcTraceRequest(request *collectorTrace.ExportTraceServiceRequest) ([]Event, error) {
-	batch := []Event{}
+func TranslateGrpcTraceRequest(request *collectorTrace.ExportTraceServiceRequest) ([]map[string]interface{}, error) {
+	batch := []map[string]interface{}{}
 	for _, resourceSpan := range request.ResourceSpans {
 		resourceAttrs := make(map[string]interface{})
 
@@ -95,9 +90,9 @@ func TranslateGrpcTraceRequest(request *collectorTrace.ExportTraceServiceRequest
 				// Now we need to wrap the eventAttrs in an event so we can specify the timestamp
 				// which is the StartTime as a time.Time object
 				timestamp := time.Unix(0, int64(span.StartTimeUnixNano)).UTC()
-				batchEvent := Event{
-					timestamp: timestamp,
-					fields:    eventAttrs,
+				batchEvent := map[string]interface{}{
+					"time": timestamp,
+					"data": eventAttrs,
 				}
 				batch = append(batch, batchEvent)
 
@@ -117,9 +112,9 @@ func TranslateGrpcTraceRequest(request *collectorTrace.ExportTraceServiceRequest
 					for k, v := range resourceAttrs {
 						attrs[k] = v
 					}
-					batch = append(batch, Event{
-						timestamp: timestamp,
-						fields:    attrs,
+					batch = append(batch, map[string]interface{}{
+						"time": timestamp,
+						"data": attrs,
 					})
 				}
 
@@ -140,9 +135,9 @@ func TranslateGrpcTraceRequest(request *collectorTrace.ExportTraceServiceRequest
 					for k, v := range resourceAttrs {
 						attrs[k] = v
 					}
-					batch = append(batch, Event{
-						timestamp: timestamp,
-						fields:    attrs,
+					batch = append(batch, map[string]interface{}{
+						"time": timestamp,
+						"data": attrs,
 					})
 				}
 			}
