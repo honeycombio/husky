@@ -119,7 +119,6 @@ func TranslateGrpcTraceRequest(request *collectorTrace.ExportTraceServiceRequest
 				}
 
 				for _, slink := range span.Links {
-					var timestamp time.Time // links don't have a start time, use empty time
 					attrs := map[string]interface{}{
 						"trace.trace_id":       traceID,
 						"trace.parent_id":      spanID,
@@ -136,7 +135,7 @@ func TranslateGrpcTraceRequest(request *collectorTrace.ExportTraceServiceRequest
 						attrs[k] = v
 					}
 					batch = append(batch, map[string]interface{}{
-						"time": timestamp,
+						"time": timestamp, // use timestamp from parent span
 						"data": attrs,
 					})
 				}
