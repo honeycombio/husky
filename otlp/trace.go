@@ -56,7 +56,7 @@ func TranslateGrpcTraceRequest(request *collectorTrace.ExportTraceServiceRequest
 			}
 
 			for _, span := range librarySpan.GetSpans() {
-				traceID := bytesToTraceID(span.TraceId)
+				traceID := BytesToTraceID(span.TraceId)
 				spanID := hex.EncodeToString(span.SpanId)
 
 				spanKind := getSpanKind(span.Kind)
@@ -122,7 +122,7 @@ func TranslateGrpcTraceRequest(request *collectorTrace.ExportTraceServiceRequest
 					attrs := map[string]interface{}{
 						"trace.trace_id":       traceID,
 						"trace.parent_id":      spanID,
-						"trace.link.trace_id":  bytesToTraceID(slink.TraceId),
+						"trace.link.trace_id":  BytesToTraceID(slink.TraceId),
 						"trace.link.span_id":   hex.EncodeToString(slink.SpanId),
 						"parent_name":          span.Name,
 						"meta.annotation_type": "link",
@@ -164,14 +164,14 @@ func getSpanKind(kind trace.Span_SpanKind) string {
 	}
 }
 
-// bytesToTraceID returns an ID suitable for use for spans and traces. Before
+// BytesToTraceID returns an ID suitable for use for spans and traces. Before
 // encoding the bytes as a hex string, we want to handle cases where we are
 // given 128-bit IDs with zero padding, e.g. 0000000000000000f798a1e7f33c8af6.
 // There are many ways to achieve this, but careful benchmarking and testing
 // showed the below as the most performant, avoiding memory allocations
 // and the use of flexible but expensive library functions. As this is hot code,
 // it seemed worthwhile to do it this way.
-func bytesToTraceID(traceID []byte) string {
+func BytesToTraceID(traceID []byte) string {
 	var encoded []byte
 	switch len(traceID) {
 	case traceIDLongLength: // 16 bytes, trim leading 8 bytes if all 0's
