@@ -135,7 +135,7 @@ func TranslateGrpcTraceRequest(request *collectorTrace.ExportTraceServiceRequest
 						attrs[k] = v
 					}
 					batch = append(batch, map[string]interface{}{
-						"time": timestamp, // use timestamp from parant span
+						"time": timestamp, // use timestamp from parent span
 						"data": attrs,
 					})
 				}
