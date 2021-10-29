@@ -113,6 +113,7 @@ func TestTranslateGrpcTraceRequest(t *testing.T) {
 
 	// link
 	ev = getEventAtIndex(events, 2)
+	assert.Equal(t, starTimestamp.Nanosecond(), ev.time.Nanosecond())
 	assert.Equal(t, bytesToTraceID(traceID), ev.data["trace.trace_id"])
 	assert.Equal(t, hex.EncodeToString(spanID), ev.data["trace.parent_id"])
 	assert.Equal(t, bytesToTraceID(linkedTraceID), ev.data["trace.link.trace_id"])
