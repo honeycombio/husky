@@ -18,7 +18,7 @@ func TestAsGRPCError(t *testing.T) {
 	assert.Equal(t, "rpc error: code = InvalidArgument desc = otlp-error", AsGRPCError(err).Error())
 }
 
-func TestNonOTLPErrorAsGRPCError(t *testing.T) {
+func TestNonOTLPErrorReturnsStandardError(t *testing.T) {
 	err := errors.New("base-error")
 	assert.Equal(t, "rpc error: code = Internal desc = ", AsGRPCError(err).Error())
 }
