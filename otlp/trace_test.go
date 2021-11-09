@@ -91,7 +91,7 @@ func TestTranslateGrpcTraceRequest(t *testing.T) {
 	var ev event
 	ev = getEventAtIndex(events, 0)
 	assert.Equal(t, starTimestamp.Nanosecond(), ev.time.Nanosecond())
-	assert.Equal(t, bytesToTraceID(traceID), ev.data["trace.trace_id"])
+	assert.Equal(t, BytesToTraceID(traceID), ev.data["trace.trace_id"])
 	assert.Equal(t, hex.EncodeToString(spanID), ev.data["trace.span_id"])
 	assert.Equal(t, "client", ev.data["type"])
 	assert.Equal(t, "client", ev.data["span.kind"])
@@ -103,7 +103,7 @@ func TestTranslateGrpcTraceRequest(t *testing.T) {
 
 	// event
 	ev = getEventAtIndex(events, 1)
-	assert.Equal(t, bytesToTraceID(traceID), ev.data["trace.trace_id"])
+	assert.Equal(t, BytesToTraceID(traceID), ev.data["trace.trace_id"])
 	assert.Equal(t, hex.EncodeToString(spanID), ev.data["trace.parent_id"])
 	assert.Equal(t, "span_event", ev.data["name"])
 	assert.Equal(t, "test_span", ev.data["parent_name"])
@@ -114,9 +114,9 @@ func TestTranslateGrpcTraceRequest(t *testing.T) {
 	// link
 	ev = getEventAtIndex(events, 2)
 	assert.Equal(t, starTimestamp.Nanosecond(), ev.time.Nanosecond())
-	assert.Equal(t, bytesToTraceID(traceID), ev.data["trace.trace_id"])
+	assert.Equal(t, BytesToTraceID(traceID), ev.data["trace.trace_id"])
 	assert.Equal(t, hex.EncodeToString(spanID), ev.data["trace.parent_id"])
-	assert.Equal(t, bytesToTraceID(linkedTraceID), ev.data["trace.link.trace_id"])
+	assert.Equal(t, BytesToTraceID(linkedTraceID), ev.data["trace.link.trace_id"])
 	assert.Equal(t, hex.EncodeToString(linkedSpanID), ev.data["trace.link.span_id"])
 	assert.Equal(t, "test_span", ev.data["parent_name"])
 	assert.Equal(t, "link", ev.data["meta.annotation_type"])
@@ -213,7 +213,7 @@ func TestTranslateHttpTraceRequest(t *testing.T) {
 			var ev event
 			ev = getEventAtIndex(events, 0)
 			assert.Equal(t, starTimestamp.Nanosecond(), ev.time.Nanosecond())
-			assert.Equal(t, bytesToTraceID(traceID), ev.data["trace.trace_id"])
+			assert.Equal(t, BytesToTraceID(traceID), ev.data["trace.trace_id"])
 			assert.Equal(t, hex.EncodeToString(spanID), ev.data["trace.span_id"])
 			assert.Equal(t, "client", ev.data["type"])
 			assert.Equal(t, "client", ev.data["span.kind"])
@@ -225,7 +225,7 @@ func TestTranslateHttpTraceRequest(t *testing.T) {
 
 			// event
 			ev = getEventAtIndex(events, 1)
-			assert.Equal(t, bytesToTraceID(traceID), ev.data["trace.trace_id"])
+			assert.Equal(t, BytesToTraceID(traceID), ev.data["trace.trace_id"])
 			assert.Equal(t, hex.EncodeToString(spanID), ev.data["trace.parent_id"])
 			assert.Equal(t, "span_event", ev.data["name"])
 			assert.Equal(t, "test_span", ev.data["parent_name"])
@@ -235,9 +235,9 @@ func TestTranslateHttpTraceRequest(t *testing.T) {
 
 			// link
 			ev = getEventAtIndex(events, 2)
-			assert.Equal(t, bytesToTraceID(traceID), ev.data["trace.trace_id"])
+			assert.Equal(t, BytesToTraceID(traceID), ev.data["trace.trace_id"])
 			assert.Equal(t, hex.EncodeToString(spanID), ev.data["trace.parent_id"])
-			assert.Equal(t, bytesToTraceID(linkedTraceID), ev.data["trace.link.trace_id"])
+			assert.Equal(t, BytesToTraceID(linkedTraceID), ev.data["trace.link.trace_id"])
 			assert.Equal(t, hex.EncodeToString(linkedSpanID), ev.data["trace.link.span_id"])
 			assert.Equal(t, "test_span", ev.data["parent_name"])
 			assert.Equal(t, "link", ev.data["meta.annotation_type"])
