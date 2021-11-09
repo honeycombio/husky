@@ -9,9 +9,9 @@ import (
 )
 
 type OTLPError struct {
-	message        string
-	httpStatusCode int
-	grpcStatusCode codes.Code
+	Message        string
+	HTTPStatusCode int
+	GRPCStatusCode codes.Code
 }
 
 var (
@@ -22,7 +22,7 @@ var (
 )
 
 func (e OTLPError) Error() string {
-	return e.message
+	return e.Message
 }
 
 func AsJson(e error) string {
@@ -31,7 +31,7 @@ func AsJson(e error) string {
 
 func AsGRPCError(e error) error {
 	if otlpErr, ok := e.(OTLPError); ok {
-		return status.Error(otlpErr.grpcStatusCode, otlpErr.message)
+		return status.Error(otlpErr.GRPCStatusCode, otlpErr.Message)
 	}
 	return status.Error(codes.Internal, "")
 }
