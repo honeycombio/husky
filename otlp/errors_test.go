@@ -9,12 +9,12 @@ import (
 )
 
 func TestErrorsReturnJson(t *testing.T) {
-	err := OTLPError{message: "test-message"}
+	err := OTLPError{Message: "test-message"}
 	assert.Equal(t, `{"message":"test-message"}`, AsJson(err))
 }
 
 func TestAsGRPCError(t *testing.T) {
-	err := OTLPError{message: "otlp-error", grpcStatusCode: codes.InvalidArgument}
+	err := OTLPError{Message: "otlp-error", GRPCStatusCode: codes.InvalidArgument}
 	assert.Equal(t, "rpc error: code = InvalidArgument desc = otlp-error", AsGRPCError(err).Error())
 }
 
