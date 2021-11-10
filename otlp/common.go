@@ -29,16 +29,15 @@ type RequestInfo struct {
 	GRPCAcceptEncoding string
 }
 
-func (ri *RequestInfo) HasValidContentType() bool {
-	return ri.ContentType == "application/protobuf" || ri.ContentType == "application/x-protobuf"
-}
-
 func (ri *RequestInfo) ValidateHeaders() error {
 	if len(ri.ApiKey) == 0 {
 		return ErrMissingAPIKeyHeader
 	}
 	if len(ri.Dataset) == 0 {
 		return ErrMissingDatasetHeader
+	}
+	if ri.ContentType != "application/protobuf" && ri.ContentType != "application/x-protobuf" {
+		return ErrInvalidContentType
 	}
 	return nil
 }

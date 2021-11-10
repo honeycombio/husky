@@ -42,26 +42,6 @@ func TestParseHttpHeadersIntoRequestInfo(t *testing.T) {
 	assert.Equal(t, "test-content-type", ri.ContentType)
 }
 
-func TestHasValidContentType(t *testing.T) {
-	testCases := []struct {
-		contentType string
-		exepcted    bool
-	}{
-		{contentType: "application/protobuf", exepcted: true},
-		{contentType: "application/x-protobuf", exepcted: true},
-		{contentType: "application/json", exepcted: false},
-		{contentType: "application/javascript", exepcted: false},
-		{contentType: "application/xml", exepcted: false},
-		{contentType: "application/octet-stream", exepcted: false},
-		{contentType: "text-plain", exepcted: false},
-	}
-
-	for _, tc := range testCases {
-		ri := RequestInfo{ContentType: tc.contentType}
-		assert.Equal(t, tc.exepcted, ri.HasValidContentType())
-	}
-}
-
 func TestAddAttributesToMap(t *testing.T) {
 	testCases := []struct {
 		key       string
@@ -134,18 +114,26 @@ func TestAddAttributesToMap(t *testing.T) {
 
 func TestValidateHeaders(t *testing.T) {
 	testCases := []struct {
-		apikey  string
-		dataset string
-		err     error
+		apikey      string
+		dataset     string
+		contentType string
+		err         error
 	}{
-		{apikey: "", dataset: "", err: ErrMissingAPIKeyHeader},
-		{apikey: "apikey", dataset: "", err: ErrMissingDatasetHeader},
-		{apikey: "", dataset: "dataset", err: ErrMissingAPIKeyHeader},
-		{apikey: "apikey", dataset: "dataset", err: nil},
+		{apikey: "", dataset: "", contentType: "", err: ErrMissingAPIKeyHeader},
+		{apikey: "apikey", dataset: "", contentType: "", err: ErrMissingDatasetHeader},
+		{apikey: "", dataset: "dataset", contentType: "", err: ErrMissingAPIKeyHeader},
+		{apikey: "apikey", dataset: "dataset", contentType: "", err: ErrInvalidContentType},
+		{apikey: "apikey", dataset: "dataset", contentType: "application/json", err: ErrInvalidContentType},
+		{apikey: "apikey", dataset: "dataset", contentType: "application/javascript", err: ErrInvalidContentType},
+		{apikey: "apikey", dataset: "dataset", contentType: "application/xml", err: ErrInvalidContentType},
+		{apikey: "apikey", dataset: "dataset", contentType: "application/octet-stream", err: ErrInvalidContentType},
+		{apikey: "apikey", dataset: "dataset", contentType: "text-plain", err: ErrInvalidContentType},
+		{apikey: "apikey", dataset: "dataset", contentType: "application/protobuf", err: nil},
+		{apikey: "apikey", dataset: "dataset", contentType: "application/x-protobuf", err: nil},
 	}
 
 	for _, tc := range testCases {
-		ri := RequestInfo{ApiKey: tc.apikey, Dataset: tc.dataset}
+		ri := RequestInfo{ApiKey: tc.apikey, ContentType: tc.contentType, Dataset: tc.dataset}
 		err := ri.ValidateHeaders()
 		assert.Equal(t, tc.err, err)
 	}

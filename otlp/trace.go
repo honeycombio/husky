@@ -21,11 +21,6 @@ const (
 )
 
 func TranslateHttpTraceRequest(req *http.Request) ([]map[string]interface{}, error) {
-	reqInfo := GetRequestInfoFromHttpHeaders(req)
-	if !reqInfo.HasValidContentType() {
-		return nil, ErrInvalidContentType
-	}
-
 	request, err := parseOTLPBody(req)
 	if err != nil {
 		return nil, ErrFailedParseBody
