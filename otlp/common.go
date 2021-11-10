@@ -57,15 +57,15 @@ func GetRequestInfoFromGrpcMetadata(ctx context.Context) RequestInfo {
 	return ri
 }
 
-func GetRequestInfoFromHttpHeaders(r *http.Request) RequestInfo {
+func GetRequestInfoFromHttpHeaders(header http.Header) RequestInfo {
 	return RequestInfo{
-		ApiKey:             r.Header.Get(apiKeyHeader),
-		Dataset:            r.Header.Get(datasetHeader),
-		ProxyToken:         r.Header.Get(proxyTokenHeader),
-		UserAgent:          r.Header.Get(userAgentHeader),
-		ContentType:        r.Header.Get(contentTypeHeader),
-		ContentEncoding:    r.Header.Get(contentEncodingHeader),
-		GRPCAcceptEncoding: r.Header.Get(gRPCAcceptEncodingHeader),
+		ApiKey:             header.Get(apiKeyHeader),
+		Dataset:            header.Get(datasetHeader),
+		ProxyToken:         header.Get(proxyTokenHeader),
+		UserAgent:          header.Get(userAgentHeader),
+		ContentType:        header.Get(contentTypeHeader),
+		ContentEncoding:    header.Get(contentEncodingHeader),
+		GRPCAcceptEncoding: header.Get(gRPCAcceptEncodingHeader),
 	}
 }
 

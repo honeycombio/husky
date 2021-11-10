@@ -27,14 +27,14 @@ func TestParseGrpcMetadataIntoRequestInfo(t *testing.T) {
 }
 
 func TestParseHttpHeadersIntoRequestInfo(t *testing.T) {
-	r, _ := http.NewRequest("POST", "/", nil)
-	r.Header.Set(apiKeyHeader, "test-api-key")
-	r.Header.Set(datasetHeader, "test-dataset")
-	r.Header.Set(proxyTokenHeader, "test-proxy-token")
-	r.Header.Set(userAgentHeader, "test-user-agent")
-	r.Header.Set(contentTypeHeader, "test-content-type")
+	header := http.Header{}
+	header.Set(apiKeyHeader, "test-api-key")
+	header.Set(datasetHeader, "test-dataset")
+	header.Set(proxyTokenHeader, "test-proxy-token")
+	header.Set(userAgentHeader, "test-user-agent")
+	header.Set(contentTypeHeader, "test-content-type")
 
-	ri := GetRequestInfoFromHttpHeaders(r)
+	ri := GetRequestInfoFromHttpHeaders(header)
 	assert.Equal(t, "test-api-key", ri.ApiKey)
 	assert.Equal(t, "test-dataset", ri.Dataset)
 	assert.Equal(t, "test-proxy-token", ri.ProxyToken)
