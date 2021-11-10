@@ -33,6 +33,16 @@ func (ri *RequestInfo) HasValidContentType() bool {
 	return ri.ContentType == "application/protobuf" || ri.ContentType == "application/x-protobuf"
 }
 
+func (ri *RequestInfo) ValidateHeaders() error {
+	if len(ri.ApiKey) == 0 {
+		return ErrMissingAPIKeyHeader
+	}
+	if len(ri.Dataset) == 0 {
+		return ErrMissingDatasetHeader
+	}
+	return nil
+}
+
 func GetRequestInfoFromGrpcMetadata(ctx context.Context) RequestInfo {
 	ri := RequestInfo{
 		ContentType: "application/protobuf",

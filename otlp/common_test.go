@@ -131,3 +131,22 @@ func TestAddAttributesToMap(t *testing.T) {
 		assert.Equal(t, tc.expected, attrs[tc.key])
 	}
 }
+
+func TestValidateHeaders(t *testing.T) {
+	testCases := []struct {
+		apikey  string
+		dataset string
+		err     error
+	}{
+		{apikey: "", dataset: "", err: ErrMissingAPIKeyHeader},
+		{apikey: "apikey", dataset: "", err: ErrMissingDatasetHeader},
+		{apikey: "", dataset: "dataset", err: ErrMissingAPIKeyHeader},
+		{apikey: "apikey", dataset: "dataset", err: nil},
+	}
+
+	for _, tc := range testCases {
+		ri := RequestInfo{ApiKey: tc.apikey, Dataset: tc.dataset}
+		err := ri.ValidateHeaders()
+		assert.Equal(t, tc.err, err)
+	}
+}

@@ -247,6 +247,26 @@ func TestTranslateHttpTraceRequest(t *testing.T) {
 	}
 }
 
+func TestInvalidContentTypeReturnsError(t *testing.T) {
+	body, _ := proto.Marshal(&collectortrace.ExportTraceServiceRequest{})
+	request, _ := http.NewRequest("POST", "", io.NopCloser(bytes.NewReader(body)))
+	request.Header.Set("content-type", "application/json")
+
+	batch, err := TranslateHttpTraceRequest(request)
+	assert.Nil(t, batch)
+	assert.Equal(t, ErrInvalidContentType, err)
+}
+
+func TestInvalidBodyReturnsError(t *testing.T) {
+	body := test.RandomBytes(10)
+	request, _ := http.NewRequest("POST", "", io.NopCloser(bytes.NewReader(body)))
+	request.Header.Set("content-type", "application/protobuf")
+
+	batch, err := TranslateHttpTraceRequest(request)
+	assert.Nil(t, batch)
+	assert.Equal(t, ErrFailedParseBody, err)
+}
+
 func getEventAtIndex(events []map[string]interface{}, i int) event {
 	return event{
 		time: events[i]["time"].(time.Time),

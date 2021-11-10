@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"compress/gzip"
 	"encoding/hex"
-	"errors"
 	"io"
 	"io/ioutil"
 	"net/http"
@@ -24,12 +23,12 @@ const (
 func TranslateHttpTraceRequest(req *http.Request) ([]map[string]interface{}, error) {
 	reqInfo := GetRequestInfoFromHttpHeaders(req)
 	if !reqInfo.HasValidContentType() {
-		return nil, errors.New("invalid content-type")
+		return nil, ErrInvalidContentType
 	}
 
 	request, err := parseOTLPBody(req)
 	if err != nil {
-		return nil, errors.New("parse error")
+		return nil, ErrFailedParseBody
 	}
 
 	return TranslateGrpcTraceRequest(request)
