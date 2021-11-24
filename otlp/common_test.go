@@ -105,11 +105,13 @@ func TestAddAttributesToMap(t *testing.T) {
 		},
 		{
 			key:      "array-attr", // not supported
-			expected: nil,
+			expected: "[\"one\",true,3]",
 			attribute: &common.KeyValue{
 				Key: "array-attr", Value: &common.AnyValue{Value: &common.AnyValue_ArrayValue{ArrayValue: &common.ArrayValue{
 					Values: []*common.AnyValue{
-						{Value: &common.AnyValue_StringValue{StringValue: "array-str-value"}},
+						{Value: &common.AnyValue_StringValue{StringValue: "one"}},
+						{Value: &common.AnyValue_BoolValue{BoolValue: true}},
+						{Value: &common.AnyValue_IntValue{IntValue: 3}},
 					}}}},
 			},
 		},
