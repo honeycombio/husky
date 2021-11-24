@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"io"
 	"io/ioutil"
-	"net/http"
 	"time"
 
 	"github.com/klauspost/compress/zstd"
@@ -19,14 +18,6 @@ const (
 	traceIDShortLength = 8
 	traceIDLongLength  = 16
 )
-
-func TranslateHttpTraceRequest(req *http.Request) ([]map[string]interface{}, error) {
-	ri := GetRequestInfoFromHttpHeaders(req.Header)
-	if err := ri.ValidateHeaders(); err != nil {
-		return nil, err
-	}
-	return TranslateTraceRequestFromReader(req.Body, ri)
-}
 
 func TranslateTraceRequestFromReader(body io.ReadCloser, ri RequestInfo) ([]map[string]interface{}, error) {
 	if err := ri.ValidateHeaders(); err != nil {

@@ -5,7 +5,6 @@ import (
 	"compress/gzip"
 	"encoding/hex"
 	"io"
-	"net/http"
 	"strings"
 	"testing"
 	"time"
@@ -201,13 +200,14 @@ func TestTranslateHttpTraceRequest(t *testing.T) {
 				buf.Write(body)
 			}
 
-			request, _ := http.NewRequest("POST", "", io.NopCloser(strings.NewReader(buf.String())))
-			request.Header.Set("x-honeycomb-team", "team")
-			request.Header.Set("x-honeycomb-dataset", "dataset")
-			request.Header.Set("content-type", "application/protobuf")
-			request.Header.Set("content-encoding", encoding)
+			ri := RequestInfo{
+				ApiKey:          "apikey",
+				Dataset:         "dataset",
+				ContentType:     "application/protobuf",
+				ContentEncoding: encoding,
+			}
 
-			events, err := TranslateHttpTraceRequest(request)
+			events, err := TranslateTraceRequestFromReader(io.NopCloser(strings.NewReader(buf.String())), ri)
 			assert.Nil(t, err)
 			assert.Equal(t, 3, len(events))
 
@@ -251,24 +251,26 @@ func TestTranslateHttpTraceRequest(t *testing.T) {
 
 func TestInvalidContentTypeReturnsError(t *testing.T) {
 	body, _ := proto.Marshal(&collectortrace.ExportTraceServiceRequest{})
-	request, _ := http.NewRequest("POST", "", io.NopCloser(bytes.NewReader(body)))
-	request.Header.Set("x-honeycomb-team", "team")
-	request.Header.Set("x-honeycomb-dataset", "dataset")
-	request.Header.Set("content-type", "application/json")
+	ri := RequestInfo{
+		ApiKey:      "apikey",
+		Dataset:     "dataset",
+		ContentType: "application/json",
+	}
 
-	batch, err := TranslateHttpTraceRequest(request)
+	batch, err := TranslateTraceRequestFromReader(io.NopCloser(bytes.NewReader(body)), ri)
 	assert.Nil(t, batch)
 	assert.Equal(t, ErrInvalidContentType, err)
 }
 
 func TestInvalidBodyReturnsError(t *testing.T) {
 	body := test.RandomBytes(10)
-	request, _ := http.NewRequest("POST", "", io.NopCloser(bytes.NewReader(body)))
-	request.Header.Set("x-honeycomb-team", "team")
-	request.Header.Set("x-honeycomb-dataset", "dataset")
-	request.Header.Set("content-type", "application/protobuf")
+	ri := RequestInfo{
+		ApiKey:      "apikey",
+		Dataset:     "dataset",
+		ContentType: "application/protobuf",
+	}
 
-	batch, err := TranslateHttpTraceRequest(request)
+	batch, err := TranslateTraceRequestFromReader(io.NopCloser(bytes.NewReader(body)), ri)
 	assert.Nil(t, batch)
 	assert.Equal(t, ErrFailedParseBody, err)
 }
