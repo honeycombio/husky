@@ -109,6 +109,18 @@ func getValue(value *common.AnyValue) interface{} {
 		if err == nil {
 			return string(bytes)
 		}
+	case *common.AnyValue_KvlistValue:
+		items := value.GetKvlistValue().Values
+		arr := make([]map[string]interface{}, len(items))
+		for i := 0; i < len(items); i++ {
+			arr[i] = map[string]interface{}{
+				items[i].Key: getValue(items[i].Value),
+			}
+		}
+		bytes, err := json.Marshal(arr)
+		if err == nil {
+			return string(bytes)
+		}
 	}
 	return nil
 }
