@@ -62,7 +62,6 @@ func TranslateGrpcTraceRequest(request *collectorTrace.ExportTraceServiceRequest
 				eventAttrs := map[string]interface{}{
 					"trace.trace_id": traceID,
 					"trace.span_id":  spanID,
-					"type":           spanKind,
 					"span.kind":      spanKind,
 					"name":           span.Name,
 					"duration_ms":    float64(span.EndTimeUnixNano-span.StartTimeUnixNano) / float64(time.Millisecond),
