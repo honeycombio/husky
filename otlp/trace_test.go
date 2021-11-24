@@ -207,7 +207,7 @@ func TestTranslateHttpTraceRequest(t *testing.T) {
 				ContentEncoding: encoding,
 			}
 
-			events, err := TranslateTraceRequestFromReader(io.NopCloser(strings.NewReader(buf.String())), ri)
+			events, err := TranslateHttpTraceRequest(io.NopCloser(strings.NewReader(buf.String())), ri)
 			assert.Nil(t, err)
 			assert.Equal(t, 3, len(events))
 
@@ -257,7 +257,7 @@ func TestInvalidContentTypeReturnsError(t *testing.T) {
 		ContentType: "application/json",
 	}
 
-	batch, err := TranslateTraceRequestFromReader(io.NopCloser(bytes.NewReader(body)), ri)
+	batch, err := TranslateHttpTraceRequest(io.NopCloser(bytes.NewReader(body)), ri)
 	assert.Nil(t, batch)
 	assert.Equal(t, ErrInvalidContentType, err)
 }
@@ -270,7 +270,7 @@ func TestInvalidBodyReturnsError(t *testing.T) {
 		ContentType: "application/protobuf",
 	}
 
-	batch, err := TranslateTraceRequestFromReader(io.NopCloser(bytes.NewReader(body)), ri)
+	batch, err := TranslateHttpTraceRequest(io.NopCloser(bytes.NewReader(body)), ri)
 	assert.Nil(t, batch)
 	assert.Equal(t, ErrFailedParseBody, err)
 }

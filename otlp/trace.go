@@ -19,7 +19,7 @@ const (
 	traceIDLongLength  = 16
 )
 
-func TranslateTraceRequestFromReader(body io.ReadCloser, ri RequestInfo) ([]map[string]interface{}, error) {
+func TranslateHttpTraceRequest(body io.ReadCloser, ri RequestInfo) ([]map[string]interface{}, error) {
 	if err := ri.ValidateHeaders(); err != nil {
 		return nil, err
 	}
