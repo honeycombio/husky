@@ -2,7 +2,7 @@ package otlp
 
 import (
 	"context"
-	"net/http"
+	"strings"
 
 	common "go.opentelemetry.io/proto/otlp/common/v1"
 	"google.golang.org/grpc/metadata"
@@ -57,16 +57,20 @@ func GetRequestInfoFromGrpcMetadata(ctx context.Context) RequestInfo {
 	return ri
 }
 
-func GetRequestInfoFromHttpHeaders(header http.Header) RequestInfo {
+func GetRequestInfoFromHttpHeaders(headers map[string][]string) RequestInfo {
 	return RequestInfo{
-		ApiKey:             header.Get(apiKeyHeader),
-		Dataset:            header.Get(datasetHeader),
-		ProxyToken:         header.Get(proxyTokenHeader),
-		UserAgent:          header.Get(userAgentHeader),
-		ContentType:        header.Get(contentTypeHeader),
-		ContentEncoding:    header.Get(contentEncodingHeader),
-		GRPCAcceptEncoding: header.Get(gRPCAcceptEncodingHeader),
+		ApiKey:             getValue(headers, apiKeyHeader),
+		Dataset:            getValue(headers, datasetHeader),
+		ProxyToken:         getValue(headers, proxyTokenHeader),
+		UserAgent:          getValue(headers, userAgentHeader),
+		ContentType:        getValue(headers, contentTypeHeader),
+		ContentEncoding:    getValue(headers, contentEncodingHeader),
+		GRPCAcceptEncoding: getValue(headers, gRPCAcceptEncodingHeader),
 	}
+}
+
+func getValue(m map[string][]string, key string) string {
+	return strings.Join(m[key], ",")
 }
 
 func getValueFromMetadata(md metadata.MD, key string) string {
