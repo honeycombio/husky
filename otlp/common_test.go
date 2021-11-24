@@ -2,6 +2,7 @@ package otlp
 
 import (
 	"context"
+	"net/http"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -26,15 +27,14 @@ func TestParseGrpcMetadataIntoRequestInfo(t *testing.T) {
 }
 
 func TestParseHttpHeadersIntoRequestInfo(t *testing.T) {
-	headers := map[string][]string{
-		apiKeyHeader:      {"test-api-key"},
-		datasetHeader:     {"test-dataset"},
-		proxyTokenHeader:  {"test-proxy-token"},
-		userAgentHeader:   {"test-user-agent"},
-		contentTypeHeader: {"test-content-type"},
-	}
+	header := http.Header{}
+	header.Set(apiKeyHeader, "test-api-key")
+	header.Set(datasetHeader, "test-dataset")
+	header.Set(proxyTokenHeader, "test-proxy-token")
+	header.Set(userAgentHeader, "test-user-agent")
+	header.Set(contentTypeHeader, "test-content-type")
 
-	ri := GetRequestInfoFromHttpHeaders(headers)
+	ri := GetRequestInfoFromHttpHeaders(header)
 	assert.Equal(t, "test-api-key", ri.ApiKey)
 	assert.Equal(t, "test-dataset", ri.Dataset)
 	assert.Equal(t, "test-proxy-token", ri.ProxyToken)
