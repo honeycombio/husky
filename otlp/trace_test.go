@@ -202,6 +202,8 @@ func TestTranslateHttpTraceRequest(t *testing.T) {
 			}
 
 			request, _ := http.NewRequest("POST", "", io.NopCloser(strings.NewReader(buf.String())))
+			request.Header.Set("x-honeycomb-team", "team")
+			request.Header.Set("x-honeycomb-dataset", "dataset")
 			request.Header.Set("content-type", "application/protobuf")
 			request.Header.Set("content-encoding", encoding)
 
@@ -250,6 +252,8 @@ func TestTranslateHttpTraceRequest(t *testing.T) {
 func TestInvalidContentTypeReturnsError(t *testing.T) {
 	body, _ := proto.Marshal(&collectortrace.ExportTraceServiceRequest{})
 	request, _ := http.NewRequest("POST", "", io.NopCloser(bytes.NewReader(body)))
+	request.Header.Set("x-honeycomb-team", "team")
+	request.Header.Set("x-honeycomb-dataset", "dataset")
 	request.Header.Set("content-type", "application/json")
 
 	batch, err := TranslateHttpTraceRequest(request)
@@ -260,6 +264,8 @@ func TestInvalidContentTypeReturnsError(t *testing.T) {
 func TestInvalidBodyReturnsError(t *testing.T) {
 	body := test.RandomBytes(10)
 	request, _ := http.NewRequest("POST", "", io.NopCloser(bytes.NewReader(body)))
+	request.Header.Set("x-honeycomb-team", "team")
+	request.Header.Set("x-honeycomb-dataset", "dataset")
 	request.Header.Set("content-type", "application/protobuf")
 
 	batch, err := TranslateHttpTraceRequest(request)
