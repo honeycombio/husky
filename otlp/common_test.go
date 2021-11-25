@@ -105,22 +105,26 @@ func TestAddAttributesToMap(t *testing.T) {
 		},
 		{
 			key:      "array-attr", // not supported
-			expected: nil,
+			expected: "[\"one\",true,3]",
 			attribute: &common.KeyValue{
 				Key: "array-attr", Value: &common.AnyValue{Value: &common.AnyValue_ArrayValue{ArrayValue: &common.ArrayValue{
 					Values: []*common.AnyValue{
-						{Value: &common.AnyValue_StringValue{StringValue: "array-str-value"}},
+						{Value: &common.AnyValue_StringValue{StringValue: "one"}},
+						{Value: &common.AnyValue_BoolValue{BoolValue: true}},
+						{Value: &common.AnyValue_IntValue{IntValue: 3}},
 					}}}},
 			},
 		},
 		{
-			key:      "kv-attr",
-			expected: nil,
+			key:      "kvlist-attr",
+			expected: "[{\"kv-attr-str\":\"kv-attr-str-value\"},{\"kv-attr-int\":1}]",
 			attribute: &common.KeyValue{
-				Key: "kv-attr", Value: &common.AnyValue{
+				Key: "kvlist-attr", Value: &common.AnyValue{
 					Value: &common.AnyValue_KvlistValue{KvlistValue: &common.KeyValueList{
 						Values: []*common.KeyValue{
-							{Key: "kv-attr-str", Value: &common.AnyValue{Value: &common.AnyValue_StringValue{"kv-attr-str-value"}}}},
+							{Key: "kv-attr-str", Value: &common.AnyValue{Value: &common.AnyValue_StringValue{StringValue: "kv-attr-str-value"}}},
+							{Key: "kv-attr-int", Value: &common.AnyValue{Value: &common.AnyValue_IntValue{IntValue: 1}}},
+						},
 					}}}},
 		},
 	}

@@ -2,6 +2,7 @@ package otlp
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 
 	common "go.opentelemetry.io/proto/otlp/common/v1"
@@ -82,19 +83,44 @@ func addAttributesToMap(attrs map[string]interface{}, attributes []*common.KeyVa
 		if attr.Key == "" {
 			continue
 		}
-		switch attr.Value.Value.(type) {
-		case *common.AnyValue_StringValue:
-			attrs[attr.Key] = attr.Value.GetStringValue()
-		case *common.AnyValue_BoolValue:
-			attrs[attr.Key] = attr.Value.GetBoolValue()
-		case *common.AnyValue_DoubleValue:
-			attrs[attr.Key] = attr.Value.GetDoubleValue()
-		case *common.AnyValue_IntValue:
-			attrs[attr.Key] = attr.Value.GetIntValue()
-		default:
-			// ArrayList and KvList types are not currently handled
-			// NOTE: when we move to forwarding encrypted OTLP requests, these will be handled in Shepherd
-			// and this func will be redundant
+		if val := getValue(attr.Value); val != nil {
+			attrs[attr.Key] = val
 		}
 	}
+}
+
+func getValue(value *common.AnyValue) interface{} {
+	switch value.Value.(type) {
+	case *common.AnyValue_StringValue:
+		return value.GetStringValue()
+	case *common.AnyValue_BoolValue:
+		return value.GetBoolValue()
+	case *common.AnyValue_DoubleValue:
+		return value.GetDoubleValue()
+	case *common.AnyValue_IntValue:
+		return value.GetIntValue()
+	case *common.AnyValue_ArrayValue:
+		items := value.GetArrayValue().Values
+		arr := make([]interface{}, len(items))
+		for i := 0; i < len(items); i++ {
+			arr[i] = getValue(items[i])
+		}
+		bytes, err := json.Marshal(arr)
+		if err == nil {
+			return string(bytes)
+		}
+	case *common.AnyValue_KvlistValue:
+		items := value.GetKvlistValue().Values
+		arr := make([]map[string]interface{}, len(items))
+		for i := 0; i < len(items); i++ {
+			arr[i] = map[string]interface{}{
+				items[i].Key: getValue(items[i].Value),
+			}
+		}
+		bytes, err := json.Marshal(arr)
+		if err == nil {
+			return string(bytes)
+		}
+	}
+	return nil
 }
