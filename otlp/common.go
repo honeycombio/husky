@@ -80,6 +80,7 @@ func getValueFromMetadata(md metadata.MD, key string) string {
 
 func addAttributesToMap(attrs map[string]interface{}, attributes []*common.KeyValue) {
 	for _, attr := range attributes {
+		// ignore entries if the key is empty or value is nil
 		if attr.Key == "" || attr.Value == nil {
 			continue
 		}
