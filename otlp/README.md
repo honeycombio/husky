@@ -9,7 +9,8 @@ You can either provide the OTLP trace request directly or a HTTP request object 
 
 ```
 // HTTP Request
-res, err := TranslateHttpTraceRequest(req *http.Request)
+ri := GetRequestInfoFromHttpHeaders(request.header http.Header)
+res, err := TranslateHttpTraceRequest(requst.body io.Reader, ri RequestInfo)
 
 // OTLP Trace gRPC
 res, err := TranslateGrpcTraceRequest(request *collectorTrace.ExportTraceServiceRequest)
@@ -21,7 +22,7 @@ The library also includes generic ways to extract request information (API Key, 
 
 ```
 // HTTP request
-requestInfo := GetRequestInfoFromHttpHeaders(r *http.Request)
+requestInfo := GetRequestInfoFromHttpHeaders(header http.Header)
 
 // gRPC request context
 requestInfo := GetRequestInfoFromGrpcMetadata(ctx context.Context)
