@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"io"
 	"io/ioutil"
-	"net/http"
 	"time"
 
 	"github.com/klauspost/compress/zstd"
@@ -20,17 +19,14 @@ const (
 	traceIDLongLength  = 16
 )
 
-func TranslateHttpTraceRequest(req *http.Request) ([]map[string]interface{}, error) {
-	reqInfo := GetRequestInfoFromHttpHeaders(req)
-	if !reqInfo.HasValidContentType() {
-		return nil, ErrInvalidContentType
+func TranslateHttpTraceRequest(body io.ReadCloser, ri RequestInfo) ([]map[string]interface{}, error) {
+	if err := ri.ValidateHeaders(); err != nil {
+		return nil, err
 	}
-
-	request, err := parseOTLPBody(req)
+	request, err := parseOTLPBody(body, ri.ContentEncoding)
 	if err != nil {
 		return nil, ErrFailedParseBody
 	}
-
 	return TranslateGrpcTraceRequest(request)
 }
 
@@ -216,16 +212,16 @@ func getSpanStatusCode(status *trace.Status) trace.Status_StatusCode {
 	return status.Code
 }
 
-func parseOTLPBody(r *http.Request) (request *collectorTrace.ExportTraceServiceRequest, err error) {
-	defer r.Body.Close()
-	bodyBytes, err := ioutil.ReadAll(r.Body)
+func parseOTLPBody(body io.ReadCloser, contentEncoding string) (request *collectorTrace.ExportTraceServiceRequest, err error) {
+	defer body.Close()
+	bodyBytes, err := ioutil.ReadAll(body)
 	if err != nil {
 		return nil, err
 	}
 	bodyReader := bytes.NewReader(bodyBytes)
 
 	var reader io.Reader
-	switch r.Header.Get("Content-Encoding") {
+	switch contentEncoding {
 	case "gzip":
 		gzipReader, err := gzip.NewReader(bodyReader)
 		defer gzipReader.Close()

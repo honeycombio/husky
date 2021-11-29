@@ -5,7 +5,6 @@ import (
 	"compress/gzip"
 	"encoding/hex"
 	"io"
-	"net/http"
 	"strings"
 	"testing"
 	"time"
@@ -182,7 +181,7 @@ func TestTranslateHttpTraceRequest(t *testing.T) {
 		}},
 	}
 
-	body, err := proto.Marshal(req)
+	bodyBytes, err := proto.Marshal(req)
 	assert.Nil(t, err)
 
 	for _, encoding := range []string{"", "gzip", "zstd"} {
@@ -191,21 +190,25 @@ func TestTranslateHttpTraceRequest(t *testing.T) {
 			switch encoding {
 			case "gzip":
 				w := gzip.NewWriter(buf)
-				w.Write(body)
+				w.Write(bodyBytes)
 				w.Close()
 			case "zstd":
 				w, _ := zstd.NewWriter(buf)
-				w.Write(body)
+				w.Write(bodyBytes)
 				w.Close()
 			default:
-				buf.Write(body)
+				buf.Write(bodyBytes)
 			}
 
-			request, _ := http.NewRequest("POST", "", io.NopCloser(strings.NewReader(buf.String())))
-			request.Header.Set("content-type", "application/protobuf")
-			request.Header.Set("content-encoding", encoding)
+			body := io.NopCloser(strings.NewReader(buf.String()))
+			ri := RequestInfo{
+				ApiKey:          "apikey",
+				Dataset:         "dataset",
+				ContentType:     "application/protobuf",
+				ContentEncoding: encoding,
+			}
 
-			events, err := TranslateHttpTraceRequest(request)
+			events, err := TranslateHttpTraceRequest(body, ri)
 			assert.Nil(t, err)
 			assert.Equal(t, 3, len(events))
 
@@ -248,21 +251,29 @@ func TestTranslateHttpTraceRequest(t *testing.T) {
 }
 
 func TestInvalidContentTypeReturnsError(t *testing.T) {
-	body, _ := proto.Marshal(&collectortrace.ExportTraceServiceRequest{})
-	request, _ := http.NewRequest("POST", "", io.NopCloser(bytes.NewReader(body)))
-	request.Header.Set("content-type", "application/json")
+	bodyBytes, _ := proto.Marshal(&collectortrace.ExportTraceServiceRequest{})
+	body := io.NopCloser(bytes.NewReader(bodyBytes))
+	ri := RequestInfo{
+		ApiKey:      "apikey",
+		Dataset:     "dataset",
+		ContentType: "application/json",
+	}
 
-	batch, err := TranslateHttpTraceRequest(request)
+	batch, err := TranslateHttpTraceRequest(body, ri)
 	assert.Nil(t, batch)
 	assert.Equal(t, ErrInvalidContentType, err)
 }
 
 func TestInvalidBodyReturnsError(t *testing.T) {
-	body := test.RandomBytes(10)
-	request, _ := http.NewRequest("POST", "", io.NopCloser(bytes.NewReader(body)))
-	request.Header.Set("content-type", "application/protobuf")
+	bodyBytes := test.RandomBytes(10)
+	body := io.NopCloser(bytes.NewReader(bodyBytes))
+	ri := RequestInfo{
+		ApiKey:      "apikey",
+		Dataset:     "dataset",
+		ContentType: "application/protobuf",
+	}
 
-	batch, err := TranslateHttpTraceRequest(request)
+	batch, err := TranslateHttpTraceRequest(body, ri)
 	assert.Nil(t, batch)
 	assert.Equal(t, ErrFailedParseBody, err)
 }
