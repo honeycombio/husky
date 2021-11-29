@@ -127,6 +127,11 @@ func TestAddAttributesToMap(t *testing.T) {
 						},
 					}}}},
 		},
+		{
+			key:       "nil-value-attr",
+			expected:  nil,
+			attribute: &common.KeyValue{Key: "kv-attr", Value: nil},
+		},
 	}
 
 	for _, tc := range testCases {
