@@ -19,16 +19,11 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-type event struct {
-	time time.Time
-	data map[string]interface{}
-}
-
 func TestTranslateGrpcTraceRequest(t *testing.T) {
 	traceID := test.RandomBytes(16)
 	spanID := test.RandomBytes(8)
-	starTimestamp := time.Now()
-	endTimestamp := starTimestamp.Add(time.Millisecond * 5)
+	startTimestamp := time.Now()
+	endTimestamp := startTimestamp.Add(time.Millisecond * 5)
 
 	linkedTraceID := test.RandomBytes(16)
 	linkedSpanID := test.RandomBytes(8)
@@ -50,7 +45,7 @@ func TestTranslateGrpcTraceRequest(t *testing.T) {
 					Name:              "test_span",
 					Kind:              trace.Span_SPAN_KIND_CLIENT,
 					Status:            &trace.Status{Code: trace.Status_STATUS_CODE_OK},
-					StartTimeUnixNano: uint64(starTimestamp.Nanosecond()),
+					StartTimeUnixNano: uint64(startTimestamp.Nanosecond()),
 					EndTimeUnixNano:   uint64(endTimestamp.Nanosecond()),
 					Attributes: []*common.KeyValue{{
 						Key: "span_attr",
@@ -82,53 +77,52 @@ func TestTranslateGrpcTraceRequest(t *testing.T) {
 		}},
 	}
 
-	events, requestSize, err := TranslateGrpcTraceRequest(req)
+	result, err := TranslateGrpcTraceRequest(req)
 	assert.Nil(t, err)
-	assert.Equal(t, proto.Size(req), requestSize)
-	assert.Equal(t, 3, len(events))
+	assert.Equal(t, proto.Size(req), result.RequestSize)
+	assert.Equal(t, 3, len(result.Events))
 
 	// span
-	var ev event
-	ev = getEventAtIndex(events, 0)
-	assert.Equal(t, starTimestamp.Nanosecond(), ev.time.Nanosecond())
-	assert.Equal(t, BytesToTraceID(traceID), ev.data["trace.trace_id"])
-	assert.Equal(t, hex.EncodeToString(spanID), ev.data["trace.span_id"])
-	assert.Equal(t, "client", ev.data["type"])
-	assert.Equal(t, "client", ev.data["span.kind"])
-	assert.Equal(t, "test_span", ev.data["name"])
-	assert.Equal(t, float64(endTimestamp.Nanosecond()-starTimestamp.Nanosecond())/float64(time.Millisecond), ev.data["duration_ms"])
-	assert.Equal(t, trace.Status_STATUS_CODE_OK, ev.data["status_code"])
-	assert.Equal(t, "span_attr_val", ev.data["span_attr"])
-	assert.Equal(t, "resource_attr_val", ev.data["resource_attr"])
+	ev := result.Events[0]
+	assert.Equal(t, startTimestamp.Nanosecond(), ev.Timestamp.Nanosecond())
+	assert.Equal(t, BytesToTraceID(traceID), ev.Attributes["trace.trace_id"])
+	assert.Equal(t, hex.EncodeToString(spanID), ev.Attributes["trace.span_id"])
+	assert.Equal(t, "client", ev.Attributes["type"])
+	assert.Equal(t, "client", ev.Attributes["span.kind"])
+	assert.Equal(t, "test_span", ev.Attributes["name"])
+	assert.Equal(t, float64(endTimestamp.Nanosecond()-startTimestamp.Nanosecond())/float64(time.Millisecond), ev.Attributes["duration_ms"])
+	assert.Equal(t, trace.Status_STATUS_CODE_OK, ev.Attributes["status_code"])
+	assert.Equal(t, "span_attr_val", ev.Attributes["span_attr"])
+	assert.Equal(t, "resource_attr_val", ev.Attributes["resource_attr"])
 
 	// event
-	ev = getEventAtIndex(events, 1)
-	assert.Equal(t, BytesToTraceID(traceID), ev.data["trace.trace_id"])
-	assert.Equal(t, hex.EncodeToString(spanID), ev.data["trace.parent_id"])
-	assert.Equal(t, "span_event", ev.data["name"])
-	assert.Equal(t, "test_span", ev.data["parent_name"])
-	assert.Equal(t, "span_event", ev.data["meta.annotation_type"])
-	assert.Equal(t, "span_event_attr_val", ev.data["span_event_attr"])
-	assert.Equal(t, "resource_attr_val", ev.data["resource_attr"])
+	ev = result.Events[1]
+	assert.Equal(t, BytesToTraceID(traceID), ev.Attributes["trace.trace_id"])
+	assert.Equal(t, hex.EncodeToString(spanID), ev.Attributes["trace.parent_id"])
+	assert.Equal(t, "span_event", ev.Attributes["name"])
+	assert.Equal(t, "test_span", ev.Attributes["parent_name"])
+	assert.Equal(t, "span_event", ev.Attributes["meta.annotation_type"])
+	assert.Equal(t, "span_event_attr_val", ev.Attributes["span_event_attr"])
+	assert.Equal(t, "resource_attr_val", ev.Attributes["resource_attr"])
 
 	// link
-	ev = getEventAtIndex(events, 2)
-	assert.Equal(t, starTimestamp.Nanosecond(), ev.time.Nanosecond())
-	assert.Equal(t, BytesToTraceID(traceID), ev.data["trace.trace_id"])
-	assert.Equal(t, hex.EncodeToString(spanID), ev.data["trace.parent_id"])
-	assert.Equal(t, BytesToTraceID(linkedTraceID), ev.data["trace.link.trace_id"])
-	assert.Equal(t, hex.EncodeToString(linkedSpanID), ev.data["trace.link.span_id"])
-	assert.Equal(t, "test_span", ev.data["parent_name"])
-	assert.Equal(t, "link", ev.data["meta.annotation_type"])
-	assert.Equal(t, "span_link_attr_val", ev.data["span_link_attr"])
-	assert.Equal(t, "resource_attr_val", ev.data["resource_attr"])
+	ev = result.Events[2]
+	assert.Equal(t, startTimestamp.Nanosecond(), ev.Timestamp.Nanosecond())
+	assert.Equal(t, BytesToTraceID(traceID), ev.Attributes["trace.trace_id"])
+	assert.Equal(t, hex.EncodeToString(spanID), ev.Attributes["trace.parent_id"])
+	assert.Equal(t, BytesToTraceID(linkedTraceID), ev.Attributes["trace.link.trace_id"])
+	assert.Equal(t, hex.EncodeToString(linkedSpanID), ev.Attributes["trace.link.span_id"])
+	assert.Equal(t, "test_span", ev.Attributes["parent_name"])
+	assert.Equal(t, "link", ev.Attributes["meta.annotation_type"])
+	assert.Equal(t, "span_link_attr_val", ev.Attributes["span_link_attr"])
+	assert.Equal(t, "resource_attr_val", ev.Attributes["resource_attr"])
 }
 
 func TestTranslateHttpTraceRequest(t *testing.T) {
 	traceID := test.RandomBytes(16)
 	spanID := test.RandomBytes(8)
-	starTimestamp := time.Now()
-	endTimestamp := starTimestamp.Add(time.Millisecond * 5)
+	startTimestamp := time.Now()
+	endTimestamp := startTimestamp.Add(time.Millisecond * 5)
 
 	linkedTraceID := test.RandomBytes(16)
 	linkedSpanID := test.RandomBytes(8)
@@ -150,7 +144,7 @@ func TestTranslateHttpTraceRequest(t *testing.T) {
 					Name:              "test_span",
 					Kind:              trace.Span_SPAN_KIND_CLIENT,
 					Status:            &trace.Status{Code: trace.Status_STATUS_CODE_OK},
-					StartTimeUnixNano: uint64(starTimestamp.Nanosecond()),
+					StartTimeUnixNano: uint64(startTimestamp.Nanosecond()),
 					EndTimeUnixNano:   uint64(endTimestamp.Nanosecond()),
 					Attributes: []*common.KeyValue{{
 						Key: "span_attr",
@@ -209,45 +203,44 @@ func TestTranslateHttpTraceRequest(t *testing.T) {
 				ContentEncoding: encoding,
 			}
 
-			events, requestSize, err := TranslateHttpTraceRequest(body, ri)
+			result, err := TranslateHttpTraceRequest(body, ri)
 			assert.Nil(t, err)
-			assert.Equal(t, proto.Size(req), requestSize)
-			assert.Equal(t, 3, len(events))
+			assert.Equal(t, proto.Size(req), result.RequestSize)
+			assert.Equal(t, 3, len(result.Events))
 
 			// span
-			var ev event
-			ev = getEventAtIndex(events, 0)
-			assert.Equal(t, starTimestamp.Nanosecond(), ev.time.Nanosecond())
-			assert.Equal(t, BytesToTraceID(traceID), ev.data["trace.trace_id"])
-			assert.Equal(t, hex.EncodeToString(spanID), ev.data["trace.span_id"])
-			assert.Equal(t, "client", ev.data["type"])
-			assert.Equal(t, "client", ev.data["span.kind"])
-			assert.Equal(t, "test_span", ev.data["name"])
-			assert.Equal(t, float64(endTimestamp.Nanosecond()-starTimestamp.Nanosecond())/float64(time.Millisecond), ev.data["duration_ms"])
-			assert.Equal(t, trace.Status_STATUS_CODE_OK, ev.data["status_code"])
-			assert.Equal(t, "span_attr_val", ev.data["span_attr"])
-			assert.Equal(t, "resource_attr_val", ev.data["resource_attr"])
+			ev := result.Events[0]
+			assert.Equal(t, startTimestamp.Nanosecond(), ev.Timestamp.Nanosecond())
+			assert.Equal(t, BytesToTraceID(traceID), ev.Attributes["trace.trace_id"])
+			assert.Equal(t, hex.EncodeToString(spanID), ev.Attributes["trace.span_id"])
+			assert.Equal(t, "client", ev.Attributes["type"])
+			assert.Equal(t, "client", ev.Attributes["span.kind"])
+			assert.Equal(t, "test_span", ev.Attributes["name"])
+			assert.Equal(t, float64(endTimestamp.Nanosecond()-startTimestamp.Nanosecond())/float64(time.Millisecond), ev.Attributes["duration_ms"])
+			assert.Equal(t, trace.Status_STATUS_CODE_OK, ev.Attributes["status_code"])
+			assert.Equal(t, "span_attr_val", ev.Attributes["span_attr"])
+			assert.Equal(t, "resource_attr_val", ev.Attributes["resource_attr"])
 
 			// event
-			ev = getEventAtIndex(events, 1)
-			assert.Equal(t, BytesToTraceID(traceID), ev.data["trace.trace_id"])
-			assert.Equal(t, hex.EncodeToString(spanID), ev.data["trace.parent_id"])
-			assert.Equal(t, "span_event", ev.data["name"])
-			assert.Equal(t, "test_span", ev.data["parent_name"])
-			assert.Equal(t, "span_event", ev.data["meta.annotation_type"])
-			assert.Equal(t, "span_event_attr_val", ev.data["span_event_attr"])
-			assert.Equal(t, "resource_attr_val", ev.data["resource_attr"])
+			ev = result.Events[1]
+			assert.Equal(t, BytesToTraceID(traceID), ev.Attributes["trace.trace_id"])
+			assert.Equal(t, hex.EncodeToString(spanID), ev.Attributes["trace.parent_id"])
+			assert.Equal(t, "span_event", ev.Attributes["name"])
+			assert.Equal(t, "test_span", ev.Attributes["parent_name"])
+			assert.Equal(t, "span_event", ev.Attributes["meta.annotation_type"])
+			assert.Equal(t, "span_event_attr_val", ev.Attributes["span_event_attr"])
+			assert.Equal(t, "resource_attr_val", ev.Attributes["resource_attr"])
 
 			// link
-			ev = getEventAtIndex(events, 2)
-			assert.Equal(t, BytesToTraceID(traceID), ev.data["trace.trace_id"])
-			assert.Equal(t, hex.EncodeToString(spanID), ev.data["trace.parent_id"])
-			assert.Equal(t, BytesToTraceID(linkedTraceID), ev.data["trace.link.trace_id"])
-			assert.Equal(t, hex.EncodeToString(linkedSpanID), ev.data["trace.link.span_id"])
-			assert.Equal(t, "test_span", ev.data["parent_name"])
-			assert.Equal(t, "link", ev.data["meta.annotation_type"])
-			assert.Equal(t, "span_link_attr_val", ev.data["span_link_attr"])
-			assert.Equal(t, "resource_attr_val", ev.data["resource_attr"])
+			ev = result.Events[2]
+			assert.Equal(t, BytesToTraceID(traceID), ev.Attributes["trace.trace_id"])
+			assert.Equal(t, hex.EncodeToString(spanID), ev.Attributes["trace.parent_id"])
+			assert.Equal(t, BytesToTraceID(linkedTraceID), ev.Attributes["trace.link.trace_id"])
+			assert.Equal(t, hex.EncodeToString(linkedSpanID), ev.Attributes["trace.link.span_id"])
+			assert.Equal(t, "test_span", ev.Attributes["parent_name"])
+			assert.Equal(t, "link", ev.Attributes["meta.annotation_type"])
+			assert.Equal(t, "span_link_attr_val", ev.Attributes["span_link_attr"])
+			assert.Equal(t, "resource_attr_val", ev.Attributes["resource_attr"])
 		})
 	}
 }
@@ -261,9 +254,8 @@ func TestInvalidContentTypeReturnsError(t *testing.T) {
 		ContentType: "application/json",
 	}
 
-	batch, requestSize, err := TranslateHttpTraceRequest(body, ri)
-	assert.Nil(t, batch)
-	assert.Equal(t, 0, requestSize)
+	result, err := TranslateHttpTraceRequest(body, ri)
+	assert.Nil(t, result)
 	assert.Equal(t, ErrInvalidContentType, err)
 }
 
@@ -276,15 +268,7 @@ func TestInvalidBodyReturnsError(t *testing.T) {
 		ContentType: "application/protobuf",
 	}
 
-	batch, requestSize, err := TranslateHttpTraceRequest(body, ri)
-	assert.Nil(t, batch)
-	assert.Equal(t, 0, requestSize)
+	result, err := TranslateHttpTraceRequest(body, ri)
+	assert.Nil(t, result)
 	assert.Equal(t, ErrFailedParseBody, err)
-}
-
-func getEventAtIndex(events []map[string]interface{}, i int) event {
-	return event{
-		time: events[i]["time"].(time.Time),
-		data: events[i]["data"].(map[string]interface{}),
-	}
 }

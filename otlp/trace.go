@@ -19,19 +19,29 @@ const (
 	traceIDLongLength  = 16
 )
 
-func TranslateHttpTraceRequest(body io.ReadCloser, ri RequestInfo) ([]map[string]interface{}, int, error) {
+type TraceResult struct {
+	RequestSize int
+	Events      []Event
+}
+
+type Event struct {
+	Attributes map[string]interface{}
+	Timestamp  time.Time
+}
+
+func TranslateHttpTraceRequest(body io.ReadCloser, ri RequestInfo) (*TraceResult, error) {
 	if err := ri.ValidateHeaders(); err != nil {
-		return nil, 0, err
+		return nil, err
 	}
 	request, err := parseOTLPBody(body, ri.ContentEncoding)
 	if err != nil {
-		return nil, 0, ErrFailedParseBody
+		return nil, ErrFailedParseBody
 	}
 	return TranslateGrpcTraceRequest(request)
 }
 
-func TranslateGrpcTraceRequest(request *collectorTrace.ExportTraceServiceRequest) ([]map[string]interface{}, int, error) {
-	batch := []map[string]interface{}{}
+func TranslateGrpcTraceRequest(request *collectorTrace.ExportTraceServiceRequest) (*TraceResult, error) {
+	batch := []Event{}
 	for _, resourceSpan := range request.ResourceSpans {
 		resourceAttrs := make(map[string]interface{})
 
@@ -85,11 +95,10 @@ func TranslateGrpcTraceRequest(request *collectorTrace.ExportTraceServiceRequest
 				// Now we need to wrap the eventAttrs in an event so we can specify the timestamp
 				// which is the StartTime as a time.Time object
 				timestamp := time.Unix(0, int64(span.StartTimeUnixNano)).UTC()
-				batchEvent := map[string]interface{}{
-					"time": timestamp,
-					"data": eventAttrs,
-				}
-				batch = append(batch, batchEvent)
+				batch = append(batch, Event{
+					Attributes: eventAttrs,
+					Timestamp:  timestamp,
+				})
 
 				for _, sevent := range span.Events {
 					timestamp := time.Unix(0, int64(sevent.TimeUnixNano)).UTC()
@@ -107,9 +116,9 @@ func TranslateGrpcTraceRequest(request *collectorTrace.ExportTraceServiceRequest
 					for k, v := range resourceAttrs {
 						attrs[k] = v
 					}
-					batch = append(batch, map[string]interface{}{
-						"time": timestamp,
-						"data": attrs,
+					batch = append(batch, Event{
+						Attributes: attrs,
+						Timestamp:  timestamp,
 					})
 				}
 
@@ -129,15 +138,18 @@ func TranslateGrpcTraceRequest(request *collectorTrace.ExportTraceServiceRequest
 					for k, v := range resourceAttrs {
 						attrs[k] = v
 					}
-					batch = append(batch, map[string]interface{}{
-						"time": timestamp, // use timestamp from parent span
-						"data": attrs,
+					batch = append(batch, Event{
+						Attributes: attrs,
+						Timestamp:  timestamp, // use timestamp from parent span
 					})
 				}
 			}
 		}
 	}
-	return batch, proto.Size(request), nil
+	return &TraceResult{
+		RequestSize: proto.Size(request),
+		Events:      batch,
+	}, nil
 }
 
 func getSpanKind(kind trace.Span_SpanKind) string {
