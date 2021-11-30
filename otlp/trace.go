@@ -19,18 +19,18 @@ const (
 	traceIDLongLength  = 16
 )
 
-func TranslateHttpTraceRequest(body io.ReadCloser, ri RequestInfo) ([]map[string]interface{}, error) {
+func TranslateHttpTraceRequest(body io.ReadCloser, ri RequestInfo) ([]map[string]interface{}, int, error) {
 	if err := ri.ValidateHeaders(); err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	request, err := parseOTLPBody(body, ri.ContentEncoding)
 	if err != nil {
-		return nil, ErrFailedParseBody
+		return nil, 0, ErrFailedParseBody
 	}
 	return TranslateGrpcTraceRequest(request)
 }
 
-func TranslateGrpcTraceRequest(request *collectorTrace.ExportTraceServiceRequest) ([]map[string]interface{}, error) {
+func TranslateGrpcTraceRequest(request *collectorTrace.ExportTraceServiceRequest) ([]map[string]interface{}, int, error) {
 	batch := []map[string]interface{}{}
 	for _, resourceSpan := range request.ResourceSpans {
 		resourceAttrs := make(map[string]interface{})
@@ -137,7 +137,7 @@ func TranslateGrpcTraceRequest(request *collectorTrace.ExportTraceServiceRequest
 			}
 		}
 	}
-	return batch, nil
+	return batch, proto.Size(request), nil
 }
 
 func getSpanKind(kind trace.Span_SpanKind) string {

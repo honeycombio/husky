@@ -82,8 +82,9 @@ func TestTranslateGrpcTraceRequest(t *testing.T) {
 		}},
 	}
 
-	events, err := TranslateGrpcTraceRequest(req)
+	events, requestSize, err := TranslateGrpcTraceRequest(req)
 	assert.Nil(t, err)
+	assert.Equal(t, proto.Size(req), requestSize)
 	assert.Equal(t, 3, len(events))
 
 	// span
@@ -208,8 +209,9 @@ func TestTranslateHttpTraceRequest(t *testing.T) {
 				ContentEncoding: encoding,
 			}
 
-			events, err := TranslateHttpTraceRequest(body, ri)
+			events, requestSize, err := TranslateHttpTraceRequest(body, ri)
 			assert.Nil(t, err)
+			assert.Equal(t, proto.Size(req), requestSize)
 			assert.Equal(t, 3, len(events))
 
 			// span
@@ -259,8 +261,9 @@ func TestInvalidContentTypeReturnsError(t *testing.T) {
 		ContentType: "application/json",
 	}
 
-	batch, err := TranslateHttpTraceRequest(body, ri)
+	batch, requestSize, err := TranslateHttpTraceRequest(body, ri)
 	assert.Nil(t, batch)
+	assert.Equal(t, 0, requestSize)
 	assert.Equal(t, ErrInvalidContentType, err)
 }
 
@@ -273,8 +276,9 @@ func TestInvalidBodyReturnsError(t *testing.T) {
 		ContentType: "application/protobuf",
 	}
 
-	batch, err := TranslateHttpTraceRequest(body, ri)
+	batch, requestSize, err := TranslateHttpTraceRequest(body, ri)
 	assert.Nil(t, batch)
+	assert.Equal(t, 0, requestSize)
 	assert.Equal(t, ErrFailedParseBody, err)
 }
 
