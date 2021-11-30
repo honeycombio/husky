@@ -27,6 +27,7 @@ type TraceResult struct {
 type Event struct {
 	Attributes map[string]interface{}
 	Timestamp  time.Time
+	SampleRate int
 }
 
 func TranslateHttpTraceRequest(body io.ReadCloser, ri RequestInfo) (*TraceResult, error) {
@@ -85,6 +86,15 @@ func TranslateGrpcTraceRequest(request *collectorTrace.ExportTraceServiceRequest
 				}
 				if span.Attributes != nil {
 					addAttributesToMap(eventAttrs, span.Attributes)
+				}
+				var sampleRateKey string
+				if eventAttrs["sampleRate"] != nil {
+					sampleRateKey = "sampleRate"
+				} else if eventAttrs["SampleRate"] != nil {
+					sampleRateKey = "sampleRate"
+				}
+				if sampleRateKey != "" {
+					SampleRateValue := eventAttrs[sampleRateKey]
 				}
 
 				// copy resource attributes to event attributes
