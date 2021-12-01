@@ -147,3 +147,100 @@ func TestValidateHeaders(t *testing.T) {
 		assert.Equal(t, tc.err, err)
 	}
 }
+
+func TestGetRequestInfoFromGrpcMetadataIsCaseInsensitive(t *testing.T) {
+	const (
+		apiKeyValue     = "test-apikey"
+		datasetValue    = "test-dataset"
+		proxyTokenValue = "test-token"
+	)
+
+	tests := []struct {
+		name             string
+		apikeyHeader     string
+		datasetHeader    string
+		proxyTokenHeader string
+	}{
+		{
+			name:             "lowercase",
+			apikeyHeader:     "x-honeycomb-team",
+			datasetHeader:    "x-honeycomb-dataset",
+			proxyTokenHeader: "x-honeycomb-proxy-token",
+		},
+		{
+			name:             "uppercase",
+			apikeyHeader:     "X-HONEYCOMB-TEAM",
+			datasetHeader:    "X-HONEYCOMB-DATASET",
+			proxyTokenHeader: "X-HONEYCOMB-PROXY-TOKEN",
+		},
+		{
+			name:             "mixed-case",
+			apikeyHeader:     "x-HoNeYcOmB-tEaM",
+			datasetHeader:    "X-hOnEyCoMb-DaTaSeT",
+			proxyTokenHeader: "X-hOnEyCoMb-PrOxY-tOKeN",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			md := metadata.MD{}
+			md.Set(tt.apikeyHeader, apiKeyValue)
+			md.Set(tt.datasetHeader, datasetValue)
+			md.Set(tt.proxyTokenHeader, proxyTokenValue)
+
+			ctx := metadata.NewIncomingContext(context.Background(), md)
+			ri := GetRequestInfoFromGrpcMetadata(ctx)
+			assert.Equal(t, apiKeyValue, ri.ApiKey)
+			assert.Equal(t, datasetValue, ri.Dataset)
+			assert.Equal(t, proxyTokenValue, ri.ProxyToken)
+		})
+	}
+}
+
+func TestGetRequestInfoFromHttpHeadersIsCaseInsensitive(t *testing.T) {
+	const (
+		apiKeyValue     = "test-apikey"
+		datasetValue    = "test-dataset"
+		proxyTokenValue = "test-token"
+	)
+
+	tests := []struct {
+		name             string
+		apikeyHeader     string
+		datasetHeader    string
+		proxyTokenHeader string
+	}{
+		{
+			name:             "lowercase",
+			apikeyHeader:     "x-honeycomb-team",
+			datasetHeader:    "x-honeycomb-dataset",
+			proxyTokenHeader: "x-honeycomb-proxy-token",
+		},
+		{
+			name:             "uppercase",
+			apikeyHeader:     "X-HONEYCOMB-TEAM",
+			datasetHeader:    "X-HONEYCOMB-DATASET",
+			proxyTokenHeader: "X-HONEYCOMB-PROXY-TOKEN",
+		},
+		{
+			name:             "mixed-case",
+			apikeyHeader:     "x-HoNeYcOmB-tEaM",
+			datasetHeader:    "X-hOnEyCoMb-DaTaSeT",
+			proxyTokenHeader: "X-hOnEyCoMb-PrOxY-tOKeN",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			header := http.Header{}
+			header.Set(apiKeyHeader, apiKeyValue)
+			header.Set(datasetHeader, datasetValue)
+			header.Set(proxyTokenHeader, proxyTokenValue)
+
+			ri := GetRequestInfoFromHttpHeaders(header)
+			assert.Equal(t, apiKeyValue, ri.ApiKey)
+			assert.Equal(t, datasetValue, ri.Dataset)
+			assert.Equal(t, proxyTokenValue, ri.ProxyToken)
+		})
+	}
+}
