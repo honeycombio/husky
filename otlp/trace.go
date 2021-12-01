@@ -23,7 +23,7 @@ const (
 	defaultSampleRate  = int32(1)
 )
 
-type TraceResult struct {
+type TranslateTraceRequestResult struct {
 	RequestSize int
 	Events      []Event
 }
@@ -34,7 +34,7 @@ type Event struct {
 	SampleRate int32
 }
 
-func TranslateHttpTraceRequest(body io.ReadCloser, ri RequestInfo) (*TraceResult, error) {
+func TranslateTraceRequestFromReader(body io.ReadCloser, ri RequestInfo) (*TranslateTraceRequestResult, error) {
 	if err := ri.ValidateHeaders(); err != nil {
 		return nil, err
 	}
@@ -42,10 +42,10 @@ func TranslateHttpTraceRequest(body io.ReadCloser, ri RequestInfo) (*TraceResult
 	if err != nil {
 		return nil, ErrFailedParseBody
 	}
-	return TranslateGrpcTraceRequest(request)
+	return TranslateTraceRequest(request)
 }
 
-func TranslateGrpcTraceRequest(request *collectorTrace.ExportTraceServiceRequest) (*TraceResult, error) {
+func TranslateTraceRequest(request *collectorTrace.ExportTraceServiceRequest) (*TranslateTraceRequestResult, error) {
 	batch := []Event{}
 	for _, resourceSpan := range request.ResourceSpans {
 		resourceAttrs := make(map[string]interface{})
@@ -152,7 +152,7 @@ func TranslateGrpcTraceRequest(request *collectorTrace.ExportTraceServiceRequest
 			}
 		}
 	}
-	return &TraceResult{
+	return &TranslateTraceRequestResult{
 		RequestSize: proto.Size(request),
 		Events:      batch,
 	}, nil
