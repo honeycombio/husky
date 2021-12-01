@@ -1,5 +1,16 @@
 # Refinery Changelog
 
+## 0.3.0 2021-12-01
+
+### Enhancements
+
+- Update translate trace request calls to return struct instead of params (#23)
+
+### Maintenance
+
+- Add changelog & releasing docs (#20)
+- Add case insensitive tests for parsing headers (#24)
+
 ## 0.2.0 2021-11-29
 
 ### Enhancements
