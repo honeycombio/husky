@@ -6,6 +6,8 @@ import (
 	"encoding/hex"
 	"io"
 	"io/ioutil"
+	"math"
+	"strconv"
 	"time"
 
 	"github.com/klauspost/compress/zstd"
@@ -17,9 +19,22 @@ import (
 const (
 	traceIDShortLength = 8
 	traceIDLongLength  = 16
+	zeroSampleRate     = int32(0)
+	defaultSampleRate  = int32(1)
 )
 
-func TranslateHttpTraceRequest(body io.ReadCloser, ri RequestInfo) ([]map[string]interface{}, error) {
+type TranslateTraceRequestResult struct {
+	RequestSize int
+	Events      []Event
+}
+
+type Event struct {
+	Attributes map[string]interface{}
+	Timestamp  time.Time
+	SampleRate int32
+}
+
+func TranslateTraceRequestFromReader(body io.ReadCloser, ri RequestInfo) (*TranslateTraceRequestResult, error) {
 	if err := ri.ValidateHeaders(); err != nil {
 		return nil, err
 	}
@@ -27,11 +42,11 @@ func TranslateHttpTraceRequest(body io.ReadCloser, ri RequestInfo) ([]map[string
 	if err != nil {
 		return nil, ErrFailedParseBody
 	}
-	return TranslateGrpcTraceRequest(request)
+	return TranslateTraceRequest(request)
 }
 
-func TranslateGrpcTraceRequest(request *collectorTrace.ExportTraceServiceRequest) ([]map[string]interface{}, error) {
-	batch := []map[string]interface{}{}
+func TranslateTraceRequest(request *collectorTrace.ExportTraceServiceRequest) (*TranslateTraceRequestResult, error) {
+	batch := []Event{}
 	for _, resourceSpan := range request.ResourceSpans {
 		resourceAttrs := make(map[string]interface{})
 
@@ -85,11 +100,11 @@ func TranslateGrpcTraceRequest(request *collectorTrace.ExportTraceServiceRequest
 				// Now we need to wrap the eventAttrs in an event so we can specify the timestamp
 				// which is the StartTime as a time.Time object
 				timestamp := time.Unix(0, int64(span.StartTimeUnixNano)).UTC()
-				batchEvent := map[string]interface{}{
-					"time": timestamp,
-					"data": eventAttrs,
-				}
-				batch = append(batch, batchEvent)
+				batch = append(batch, Event{
+					Attributes: eventAttrs,
+					Timestamp:  timestamp,
+					SampleRate: getSampleRate(eventAttrs),
+				})
 
 				for _, sevent := range span.Events {
 					timestamp := time.Unix(0, int64(sevent.TimeUnixNano)).UTC()
@@ -107,9 +122,9 @@ func TranslateGrpcTraceRequest(request *collectorTrace.ExportTraceServiceRequest
 					for k, v := range resourceAttrs {
 						attrs[k] = v
 					}
-					batch = append(batch, map[string]interface{}{
-						"time": timestamp,
-						"data": attrs,
+					batch = append(batch, Event{
+						Attributes: attrs,
+						Timestamp:  timestamp,
 					})
 				}
 
@@ -129,15 +144,18 @@ func TranslateGrpcTraceRequest(request *collectorTrace.ExportTraceServiceRequest
 					for k, v := range resourceAttrs {
 						attrs[k] = v
 					}
-					batch = append(batch, map[string]interface{}{
-						"time": timestamp, // use timestamp from parent span
-						"data": attrs,
+					batch = append(batch, Event{
+						Attributes: attrs,
+						Timestamp:  timestamp, // use timestamp from parent span
 					})
 				}
 			}
 		}
 	}
-	return batch, nil
+	return &TranslateTraceRequestResult{
+		RequestSize: proto.Size(request),
+		Events:      batch,
+	}, nil
 }
 
 func getSpanKind(kind trace.Span_SpanKind) string {
@@ -252,4 +270,50 @@ func parseOTLPBody(body io.ReadCloser, contentEncoding string) (request *collect
 	}
 
 	return request, nil
+}
+
+func getSampleRate(attrs map[string]interface{}) int32 {
+	sampleRateKey := getSampleRateKey(attrs)
+	if sampleRateKey == "" {
+		return zeroSampleRate
+	}
+
+	sampleRate := defaultSampleRate
+	sampleRateVal := attrs[sampleRateKey]
+	switch v := sampleRateVal.(type) {
+	case string:
+		if i, err := strconv.Atoi(v); err == nil {
+			if i < math.MaxInt32 {
+				sampleRate = int32(i)
+			} else {
+				sampleRate = math.MaxInt32
+			}
+		}
+	case int32:
+		sampleRate = v
+	case int:
+		if v < math.MaxInt32 {
+			sampleRate = int32(v)
+		} else {
+			sampleRate = math.MaxInt32
+		}
+	case int64:
+		if v < math.MaxInt32 {
+			sampleRate = int32(v)
+		} else {
+			sampleRate = math.MaxInt32
+		}
+	}
+	delete(attrs, sampleRateKey) // remove attr
+	return sampleRate
+}
+
+func getSampleRateKey(attrs map[string]interface{}) string {
+	if _, ok := attrs["sampleRate"]; ok {
+		return "sampleRate"
+	}
+	if _, ok := attrs["SampleRate"]; ok {
+		return "SampleRate"
+	}
+	return ""
 }
