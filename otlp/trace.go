@@ -6,6 +6,8 @@ import (
 	"encoding/hex"
 	"io"
 	"io/ioutil"
+	"math"
+	"strconv"
 	"time"
 
 	"github.com/klauspost/compress/zstd"
@@ -17,6 +19,8 @@ import (
 const (
 	traceIDShortLength = 8
 	traceIDLongLength  = 16
+	zeroSampleRate     = int32(0)
+	defaultSampleRate  = int32(1)
 )
 
 type TraceResult struct {
@@ -27,7 +31,7 @@ type TraceResult struct {
 type Event struct {
 	Attributes map[string]interface{}
 	Timestamp  time.Time
-	SampleRate int
+	SampleRate int32
 }
 
 func TranslateHttpTraceRequest(body io.ReadCloser, ri RequestInfo) (*TraceResult, error) {
@@ -87,15 +91,6 @@ func TranslateGrpcTraceRequest(request *collectorTrace.ExportTraceServiceRequest
 				if span.Attributes != nil {
 					addAttributesToMap(eventAttrs, span.Attributes)
 				}
-				var sampleRateKey string
-				if eventAttrs["sampleRate"] != nil {
-					sampleRateKey = "sampleRate"
-				} else if eventAttrs["SampleRate"] != nil {
-					sampleRateKey = "sampleRate"
-				}
-				if sampleRateKey != "" {
-					SampleRateValue := eventAttrs[sampleRateKey]
-				}
 
 				// copy resource attributes to event attributes
 				for k, v := range resourceAttrs {
@@ -108,6 +103,7 @@ func TranslateGrpcTraceRequest(request *collectorTrace.ExportTraceServiceRequest
 				batch = append(batch, Event{
 					Attributes: eventAttrs,
 					Timestamp:  timestamp,
+					SampleRate: getSampleRate(eventAttrs),
 				})
 
 				for _, sevent := range span.Events {
@@ -274,4 +270,50 @@ func parseOTLPBody(body io.ReadCloser, contentEncoding string) (request *collect
 	}
 
 	return request, nil
+}
+
+func getSampleRate(attrs map[string]interface{}) int32 {
+	sampleRateKey := getSampleRateKey(attrs)
+	if sampleRateKey == "" {
+		return zeroSampleRate
+	}
+
+	sampleRate := defaultSampleRate
+	sampleRateVal := attrs[sampleRateKey]
+	switch v := sampleRateVal.(type) {
+	case string:
+		if i, err := strconv.Atoi(v); err == nil {
+			if i < math.MaxInt32 {
+				sampleRate = int32(i)
+			} else {
+				sampleRate = math.MaxInt32
+			}
+		}
+	case int32:
+		sampleRate = v
+	case int:
+		if v < math.MaxInt32 {
+			sampleRate = int32(v)
+		} else {
+			sampleRate = math.MaxInt32
+		}
+	case int64:
+		if v < math.MaxInt32 {
+			sampleRate = int32(v)
+		} else {
+			sampleRate = math.MaxInt32
+		}
+	}
+	delete(attrs, sampleRateKey) // remove attr
+	return sampleRate
+}
+
+func getSampleRateKey(attrs map[string]interface{}) string {
+	if _, ok := attrs["sampleRate"]; ok {
+		return "sampleRate"
+	}
+	if _, ok := attrs["SampleRate"]; ok {
+		return "SampleRate"
+	}
+	return ""
 }

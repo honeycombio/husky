@@ -5,6 +5,8 @@ import (
 	"compress/gzip"
 	"encoding/hex"
 	"io"
+	"math"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -47,12 +49,20 @@ func TestTranslateGrpcTraceRequest(t *testing.T) {
 					Status:            &trace.Status{Code: trace.Status_STATUS_CODE_OK},
 					StartTimeUnixNano: uint64(startTimestamp.Nanosecond()),
 					EndTimeUnixNano:   uint64(endTimestamp.Nanosecond()),
-					Attributes: []*common.KeyValue{{
-						Key: "span_attr",
-						Value: &common.AnyValue{
-							Value: &common.AnyValue_StringValue{StringValue: "span_attr_val"},
+					Attributes: []*common.KeyValue{
+						{
+							Key: "span_attr",
+							Value: &common.AnyValue{
+								Value: &common.AnyValue_StringValue{StringValue: "span_attr_val"},
+							},
 						},
-					}},
+						{
+							Key: "sampleRate",
+							Value: &common.AnyValue{
+								Value: &common.AnyValue_IntValue{IntValue: 100},
+							},
+						},
+					},
 					Events: []*trace.Span_Event{{
 						Name: "span_event",
 						Attributes: []*common.KeyValue{{
@@ -85,6 +95,7 @@ func TestTranslateGrpcTraceRequest(t *testing.T) {
 	// span
 	ev := result.Events[0]
 	assert.Equal(t, startTimestamp.Nanosecond(), ev.Timestamp.Nanosecond())
+	assert.Equal(t, int32(100), ev.SampleRate)
 	assert.Equal(t, BytesToTraceID(traceID), ev.Attributes["trace.trace_id"])
 	assert.Equal(t, hex.EncodeToString(spanID), ev.Attributes["trace.span_id"])
 	assert.Equal(t, "client", ev.Attributes["type"])
@@ -98,6 +109,7 @@ func TestTranslateGrpcTraceRequest(t *testing.T) {
 	// event
 	ev = result.Events[1]
 	assert.Equal(t, BytesToTraceID(traceID), ev.Attributes["trace.trace_id"])
+	assert.Equal(t, int32(0), ev.SampleRate)
 	assert.Equal(t, hex.EncodeToString(spanID), ev.Attributes["trace.parent_id"])
 	assert.Equal(t, "span_event", ev.Attributes["name"])
 	assert.Equal(t, "test_span", ev.Attributes["parent_name"])
@@ -108,6 +120,7 @@ func TestTranslateGrpcTraceRequest(t *testing.T) {
 	// link
 	ev = result.Events[2]
 	assert.Equal(t, startTimestamp.Nanosecond(), ev.Timestamp.Nanosecond())
+	assert.Equal(t, int32(0), ev.SampleRate)
 	assert.Equal(t, BytesToTraceID(traceID), ev.Attributes["trace.trace_id"])
 	assert.Equal(t, hex.EncodeToString(spanID), ev.Attributes["trace.parent_id"])
 	assert.Equal(t, BytesToTraceID(linkedTraceID), ev.Attributes["trace.link.trace_id"])
@@ -271,4 +284,69 @@ func TestInvalidBodyReturnsError(t *testing.T) {
 	result, err := TranslateHttpTraceRequest(body, ri)
 	assert.Nil(t, result)
 	assert.Equal(t, ErrFailedParseBody, err)
+}
+
+func TestNoSampleRateKeyReturnZero(t *testing.T) {
+	attrs := map[string]interface{}{
+		"not_a_sample_rate": 10,
+	}
+	sampleRate := getSampleRate(attrs)
+	assert.Equal(t, int32(0), sampleRate)
+}
+
+func TestCanDetectSampleRateCapitalizations(t *testing.T) {
+	t.Run("lowercase", func(t *testing.T) {
+		attrs := map[string]interface{}{
+			"sampleRate": 10,
+		}
+		key := getSampleRateKey(attrs)
+		assert.Equal(t, "sampleRate", key)
+	})
+	t.Run("uppercase", func(t *testing.T) {
+		attrs := map[string]interface{}{
+			"SampleRate": 10,
+		}
+		key := getSampleRateKey(attrs)
+		assert.Equal(t, "SampleRate", key)
+	})
+}
+
+func TestGetSampleRateConversions(t *testing.T) {
+	testCases := []struct {
+		sampleRate interface{}
+		expected   int32
+	}{
+		{sampleRate: nil, expected: 1},
+		{sampleRate: "0", expected: 0},
+		{sampleRate: "1", expected: 1},
+		{sampleRate: "100", expected: 100},
+		{sampleRate: "invalid", expected: 1},
+		{sampleRate: strconv.Itoa(math.MaxInt32), expected: math.MaxInt32},
+		{sampleRate: strconv.Itoa(math.MaxInt64), expected: math.MaxInt32},
+
+		{sampleRate: 0, expected: 0},
+		{sampleRate: 1, expected: 1},
+		{sampleRate: 100, expected: 100},
+		{sampleRate: math.MaxInt32, expected: math.MaxInt32},
+		{sampleRate: math.MaxInt64, expected: math.MaxInt32},
+
+		{sampleRate: int32(0), expected: 0},
+		{sampleRate: int32(1), expected: 1},
+		{sampleRate: int32(100), expected: 100},
+		{sampleRate: int32(math.MaxInt32), expected: math.MaxInt32},
+
+		{sampleRate: int64(0), expected: 0},
+		{sampleRate: int64(1), expected: 1},
+		{sampleRate: int64(100), expected: 100},
+		{sampleRate: int64(math.MaxInt32), expected: math.MaxInt32},
+		{sampleRate: int64(math.MaxInt64), expected: math.MaxInt32},
+	}
+
+	for _, tc := range testCases {
+		attrs := map[string]interface{}{
+			"sampleRate": tc.sampleRate,
+		}
+		assert.Equal(t, tc.expected, getSampleRate(attrs))
+		assert.Equal(t, 0, len(attrs))
+	}
 }
