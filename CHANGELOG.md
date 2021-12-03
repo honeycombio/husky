@@ -1,5 +1,11 @@
 # Refinery Changelog
 
+## 0.4.0 2021-12-03
+
+### Dependencies
+
+- Downgrade otlp-proto to v0.9.0 & grpc to 1.40.0 (#27)
+
 ## 0.3.0 2021-12-01
 
 ### Enhancements
