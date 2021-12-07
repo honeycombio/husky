@@ -13,6 +13,7 @@ const (
 	apiKeyHeader             = "x-honeycomb-team"
 	datasetHeader            = "x-honeycomb-dataset"
 	proxyTokenHeader         = "x-honeycomb-proxy-token"
+	proxyVersionHeader       = "x-basenji-version"
 	userAgentHeader          = "user-agent"
 	contentTypeHeader        = "content-type"
 	contentEncodingHeader    = "content-encoding"
@@ -20,9 +21,10 @@ const (
 )
 
 type RequestInfo struct {
-	ApiKey     string
-	Dataset    string
-	ProxyToken string
+	ApiKey       string
+	Dataset      string
+	ProxyToken   string
+	ProxyVersion string
 
 	UserAgent          string
 	ContentType        string
@@ -51,6 +53,7 @@ func GetRequestInfoFromGrpcMetadata(ctx context.Context) RequestInfo {
 		ri.ApiKey = getValueFromMetadata(md, apiKeyHeader)
 		ri.Dataset = getValueFromMetadata(md, datasetHeader)
 		ri.ProxyToken = getValueFromMetadata(md, proxyTokenHeader)
+		ri.ProxyVersion = getValueFromMetadata(md, proxyVersionHeader)
 		ri.UserAgent = getValueFromMetadata(md, userAgentHeader)
 		ri.ContentEncoding = getValueFromMetadata(md, contentEncodingHeader)
 		ri.GRPCAcceptEncoding = getValueFromMetadata(md, gRPCAcceptEncodingHeader)
@@ -63,6 +66,7 @@ func GetRequestInfoFromHttpHeaders(header http.Header) RequestInfo {
 		ApiKey:             header.Get(apiKeyHeader),
 		Dataset:            header.Get(datasetHeader),
 		ProxyToken:         header.Get(proxyTokenHeader),
+		ProxyVersion:       header.Get(proxyVersionHeader),
 		UserAgent:          header.Get(userAgentHeader),
 		ContentType:        header.Get(contentTypeHeader),
 		ContentEncoding:    header.Get(contentEncodingHeader),
