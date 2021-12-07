@@ -1,5 +1,10 @@
 # Refinery Changelog
 
+## 0.5.0 2021-12-07
+
+- Parse proxy version as part of RequestInfo (#30)
+- Record number of span events and links (#29)
+
 ## 0.4.0 2021-12-03
 
 ### Dependencies
