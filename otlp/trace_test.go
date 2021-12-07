@@ -105,6 +105,8 @@ func TestTranslateGrpcTraceRequest(t *testing.T) {
 	assert.Equal(t, trace.Status_STATUS_CODE_OK, ev.Attributes["status_code"])
 	assert.Equal(t, "span_attr_val", ev.Attributes["span_attr"])
 	assert.Equal(t, "resource_attr_val", ev.Attributes["resource_attr"])
+	assert.Equal(t, 1, ev.Attributes["span.num_links"])
+	assert.Equal(t, 1, ev.Attributes["span.num_events"])
 
 	// event
 	ev = result.Events[1]
