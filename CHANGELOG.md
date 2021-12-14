@@ -1,6 +1,6 @@
-# Refinery Changelog
+# Husky Changelog
 
-## 0.5.0 2021-12-07
+## 0.5.0 2021-12-07
 
 - Parse proxy version as part of RequestInfo (#30)
 - Record number of span events and links (#29)
