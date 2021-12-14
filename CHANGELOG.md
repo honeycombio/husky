@@ -1,6 +1,14 @@
 # Husky Changelog
 
+## 0.6.0 2021-12-15
+
+### Enhancements
+
+- Add versioning info (#32)
+
 ## 0.5.0 2021-12-07
+
+### Enhancements
 
 - Parse proxy version as part of RequestInfo (#30)
 - Record number of span events and links (#29)
