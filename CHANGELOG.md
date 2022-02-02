@@ -1,5 +1,11 @@
 # Husky Changelog
 
+## 0.7.0 2022-02-02
+
+## !!! Breaking Changes !!!
+
+- feat!: environments & services support (#35)
+
 ## 0.6.0 2021-12-15
 
 ### Enhancements
