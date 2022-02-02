@@ -25,7 +25,7 @@ const (
 
 type TranslateTraceRequestResult struct {
 	RequestSize int
-	Events      []Event
+	Batches     map[string][]Event
 }
 
 type Event struct {
@@ -35,23 +35,43 @@ type Event struct {
 }
 
 func TranslateTraceRequestFromReader(body io.ReadCloser, ri RequestInfo) (*TranslateTraceRequestResult, error) {
-	if err := ri.ValidateHeaders(); err != nil {
+	if err := ri.ValidateTracesHeaders(); err != nil {
 		return nil, err
 	}
 	request, err := parseOTLPBody(body, ri.ContentEncoding)
 	if err != nil {
 		return nil, ErrFailedParseBody
 	}
-	return TranslateTraceRequest(request)
+	return TranslateTraceRequest(request, ri)
 }
 
-func TranslateTraceRequest(request *collectorTrace.ExportTraceServiceRequest) (*TranslateTraceRequestResult, error) {
-	batch := []Event{}
+func TranslateTraceRequest(request *collectorTrace.ExportTraceServiceRequest, ri RequestInfo) (*TranslateTraceRequestResult, error) {
+	if err := ri.ValidateTracesHeaders(); err != nil {
+		return nil, err
+	}
+	batches := make(map[string][]Event)
+	isLegacy := isLegacy(ri.ApiKey)
 	for _, resourceSpan := range request.ResourceSpans {
 		resourceAttrs := make(map[string]interface{})
 
 		if resourceSpan.Resource != nil {
 			addAttributesToMap(resourceAttrs, resourceSpan.Resource.Attributes)
+		}
+
+		var dataset string
+		if isLegacy {
+			dataset = ri.Dataset
+		} else {
+			if resourceSpan.Resource == nil {
+				return nil, ErrMissingServiceNameAttr
+			} else {
+				serviceName, ok := resourceAttrs["service.name"].(string)
+				if !ok {
+					return nil, ErrMissingServiceNameAttr
+				} else {
+					dataset = serviceName
+				}
+			}
 		}
 
 		for _, librarySpan := range resourceSpan.InstrumentationLibrarySpans {
@@ -102,7 +122,7 @@ func TranslateTraceRequest(request *collectorTrace.ExportTraceServiceRequest) (*
 				// Now we need to wrap the eventAttrs in an event so we can specify the timestamp
 				// which is the StartTime as a time.Time object
 				timestamp := time.Unix(0, int64(span.StartTimeUnixNano)).UTC()
-				batch = append(batch, Event{
+				batches[dataset] = append(batches[dataset], Event{
 					Attributes: eventAttrs,
 					Timestamp:  timestamp,
 					SampleRate: getSampleRate(eventAttrs),
@@ -124,7 +144,7 @@ func TranslateTraceRequest(request *collectorTrace.ExportTraceServiceRequest) (*
 					for k, v := range resourceAttrs {
 						attrs[k] = v
 					}
-					batch = append(batch, Event{
+					batches[dataset] = append(batches[dataset], Event{
 						Attributes: attrs,
 						Timestamp:  timestamp,
 					})
@@ -146,7 +166,7 @@ func TranslateTraceRequest(request *collectorTrace.ExportTraceServiceRequest) (*
 					for k, v := range resourceAttrs {
 						attrs[k] = v
 					}
-					batch = append(batch, Event{
+					batches[dataset] = append(batches[dataset], Event{
 						Attributes: attrs,
 						Timestamp:  timestamp, // use timestamp from parent span
 					})
@@ -156,7 +176,7 @@ func TranslateTraceRequest(request *collectorTrace.ExportTraceServiceRequest) (*
 	}
 	return &TranslateTraceRequestResult{
 		RequestSize: proto.Size(request),
-		Events:      batch,
+		Batches:     batches,
 	}, nil
 }
 

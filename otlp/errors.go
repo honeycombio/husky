@@ -15,10 +15,11 @@ type OTLPError struct {
 }
 
 var (
-	ErrInvalidContentType   = OTLPError{"invalid content-type - only 'application/protobuf' is supported", http.StatusNotImplemented, codes.Unimplemented}
-	ErrFailedParseBody      = OTLPError{"failed to parse OTLP request body", http.StatusBadRequest, codes.Internal}
-	ErrMissingAPIKeyHeader  = OTLPError{"missing 'x-honeycomb-team' header", http.StatusUnauthorized, codes.Unauthenticated}
-	ErrMissingDatasetHeader = OTLPError{"missing 'x-honeycomb-dataset' header", http.StatusUnauthorized, codes.Unauthenticated}
+	ErrInvalidContentType     = OTLPError{"invalid content-type - only 'application/protobuf' is supported", http.StatusNotImplemented, codes.Unimplemented}
+	ErrFailedParseBody        = OTLPError{"failed to parse OTLP request body", http.StatusBadRequest, codes.Internal}
+	ErrMissingAPIKeyHeader    = OTLPError{"missing 'x-honeycomb-team' header", http.StatusUnauthorized, codes.Unauthenticated}
+	ErrMissingDatasetHeader   = OTLPError{"missing 'x-honeycomb-dataset' header", http.StatusUnauthorized, codes.Unauthenticated}
+	ErrMissingServiceNameAttr = OTLPError{"missing service.name attribute", http.StatusBadRequest, codes.InvalidArgument}
 )
 
 func (e OTLPError) Error() string {

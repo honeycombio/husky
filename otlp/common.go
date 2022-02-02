@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"regexp"
 
 	common "go.opentelemetry.io/proto/otlp/common/v1"
 	"google.golang.org/grpc/metadata"
@@ -20,6 +21,8 @@ const (
 	gRPCAcceptEncodingHeader = "grpc-accept-encoding"
 )
 
+var legacyApiKeyPattern = regexp.MustCompile("^[0-9a-f]{32}$")
+
 type RequestInfo struct {
 	ApiKey       string
 	Dataset      string
@@ -32,7 +35,20 @@ type RequestInfo struct {
 	GRPCAcceptEncoding string
 }
 
-func (ri *RequestInfo) ValidateHeaders() error {
+func (ri *RequestInfo) ValidateTracesHeaders() error {
+	if len(ri.ApiKey) == 0 {
+		return ErrMissingAPIKeyHeader
+	}
+	if isLegacy(ri.ApiKey) && len(ri.Dataset) == 0 {
+		return ErrMissingDatasetHeader
+	}
+	if ri.ContentType != "application/protobuf" && ri.ContentType != "application/x-protobuf" {
+		return ErrInvalidContentType
+	}
+	return nil
+}
+
+func (ri *RequestInfo) ValidateMetricsHeaders() error {
 	if len(ri.ApiKey) == 0 {
 		return ErrMissingAPIKeyHeader
 	}
@@ -127,4 +143,8 @@ func getValue(value *common.AnyValue) interface{} {
 		}
 	}
 	return nil
+}
+
+func isLegacy(apiKey string) bool {
+	return legacyApiKeyPattern.MatchString(apiKey)
 }

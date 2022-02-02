@@ -145,7 +145,7 @@ func TestValidateHeaders(t *testing.T) {
 
 	for _, tc := range testCases {
 		ri := RequestInfo{ApiKey: tc.apikey, ContentType: tc.contentType, Dataset: tc.dataset}
-		err := ri.ValidateHeaders()
+		err := ri.ValidateTracesHeaders()
 		assert.Equal(t, tc.err, err)
 	}
 }
