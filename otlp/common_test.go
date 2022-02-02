@@ -123,7 +123,7 @@ func TestAddAttributesToMap(t *testing.T) {
 	}
 }
 
-func TestValidateHeaders(t *testing.T) {
+func TestValidateTracesHeaders(t *testing.T) {
 	testCases := []struct {
 		apikey      string
 		dataset     string
@@ -131,7 +131,8 @@ func TestValidateHeaders(t *testing.T) {
 		err         error
 	}{
 		{apikey: "", dataset: "", contentType: "", err: ErrMissingAPIKeyHeader},
-		{apikey: "apikey", dataset: "", contentType: "", err: ErrMissingDatasetHeader},
+		{apikey: "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1", dataset: "", contentType: "", err: ErrMissingDatasetHeader},
+		{apikey: "abc123DEF456ghi789jklm", dataset: "", contentType: "application/protobuf", err: nil},
 		{apikey: "", dataset: "dataset", contentType: "", err: ErrMissingAPIKeyHeader},
 		{apikey: "apikey", dataset: "dataset", contentType: "", err: ErrInvalidContentType},
 		{apikey: "apikey", dataset: "dataset", contentType: "application/json", err: ErrInvalidContentType},
@@ -146,6 +147,34 @@ func TestValidateHeaders(t *testing.T) {
 	for _, tc := range testCases {
 		ri := RequestInfo{ApiKey: tc.apikey, ContentType: tc.contentType, Dataset: tc.dataset}
 		err := ri.ValidateTracesHeaders()
+		assert.Equal(t, tc.err, err)
+	}
+}
+
+func TestValidateMetricsHeaders(t *testing.T) {
+	testCases := []struct {
+		apikey      string
+		dataset     string
+		contentType string
+		err         error
+	}{
+		{apikey: "", dataset: "", contentType: "", err: ErrMissingAPIKeyHeader},
+		{apikey: "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1", dataset: "", contentType: "", err: ErrMissingDatasetHeader},
+		{apikey: "abc123DEF456ghi789jklm", dataset: "", contentType: "", err: ErrMissingDatasetHeader},
+		{apikey: "", dataset: "dataset", contentType: "", err: ErrMissingAPIKeyHeader},
+		{apikey: "apikey", dataset: "dataset", contentType: "", err: ErrInvalidContentType},
+		{apikey: "apikey", dataset: "dataset", contentType: "application/json", err: ErrInvalidContentType},
+		{apikey: "apikey", dataset: "dataset", contentType: "application/javascript", err: ErrInvalidContentType},
+		{apikey: "apikey", dataset: "dataset", contentType: "application/xml", err: ErrInvalidContentType},
+		{apikey: "apikey", dataset: "dataset", contentType: "application/octet-stream", err: ErrInvalidContentType},
+		{apikey: "apikey", dataset: "dataset", contentType: "text-plain", err: ErrInvalidContentType},
+		{apikey: "apikey", dataset: "dataset", contentType: "application/protobuf", err: nil},
+		{apikey: "apikey", dataset: "dataset", contentType: "application/x-protobuf", err: nil},
+	}
+
+	for _, tc := range testCases {
+		ri := RequestInfo{ApiKey: tc.apikey, ContentType: tc.contentType, Dataset: tc.dataset}
+		err := ri.ValidateMetricsHeaders()
 		assert.Equal(t, tc.err, err)
 	}
 }
