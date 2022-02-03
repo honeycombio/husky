@@ -25,7 +25,13 @@ const (
 
 type TranslateTraceRequestResult struct {
 	RequestSize int
-	Batches     map[string][]Event
+	Batches     []Batch
+}
+
+type Batch struct {
+	Dataset   string
+	SizeBytes int
+	Events    []Event
 }
 
 type Event struct {
@@ -49,9 +55,10 @@ func TranslateTraceRequest(request *collectorTrace.ExportTraceServiceRequest, ri
 	if err := ri.ValidateTracesHeaders(); err != nil {
 		return nil, err
 	}
-	batches := make(map[string][]Event)
+	var batches []Batch
 	isLegacy := isLegacy(ri.ApiKey)
 	for _, resourceSpan := range request.ResourceSpans {
+		var events []Event
 		resourceAttrs := make(map[string]interface{})
 
 		if resourceSpan.Resource != nil {
@@ -122,7 +129,7 @@ func TranslateTraceRequest(request *collectorTrace.ExportTraceServiceRequest, ri
 				// Now we need to wrap the eventAttrs in an event so we can specify the timestamp
 				// which is the StartTime as a time.Time object
 				timestamp := time.Unix(0, int64(span.StartTimeUnixNano)).UTC()
-				batches[dataset] = append(batches[dataset], Event{
+				events = append(events, Event{
 					Attributes: eventAttrs,
 					Timestamp:  timestamp,
 					SampleRate: getSampleRate(eventAttrs),
@@ -144,7 +151,7 @@ func TranslateTraceRequest(request *collectorTrace.ExportTraceServiceRequest, ri
 					for k, v := range resourceAttrs {
 						attrs[k] = v
 					}
-					batches[dataset] = append(batches[dataset], Event{
+					events = append(events, Event{
 						Attributes: attrs,
 						Timestamp:  timestamp,
 					})
@@ -166,13 +173,18 @@ func TranslateTraceRequest(request *collectorTrace.ExportTraceServiceRequest, ri
 					for k, v := range resourceAttrs {
 						attrs[k] = v
 					}
-					batches[dataset] = append(batches[dataset], Event{
+					events = append(events, Event{
 						Attributes: attrs,
 						Timestamp:  timestamp, // use timestamp from parent span
 					})
 				}
 			}
 		}
+		batches = append(batches, Batch{
+			Dataset:   dataset,
+			SizeBytes: proto.Size(resourceSpan),
+			Events:    events,
+		})
 	}
 	return &TranslateTraceRequestResult{
 		RequestSize: proto.Size(request),
