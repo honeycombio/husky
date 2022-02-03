@@ -1,5 +1,11 @@
 # Husky Changelog
 
+## 0.8.0 2022-02-03
+
+## !!! Breaking Changes !!!
+
+- feat!: include individual batch sizes (#38)
+
 ## 0.7.0 2022-02-02
 
 ## !!! Breaking Changes !!!
