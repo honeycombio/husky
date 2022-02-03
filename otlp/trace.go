@@ -23,23 +23,31 @@ const (
 	defaultSampleRate  = int32(1)
 )
 
+// TranslateTraceRequestResult represents an OTLP trace request translated into Honeycomb-friendly structure
+// RequestSize is total byte size of the entire OTLP request
+// Batches represent events grouped by their target dataset
 type TranslateTraceRequestResult struct {
 	RequestSize int
 	Batches     []Batch
 }
 
+// Batch represents Honeycomb events grouped by their target dataset
+// SizeBytes is the total byte size of the OTLP structure that represents this batch
 type Batch struct {
 	Dataset   string
 	SizeBytes int
 	Events    []Event
 }
 
+// Event represents a single Honeycomb event
 type Event struct {
 	Attributes map[string]interface{}
 	Timestamp  time.Time
 	SampleRate int32
 }
 
+// TranslateTraceRequestFromReader translates an OTLP/HTTP request into Honeycomb-friendly structure
+// RequestInfo is the parsed information from the HTTP headers
 func TranslateTraceRequestFromReader(body io.ReadCloser, ri RequestInfo) (*TranslateTraceRequestResult, error) {
 	if err := ri.ValidateTracesHeaders(); err != nil {
 		return nil, err
@@ -51,6 +59,8 @@ func TranslateTraceRequestFromReader(body io.ReadCloser, ri RequestInfo) (*Trans
 	return TranslateTraceRequest(request, ri)
 }
 
+// TranslateTraceRequest translates an OTLP/gRPC request into Honeycomb-friendly structure
+// RequestInfo is the parsed information from the gRPC metadata
 func TranslateTraceRequest(request *collectorTrace.ExportTraceServiceRequest, ri RequestInfo) (*TranslateTraceRequestResult, error) {
 	if err := ri.ValidateTracesHeaders(); err != nil {
 		return nil, err
