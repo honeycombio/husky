@@ -102,7 +102,10 @@ func TestTranslateLegacyGrpcTraceRequest(t *testing.T) {
 	assert.Nil(t, err)
 	assert.Equal(t, proto.Size(req), result.RequestSize)
 	assert.Equal(t, 1, len(result.Batches))
-	events := result.Batches["legacy-dataset"]
+	batch := result.Batches[0]
+	assert.Equal(t, "legacy-dataset", batch.Dataset)
+	assert.Equal(t, proto.Size(req.ResourceSpans[0]), batch.SizeBytes)
+	events := batch.Events
 	assert.Equal(t, 3, len(events))
 
 	// span
@@ -228,7 +231,10 @@ func TestTranslateGrpcTraceRequest(t *testing.T) {
 	assert.Nil(t, err)
 	assert.Equal(t, proto.Size(req), result.RequestSize)
 	assert.Equal(t, 1, len(result.Batches))
-	events := result.Batches["my-service"]
+	batch := result.Batches[0]
+	assert.Equal(t, "my-service", batch.Dataset)
+	assert.Equal(t, proto.Size(req.ResourceSpans[0]), batch.SizeBytes)
+	events := batch.Events
 	assert.Equal(t, 3, len(events))
 
 	// span
@@ -319,8 +325,14 @@ func TestTranslateGrpcTraceRequestFromMultipleServices(t *testing.T) {
 	assert.Nil(t, err)
 	assert.Equal(t, proto.Size(req), result.RequestSize)
 	assert.Equal(t, 2, len(result.Batches))
-	eventsA := result.Batches["my-service-a"]
-	eventsB := result.Batches["my-service-b"]
+	batchA := result.Batches[0]
+	batchB := result.Batches[1]
+	assert.Equal(t, "my-service-a", batchA.Dataset)
+	assert.Equal(t, "my-service-b", batchB.Dataset)
+	assert.Equal(t, proto.Size(req.ResourceSpans[0]), batchA.SizeBytes)
+	assert.Equal(t, proto.Size(req.ResourceSpans[1]), batchB.SizeBytes)
+	eventsA := batchA.Events
+	eventsB := batchB.Events
 	assert.Equal(t, 1, len(eventsA))
 	assert.Equal(t, 1, len(eventsB))
 
@@ -422,7 +434,10 @@ func TestTranslateLegacyHttpTraceRequest(t *testing.T) {
 			assert.Nil(t, err)
 			assert.Equal(t, proto.Size(req), result.RequestSize)
 			assert.Equal(t, 1, len(result.Batches))
-			events := result.Batches["legacy-dataset"]
+			batch := result.Batches[0]
+			assert.Equal(t, "legacy-dataset", batch.Dataset)
+			assert.Equal(t, proto.Size(req.ResourceSpans[0]), batch.SizeBytes)
+			events := batch.Events
 			assert.Equal(t, 3, len(events))
 
 			// span
@@ -557,7 +572,10 @@ func TestTranslateHttpTraceRequest(t *testing.T) {
 			assert.Nil(t, err)
 			assert.Equal(t, proto.Size(req), result.RequestSize)
 			assert.Equal(t, 1, len(result.Batches))
-			events := result.Batches["my-service"]
+			batch := result.Batches[0]
+			assert.Equal(t, "my-service", batch.Dataset)
+			assert.Equal(t, proto.Size(req.ResourceSpans[0]), batch.SizeBytes)
+			events := batch.Events
 			assert.Equal(t, 3, len(events))
 
 			// span
@@ -652,8 +670,15 @@ func TestTranslateHttpTraceRequestFromMultipleServices(t *testing.T) {
 	assert.Nil(t, err)
 	assert.Equal(t, proto.Size(req), result.RequestSize)
 	assert.Equal(t, 2, len(result.Batches))
-	eventsA := result.Batches["my-service-a"]
-	eventsB := result.Batches["my-service-b"]
+
+	batchA := result.Batches[0]
+	batchB := result.Batches[1]
+	assert.Equal(t, "my-service-a", batchA.Dataset)
+	assert.Equal(t, "my-service-b", batchB.Dataset)
+	assert.Equal(t, proto.Size(req.ResourceSpans[0]), batchA.SizeBytes)
+	assert.Equal(t, proto.Size(req.ResourceSpans[1]), batchB.SizeBytes)
+	eventsA := batchA.Events
+	eventsB := batchB.Events
 	assert.Equal(t, 1, len(eventsA))
 	assert.Equal(t, 1, len(eventsB))
 

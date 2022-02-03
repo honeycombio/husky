@@ -23,17 +23,31 @@ const (
 	defaultSampleRate  = int32(1)
 )
 
+// TranslateTraceRequestResult represents an OTLP trace request translated into Honeycomb-friendly structure
+// RequestSize is total byte size of the entire OTLP request
+// Batches represent events grouped by their target dataset
 type TranslateTraceRequestResult struct {
 	RequestSize int
-	Batches     map[string][]Event
+	Batches     []Batch
 }
 
+// Batch represents Honeycomb events grouped by their target dataset
+// SizeBytes is the total byte size of the OTLP structure that represents this batch
+type Batch struct {
+	Dataset   string
+	SizeBytes int
+	Events    []Event
+}
+
+// Event represents a single Honeycomb event
 type Event struct {
 	Attributes map[string]interface{}
 	Timestamp  time.Time
 	SampleRate int32
 }
 
+// TranslateTraceRequestFromReader translates an OTLP/HTTP request into Honeycomb-friendly structure
+// RequestInfo is the parsed information from the HTTP headers
 func TranslateTraceRequestFromReader(body io.ReadCloser, ri RequestInfo) (*TranslateTraceRequestResult, error) {
 	if err := ri.ValidateTracesHeaders(); err != nil {
 		return nil, err
@@ -45,13 +59,16 @@ func TranslateTraceRequestFromReader(body io.ReadCloser, ri RequestInfo) (*Trans
 	return TranslateTraceRequest(request, ri)
 }
 
+// TranslateTraceRequest translates an OTLP/gRPC request into Honeycomb-friendly structure
+// RequestInfo is the parsed information from the gRPC metadata
 func TranslateTraceRequest(request *collectorTrace.ExportTraceServiceRequest, ri RequestInfo) (*TranslateTraceRequestResult, error) {
 	if err := ri.ValidateTracesHeaders(); err != nil {
 		return nil, err
 	}
-	batches := make(map[string][]Event)
+	var batches []Batch
 	isLegacy := isLegacy(ri.ApiKey)
 	for _, resourceSpan := range request.ResourceSpans {
+		var events []Event
 		resourceAttrs := make(map[string]interface{})
 
 		if resourceSpan.Resource != nil {
@@ -122,7 +139,7 @@ func TranslateTraceRequest(request *collectorTrace.ExportTraceServiceRequest, ri
 				// Now we need to wrap the eventAttrs in an event so we can specify the timestamp
 				// which is the StartTime as a time.Time object
 				timestamp := time.Unix(0, int64(span.StartTimeUnixNano)).UTC()
-				batches[dataset] = append(batches[dataset], Event{
+				events = append(events, Event{
 					Attributes: eventAttrs,
 					Timestamp:  timestamp,
 					SampleRate: getSampleRate(eventAttrs),
@@ -144,7 +161,7 @@ func TranslateTraceRequest(request *collectorTrace.ExportTraceServiceRequest, ri
 					for k, v := range resourceAttrs {
 						attrs[k] = v
 					}
-					batches[dataset] = append(batches[dataset], Event{
+					events = append(events, Event{
 						Attributes: attrs,
 						Timestamp:  timestamp,
 					})
@@ -166,13 +183,18 @@ func TranslateTraceRequest(request *collectorTrace.ExportTraceServiceRequest, ri
 					for k, v := range resourceAttrs {
 						attrs[k] = v
 					}
-					batches[dataset] = append(batches[dataset], Event{
+					events = append(events, Event{
 						Attributes: attrs,
 						Timestamp:  timestamp, // use timestamp from parent span
 					})
 				}
 			}
 		}
+		batches = append(batches, Batch{
+			Dataset:   dataset,
+			SizeBytes: proto.Size(resourceSpan),
+			Events:    events,
+		})
 	}
 	return &TranslateTraceRequestResult{
 		RequestSize: proto.Size(request),

@@ -23,6 +23,7 @@ const (
 
 var legacyApiKeyPattern = regexp.MustCompile("^[0-9a-f]{32}$")
 
+// RequestInfo represents information parsed from either HTTP headers or gRPC metadata
 type RequestInfo struct {
 	ApiKey       string
 	Dataset      string
@@ -35,6 +36,7 @@ type RequestInfo struct {
 	GRPCAcceptEncoding string
 }
 
+// ValidateTracesHeaders validates required headers/metadata for a trace OTLP request
 func (ri *RequestInfo) ValidateTracesHeaders() error {
 	if len(ri.ApiKey) == 0 {
 		return ErrMissingAPIKeyHeader
@@ -48,6 +50,7 @@ func (ri *RequestInfo) ValidateTracesHeaders() error {
 	return nil
 }
 
+// ValidateMetricsHeaders validates required headers/metadata for a metric OTLP request
 func (ri *RequestInfo) ValidateMetricsHeaders() error {
 	if len(ri.ApiKey) == 0 {
 		return ErrMissingAPIKeyHeader
@@ -61,6 +64,7 @@ func (ri *RequestInfo) ValidateMetricsHeaders() error {
 	return nil
 }
 
+// GetRequestInfoFromGrpcMetadata parses relevant gRPC metadata from an incoming request context
 func GetRequestInfoFromGrpcMetadata(ctx context.Context) RequestInfo {
 	ri := RequestInfo{
 		ContentType: "application/protobuf",
@@ -77,6 +81,7 @@ func GetRequestInfoFromGrpcMetadata(ctx context.Context) RequestInfo {
 	return ri
 }
 
+// GetRequestInfoFromHttpHeaders parses relevant incoming HTTP headers
 func GetRequestInfoFromHttpHeaders(header http.Header) RequestInfo {
 	return RequestInfo{
 		ApiKey:             header.Get(apiKeyHeader),
