@@ -83,7 +83,7 @@ func TranslateTraceRequest(request *collectorTrace.ExportTraceServiceRequest, ri
 				return nil, ErrMissingServiceNameAttr
 			} else {
 				serviceName, ok := resourceAttrs["service.name"].(string)
-				if !ok {
+				if !ok || serviceName == "" {
 					return nil, ErrMissingServiceNameAttr
 				} else {
 					dataset = serviceName

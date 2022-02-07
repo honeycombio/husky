@@ -848,3 +848,42 @@ func TestMissingServiceNameResourceReturnsError(t *testing.T) {
 	assert.Nil(t, result)
 	assert.Equal(t, ErrMissingServiceNameAttr, err)
 }
+
+func TestEmptyServiceNameResourceReturnsError(t *testing.T) {
+	req := &collectortrace.ExportTraceServiceRequest{
+		ResourceSpans: []*trace.ResourceSpans{{
+			Resource: &resource.Resource{
+				Attributes: []*common.KeyValue{{
+					Key: "service.name",
+					Value: &common.AnyValue{
+						Value: &common.AnyValue_StringValue{StringValue: ""},
+					},
+				}},
+			},
+			InstrumentationLibrarySpans: []*trace.InstrumentationLibrarySpans{{
+				Spans: []*trace.Span{{
+					TraceId: test.RandomBytes(16),
+					SpanId:  test.RandomBytes(8),
+					Name:    "test_span_a",
+				}},
+			}},
+		}},
+	}
+
+	bodyBytes, err := proto.Marshal(req)
+	assert.Nil(t, err)
+
+	buf := new(bytes.Buffer)
+	buf.Write(bodyBytes)
+
+	body := io.NopCloser(strings.NewReader(buf.String()))
+	ri := RequestInfo{
+		ApiKey:      "abc123DEF456ghi789jklm",
+		Dataset:     "legacy-dataset",
+		ContentType: "application/protobuf",
+	}
+
+	result, err := TranslateTraceRequestFromReader(body, ri)
+	assert.Nil(t, result)
+	assert.Equal(t, ErrMissingServiceNameAttr, err)
+}
