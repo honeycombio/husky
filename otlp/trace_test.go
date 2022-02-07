@@ -779,7 +779,7 @@ func TestGetSampleRateConversions(t *testing.T) {
 	}
 }
 
-func TestMissingServiceNameAttributeReturnsError(t *testing.T) {
+func TestMissingServiceNameAttributeUsesDefault(t *testing.T) {
 	req := &collectortrace.ExportTraceServiceRequest{
 		ResourceSpans: []*trace.ResourceSpans{{
 			Resource: &resource.Resource{
@@ -814,11 +814,12 @@ func TestMissingServiceNameAttributeReturnsError(t *testing.T) {
 	}
 
 	result, err := TranslateTraceRequestFromReader(body, ri)
-	assert.Nil(t, result)
-	assert.Equal(t, ErrMissingServiceNameAttr, err)
+	assert.Nil(t, err)
+	batch := result.Batches[0]
+	assert.Equal(t, "unknown_service", batch.Dataset)
 }
 
-func TestMissingServiceNameResourceReturnsError(t *testing.T) {
+func TestMissingServiceNameResourceUsesDefault(t *testing.T) {
 	req := &collectortrace.ExportTraceServiceRequest{
 		ResourceSpans: []*trace.ResourceSpans{{
 			InstrumentationLibrarySpans: []*trace.InstrumentationLibrarySpans{{
@@ -845,11 +846,12 @@ func TestMissingServiceNameResourceReturnsError(t *testing.T) {
 	}
 
 	result, err := TranslateTraceRequestFromReader(body, ri)
-	assert.Nil(t, result)
-	assert.Equal(t, ErrMissingServiceNameAttr, err)
+	assert.Nil(t, err)
+	batch := result.Batches[0]
+	assert.Equal(t, "unknown_service", batch.Dataset)
 }
 
-func TestEmptyServiceNameResourceReturnsError(t *testing.T) {
+func TestEmptyServiceNameAttributeUsesDefault(t *testing.T) {
 	req := &collectortrace.ExportTraceServiceRequest{
 		ResourceSpans: []*trace.ResourceSpans{{
 			Resource: &resource.Resource{
@@ -884,6 +886,91 @@ func TestEmptyServiceNameResourceReturnsError(t *testing.T) {
 	}
 
 	result, err := TranslateTraceRequestFromReader(body, ri)
-	assert.Nil(t, result)
-	assert.Equal(t, ErrMissingServiceNameAttr, err)
+	assert.Nil(t, err)
+	batch := result.Batches[0]
+	assert.Equal(t, "unknown_service", batch.Dataset)
+}
+
+func TestServiceNameAttributeUsesDefaultIfInteger(t *testing.T) {
+	req := &collectortrace.ExportTraceServiceRequest{
+		ResourceSpans: []*trace.ResourceSpans{{
+			Resource: &resource.Resource{
+				Attributes: []*common.KeyValue{{
+					Key: "service.name",
+					Value: &common.AnyValue{
+						Value: &common.AnyValue_IntValue{IntValue: 2},
+					},
+				}},
+			},
+			InstrumentationLibrarySpans: []*trace.InstrumentationLibrarySpans{{
+				Spans: []*trace.Span{{
+					TraceId: test.RandomBytes(16),
+					SpanId:  test.RandomBytes(8),
+					Name:    "test_span_a",
+				}},
+			}},
+		}},
+	}
+
+	bodyBytes, err := proto.Marshal(req)
+	assert.Nil(t, err)
+
+	buf := new(bytes.Buffer)
+	buf.Write(bodyBytes)
+
+	body := io.NopCloser(strings.NewReader(buf.String()))
+	ri := RequestInfo{
+		ApiKey:      "abc123DEF456ghi789jklm",
+		Dataset:     "legacy-dataset",
+		ContentType: "application/protobuf",
+	}
+
+	result, err := TranslateTraceRequestFromReader(body, ri)
+	assert.Nil(t, err)
+	batch := result.Batches[0]
+	assert.NotEqual(t, 2, batch.Dataset)
+	assert.NotEqual(t, "2", batch.Dataset)
+	assert.Equal(t, "unknown_service", batch.Dataset)
+}
+
+func TestServiceNameAttributeUsesDefaultIfBoolean(t *testing.T) {
+	req := &collectortrace.ExportTraceServiceRequest{
+		ResourceSpans: []*trace.ResourceSpans{{
+			Resource: &resource.Resource{
+				Attributes: []*common.KeyValue{{
+					Key: "service.name",
+					Value: &common.AnyValue{
+						Value: &common.AnyValue_BoolValue{BoolValue: true},
+					},
+				}},
+			},
+			InstrumentationLibrarySpans: []*trace.InstrumentationLibrarySpans{{
+				Spans: []*trace.Span{{
+					TraceId: test.RandomBytes(16),
+					SpanId:  test.RandomBytes(8),
+					Name:    "test_span_a",
+				}},
+			}},
+		}},
+	}
+
+	bodyBytes, err := proto.Marshal(req)
+	assert.Nil(t, err)
+
+	buf := new(bytes.Buffer)
+	buf.Write(bodyBytes)
+
+	body := io.NopCloser(strings.NewReader(buf.String()))
+	ri := RequestInfo{
+		ApiKey:      "abc123DEF456ghi789jklm",
+		Dataset:     "legacy-dataset",
+		ContentType: "application/protobuf",
+	}
+
+	result, err := TranslateTraceRequestFromReader(body, ri)
+	assert.Nil(t, err)
+	batch := result.Batches[0]
+	assert.NotEqual(t, true, batch.Dataset)
+	assert.NotEqual(t, "true", batch.Dataset)
+	assert.Equal(t, "unknown_service", batch.Dataset)
 }

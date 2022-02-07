@@ -21,6 +21,7 @@ const (
 	traceIDLongLength  = 16
 	zeroSampleRate     = int32(0)
 	defaultSampleRate  = int32(1)
+	defaultServiceName = "unknown_service"
 )
 
 // TranslateTraceRequestResult represents an OTLP trace request translated into Honeycomb-friendly structure
@@ -80,11 +81,11 @@ func TranslateTraceRequest(request *collectorTrace.ExportTraceServiceRequest, ri
 			dataset = ri.Dataset
 		} else {
 			if resourceSpan.Resource == nil {
-				return nil, ErrMissingServiceNameAttr
+				dataset = defaultServiceName
 			} else {
 				serviceName, ok := resourceAttrs["service.name"].(string)
 				if !ok || serviceName == "" {
-					return nil, ErrMissingServiceNameAttr
+					dataset = defaultServiceName
 				} else {
 					dataset = serviceName
 				}
