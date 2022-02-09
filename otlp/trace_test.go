@@ -851,10 +851,18 @@ func TestMissingServiceNameResourceUsesDefault(t *testing.T) {
 	assert.Equal(t, "unknown_service", batch.Dataset)
 }
 
-func TestEmptyServiceNameAttributeUsesDefault(t *testing.T) {
-	req := &collectortrace.ExportTraceServiceRequest{
-		ResourceSpans: []*trace.ResourceSpans{{
-			Resource: &resource.Resource{
+func TestEmptyOrInvalidServiceNameAttributeUsesDefault(t *testing.T) {
+	testCases := []struct {
+		name     string
+		resource *resource.Resource
+	}{
+		{
+			name:     "nil resource",
+			resource: nil,
+		},
+		{
+			name: "empty string",
+			resource: &resource.Resource{
 				Attributes: []*common.KeyValue{{
 					Key: "service.name",
 					Value: &common.AnyValue{
@@ -862,39 +870,10 @@ func TestEmptyServiceNameAttributeUsesDefault(t *testing.T) {
 					},
 				}},
 			},
-			InstrumentationLibrarySpans: []*trace.InstrumentationLibrarySpans{{
-				Spans: []*trace.Span{{
-					TraceId: test.RandomBytes(16),
-					SpanId:  test.RandomBytes(8),
-					Name:    "test_span_a",
-				}},
-			}},
-		}},
-	}
-
-	bodyBytes, err := proto.Marshal(req)
-	assert.Nil(t, err)
-
-	buf := new(bytes.Buffer)
-	buf.Write(bodyBytes)
-
-	body := io.NopCloser(strings.NewReader(buf.String()))
-	ri := RequestInfo{
-		ApiKey:      "abc123DEF456ghi789jklm",
-		Dataset:     "legacy-dataset",
-		ContentType: "application/protobuf",
-	}
-
-	result, err := TranslateTraceRequestFromReader(body, ri)
-	assert.Nil(t, err)
-	batch := result.Batches[0]
-	assert.Equal(t, "unknown_service", batch.Dataset)
-}
-
-func TestServiceNameAttributeUsesDefaultIfInteger(t *testing.T) {
-	req := &collectortrace.ExportTraceServiceRequest{
-		ResourceSpans: []*trace.ResourceSpans{{
-			Resource: &resource.Resource{
+		},
+		{
+			name: "integer",
+			resource: &resource.Resource{
 				Attributes: []*common.KeyValue{{
 					Key: "service.name",
 					Value: &common.AnyValue{
@@ -902,41 +881,10 @@ func TestServiceNameAttributeUsesDefaultIfInteger(t *testing.T) {
 					},
 				}},
 			},
-			InstrumentationLibrarySpans: []*trace.InstrumentationLibrarySpans{{
-				Spans: []*trace.Span{{
-					TraceId: test.RandomBytes(16),
-					SpanId:  test.RandomBytes(8),
-					Name:    "test_span_a",
-				}},
-			}},
-		}},
-	}
-
-	bodyBytes, err := proto.Marshal(req)
-	assert.Nil(t, err)
-
-	buf := new(bytes.Buffer)
-	buf.Write(bodyBytes)
-
-	body := io.NopCloser(strings.NewReader(buf.String()))
-	ri := RequestInfo{
-		ApiKey:      "abc123DEF456ghi789jklm",
-		Dataset:     "legacy-dataset",
-		ContentType: "application/protobuf",
-	}
-
-	result, err := TranslateTraceRequestFromReader(body, ri)
-	assert.Nil(t, err)
-	batch := result.Batches[0]
-	assert.NotEqual(t, 2, batch.Dataset)
-	assert.NotEqual(t, "2", batch.Dataset)
-	assert.Equal(t, "unknown_service", batch.Dataset)
-}
-
-func TestServiceNameAttributeUsesDefaultIfBoolean(t *testing.T) {
-	req := &collectortrace.ExportTraceServiceRequest{
-		ResourceSpans: []*trace.ResourceSpans{{
-			Resource: &resource.Resource{
+		},
+		{
+			name: "boolean",
+			resource: &resource.Resource{
 				Attributes: []*common.KeyValue{{
 					Key: "service.name",
 					Value: &common.AnyValue{
@@ -944,33 +892,46 @@ func TestServiceNameAttributeUsesDefaultIfBoolean(t *testing.T) {
 					},
 				}},
 			},
-			InstrumentationLibrarySpans: []*trace.InstrumentationLibrarySpans{{
-				Spans: []*trace.Span{{
-					TraceId: test.RandomBytes(16),
-					SpanId:  test.RandomBytes(8),
-					Name:    "test_span_a",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			req := &collectortrace.ExportTraceServiceRequest{
+				ResourceSpans: []*trace.ResourceSpans{{
+					Resource: tc.resource,
+					InstrumentationLibrarySpans: []*trace.InstrumentationLibrarySpans{{
+						Spans: []*trace.Span{{
+							TraceId: test.RandomBytes(16),
+							SpanId:  test.RandomBytes(8),
+							Name:    "test_span_a",
+						}},
+					}},
 				}},
-			}},
-		}},
+			}
+
+			bodyBytes, err := proto.Marshal(req)
+			assert.Nil(t, err)
+
+			buf := new(bytes.Buffer)
+			buf.Write(bodyBytes)
+
+			body := io.NopCloser(strings.NewReader(buf.String()))
+			ri := RequestInfo{
+				ApiKey:      "abc123DEF456ghi789jklm",
+				Dataset:     "legacy-dataset",
+				ContentType: "application/protobuf",
+			}
+
+			result, err := TranslateTraceRequestFromReader(body, ri)
+			assert.Nil(t, err)
+			batch := result.Batches[0]
+			assert.NotNil(t, batch.Dataset)
+			assert.NotEqual(t, 2, batch.Dataset)
+			assert.NotEqual(t, "2", batch.Dataset)
+			assert.NotEqual(t, true, batch.Dataset)
+			assert.NotEqual(t, "true", batch.Dataset)
+			assert.Equal(t, "unknown_service", batch.Dataset)
+		})
 	}
-
-	bodyBytes, err := proto.Marshal(req)
-	assert.Nil(t, err)
-
-	buf := new(bytes.Buffer)
-	buf.Write(bodyBytes)
-
-	body := io.NopCloser(strings.NewReader(buf.String()))
-	ri := RequestInfo{
-		ApiKey:      "abc123DEF456ghi789jklm",
-		Dataset:     "legacy-dataset",
-		ContentType: "application/protobuf",
-	}
-
-	result, err := TranslateTraceRequestFromReader(body, ri)
-	assert.Nil(t, err)
-	batch := result.Batches[0]
-	assert.NotEqual(t, true, batch.Dataset)
-	assert.NotEqual(t, "true", batch.Dataset)
-	assert.Equal(t, "unknown_service", batch.Dataset)
 }
