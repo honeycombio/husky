@@ -1,5 +1,5 @@
 package husky
 
 var (
-	Version string = "0.8.0"
+	Version string = "0.8.1"
 )

@@ -1,5 +1,15 @@
 # Husky Changelog
 
+## 0.8.1 2022-02-10
+
+### Enhancements
+
+- empty or missing service name should default to unknown_service (#42) | [@JamieDanielson](https://github.com/JamieDanielson)
+
+### Maintenance
+
+- maint: remove indent style from editorconfig (#39) | [@vreynolds](https://github.com/vreynolds)
+
 ## 0.8.0 2022-02-03
 
 ## !!! Breaking Changes !!!
