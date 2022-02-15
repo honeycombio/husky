@@ -1,5 +1,11 @@
 # Husky Changelog
 
+## 0.9.0 2022-02-15
+
+### Enhancements
+
+- feat: truncate dataset name when service is unknown (#46) | [@vreynolds](https://github.com/vreynolds)
+
 ## 0.8.1 2022-02-10
 
 ### Enhancements
