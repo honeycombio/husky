@@ -935,3 +935,77 @@ func TestEmptyOrInvalidServiceNameAttributeUsesDefault(t *testing.T) {
 		})
 	}
 }
+
+func TestUnknownServiceNameIsTruncatedForDatadset(t *testing.T) {
+	testCases := []struct {
+		resourceServiceName      string
+		expectedDataset          string
+		expectedEventServiceName string
+	}{
+		{
+			resourceServiceName:      "unknown_service:go",
+			expectedDataset:          "unknown_service",
+			expectedEventServiceName: "unknown_service:go",
+		}, {
+			resourceServiceName:      "unknown_servicego",
+			expectedDataset:          "unknown_service",
+			expectedEventServiceName: "unknown_servicego",
+		}, {
+			resourceServiceName:      "so_unknown_service:go",
+			expectedDataset:          "so_unknown_service:go",
+			expectedEventServiceName: "so_unknown_service:go",
+		}, {
+			resourceServiceName:      "go:unknown_service",
+			expectedDataset:          "go:unknown_service",
+			expectedEventServiceName: "go:unknown_service",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.resourceServiceName, func(t *testing.T) {
+			req := &collectortrace.ExportTraceServiceRequest{
+				ResourceSpans: []*trace.ResourceSpans{{
+					Resource: &resource.Resource{
+						Attributes: []*common.KeyValue{{
+							Key: "service.name",
+							Value: &common.AnyValue{
+								Value: &common.AnyValue_StringValue{StringValue: tc.resourceServiceName},
+							},
+						}},
+					},
+					InstrumentationLibrarySpans: []*trace.InstrumentationLibrarySpans{{
+						Spans: []*trace.Span{{
+							TraceId: test.RandomBytes(16),
+							SpanId:  test.RandomBytes(8),
+							Name:    "test_span_a",
+						}},
+					}},
+				}},
+			}
+
+			bodyBytes, err := proto.Marshal(req)
+			assert.Nil(t, err)
+
+			buf := new(bytes.Buffer)
+			buf.Write(bodyBytes)
+
+			body := io.NopCloser(strings.NewReader(buf.String()))
+			ri := RequestInfo{
+				ApiKey:      "abc123DEF456ghi789jklm",
+				Dataset:     "legacy-dataset",
+				ContentType: "application/protobuf",
+			}
+
+			result, err := TranslateTraceRequestFromReader(body, ri)
+			assert.Nil(t, err)
+
+			assert.Equal(t, 1, len(result.Batches))
+			batch := result.Batches[0]
+			assert.Equal(t, tc.expectedDataset, batch.Dataset)
+
+			assert.Equal(t, 1, len(result.Batches[0].Events))
+			event := result.Batches[0].Events[0]
+			assert.Equal(t, tc.expectedEventServiceName, event.Attributes["service.name"])
+		})
+	}
+}

@@ -8,6 +8,7 @@ import (
 	"io/ioutil"
 	"math"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/klauspost/compress/zstd"
@@ -87,7 +88,11 @@ func TranslateTraceRequest(request *collectorTrace.ExportTraceServiceRequest, ri
 				if !ok || serviceName == "" {
 					dataset = defaultServiceName
 				} else {
-					dataset = serviceName
+					if strings.HasPrefix(serviceName, "unknown_service") {
+						dataset = defaultServiceName
+					} else {
+						dataset = serviceName
+					}
 				}
 			}
 		}
