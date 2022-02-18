@@ -1,5 +1,11 @@
 # Husky Changelog
 
+## 0.10.0 2022-02-18
+
+### Enhancements
+
+- feat: update metrics header validation (#48) | [@vreynolds](https://github.com/vreynolds)
+
 ## 0.9.0 2022-02-15
 
 ### Enhancements
