@@ -55,7 +55,7 @@ func (ri *RequestInfo) ValidateMetricsHeaders() error {
 	if len(ri.ApiKey) == 0 {
 		return ErrMissingAPIKeyHeader
 	}
-	if len(ri.Dataset) == 0 {
+	if isLegacy(ri.ApiKey) && len(ri.Dataset) == 0 {
 		return ErrMissingDatasetHeader
 	}
 	if ri.ContentType != "application/protobuf" && ri.ContentType != "application/x-protobuf" {
