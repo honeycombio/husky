@@ -714,12 +714,12 @@ func TestInvalidBodyReturnsError(t *testing.T) {
 	assert.Equal(t, ErrFailedParseBody, err)
 }
 
-func TestNoSampleRateKeyReturnZero(t *testing.T) {
+func TestNoSampleRateKeyReturnOne(t *testing.T) {
 	attrs := map[string]interface{}{
 		"not_a_sample_rate": 10,
 	}
 	sampleRate := getSampleRate(attrs)
-	assert.Equal(t, int32(0), sampleRate)
+	assert.Equal(t, int32(1), sampleRate)
 }
 
 func TestCanDetectSampleRateCapitalizations(t *testing.T) {
