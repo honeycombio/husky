@@ -20,7 +20,6 @@ import (
 const (
 	traceIDShortLength = 8
 	traceIDLongLength  = 16
-	zeroSampleRate     = int32(0)
 	defaultSampleRate  = int32(1)
 	defaultServiceName = "unknown_service"
 )
@@ -325,7 +324,7 @@ func parseOTLPBody(body io.ReadCloser, contentEncoding string) (request *collect
 func getSampleRate(attrs map[string]interface{}) int32 {
 	sampleRateKey := getSampleRateKey(attrs)
 	if sampleRateKey == "" {
-		return zeroSampleRate
+		return defaultSampleRate
 	}
 
 	sampleRate := defaultSampleRate
