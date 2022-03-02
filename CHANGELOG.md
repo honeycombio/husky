@@ -1,5 +1,11 @@
 # Husky Changelog
 
+## 0.10.1 2022-03-01
+
+### Fixed
+
+- Return sample rate of 1 when no sample rate key found (#50) | [@MikeGoldsmith](https://github.com/MikeGoldsmith)
+
 ## 0.10.0 2022-02-18
 
 ### Enhancements
