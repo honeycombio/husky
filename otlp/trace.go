@@ -80,19 +80,13 @@ func TranslateTraceRequest(request *collectorTrace.ExportTraceServiceRequest, ri
 		if isLegacy {
 			dataset = ri.Dataset
 		} else {
-			if resourceSpan.Resource == nil {
+			serviceName, ok := resourceAttrs["service.name"].(string)
+			if !ok ||
+				strings.TrimSpace(serviceName) == "" ||
+				strings.HasPrefix(serviceName, "unknown_service") {
 				dataset = defaultServiceName
 			} else {
-				serviceName, ok := resourceAttrs["service.name"].(string)
-				if !ok || serviceName == "" {
-					dataset = defaultServiceName
-				} else {
-					if strings.HasPrefix(serviceName, "unknown_service") {
-						dataset = defaultServiceName
-					} else {
-						dataset = serviceName
-					}
-				}
+				dataset = strings.TrimSpace(serviceName)
 			}
 		}
 
