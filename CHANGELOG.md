@@ -1,5 +1,11 @@
 # Husky Changelog
 
+## 0.10.2 2022-03-07
+
+### Fixed
+
+- Trim whitespace when deriving from service.name (#52) | [@vreynolds](https://github.com/vreynolds)
+
 ## 0.10.1 2022-03-01
 
 ### Fixed
