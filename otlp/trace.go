@@ -351,7 +351,7 @@ func getSampleRate(attrs map[string]interface{}) int32 {
 	// A value of 1 means the span was not sampled
 	// For full explanation, see https://app.asana.com/0/365940753298424/1201973146987622/f
 	if sampleRate == 0 {
-		sampleRate = 1
+		sampleRate = defaultSampleRate
 	}
 	delete(attrs, sampleRateKey) // remove attr
 	return sampleRate
