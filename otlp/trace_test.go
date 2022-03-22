@@ -745,25 +745,25 @@ func TestGetSampleRateConversions(t *testing.T) {
 		expected   int32
 	}{
 		{sampleRate: nil, expected: 1},
-		{sampleRate: "0", expected: 0},
+		{sampleRate: "0", expected: 1},
 		{sampleRate: "1", expected: 1},
 		{sampleRate: "100", expected: 100},
 		{sampleRate: "invalid", expected: 1},
 		{sampleRate: strconv.Itoa(math.MaxInt32), expected: math.MaxInt32},
 		{sampleRate: strconv.Itoa(math.MaxInt64), expected: math.MaxInt32},
 
-		{sampleRate: 0, expected: 0},
+		{sampleRate: 0, expected: 1},
 		{sampleRate: 1, expected: 1},
 		{sampleRate: 100, expected: 100},
 		{sampleRate: math.MaxInt32, expected: math.MaxInt32},
 		{sampleRate: math.MaxInt64, expected: math.MaxInt32},
 
-		{sampleRate: int32(0), expected: 0},
+		{sampleRate: int32(0), expected: 1},
 		{sampleRate: int32(1), expected: 1},
 		{sampleRate: int32(100), expected: 100},
 		{sampleRate: int32(math.MaxInt32), expected: math.MaxInt32},
 
-		{sampleRate: int64(0), expected: 0},
+		{sampleRate: int64(0), expected: 1},
 		{sampleRate: int64(1), expected: 1},
 		{sampleRate: int64(100), expected: 100},
 		{sampleRate: int64(math.MaxInt32), expected: math.MaxInt32},
