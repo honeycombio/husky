@@ -1,12 +1,18 @@
 # Husky Changelog
 
+## 0.10.3 2022-03-28
+
+### Fixed
+
+- default sample rate to 1 if omitted or if 0 (#55) | [@asdvalenzuela](https://github.com/asdvalenzuela)
+
 ## 0.10.2 2022-03-07
 
-### Fixed
+### Fixed
 
 - Trim whitespace when deriving from service.name (#52) | [@vreynolds](https://github.com/vreynolds)
 
-## 0.10.1 2022-03-01
+## 0.10.1 2022-03-01
 
 ### Fixed
 
