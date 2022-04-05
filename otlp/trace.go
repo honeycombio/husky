@@ -265,9 +265,6 @@ func getSpanStatusCode(status *trace.Status) trace.Status_StatusCode {
 		return trace.Status_STATUS_CODE_UNSET
 	}
 	if status.Code == trace.Status_STATUS_CODE_UNSET {
-		if status.DeprecatedCode == trace.Status_DEPRECATED_STATUS_CODE_OK {
-			return trace.Status_STATUS_CODE_UNSET
-		}
 		return trace.Status_STATUS_CODE_ERROR
 	}
 	return status.Code
