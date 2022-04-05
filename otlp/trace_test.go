@@ -51,7 +51,11 @@ func TestTranslateLegacyGrpcTraceRequest(t *testing.T) {
 					},
 				}},
 			},
-			InstrumentationLibrarySpans: []*trace.InstrumentationLibrarySpans{{
+			ScopeSpans: []*trace.ScopeSpans{{
+				Scope: &common.InstrumentationScope{
+					Name:    "my-library",
+					Version: "v0.0.1",
+				},
 				Spans: []*trace.Span{{
 					TraceId:           traceID,
 					SpanId:            spanID,
@@ -118,6 +122,8 @@ func TestTranslateLegacyGrpcTraceRequest(t *testing.T) {
 	assert.Equal(t, "client", ev.Attributes["span.kind"])
 	assert.Equal(t, "test_span", ev.Attributes["name"])
 	assert.Equal(t, "my-service", ev.Attributes["service.name"])
+	assert.Equal(t, "my-library", ev.Attributes["library.name"])
+	assert.Equal(t, "v0.0.1", ev.Attributes["library.version"])
 	assert.Equal(t, float64(endTimestamp.Nanosecond()-startTimestamp.Nanosecond())/float64(time.Millisecond), ev.Attributes["duration_ms"])
 	assert.Equal(t, trace.Status_STATUS_CODE_OK, ev.Attributes["status_code"])
 	assert.Equal(t, "span_attr_val", ev.Attributes["span_attr"])
@@ -135,6 +141,8 @@ func TestTranslateLegacyGrpcTraceRequest(t *testing.T) {
 	assert.Equal(t, "span_event", ev.Attributes["meta.annotation_type"])
 	assert.Equal(t, "span_event_attr_val", ev.Attributes["span_event_attr"])
 	assert.Equal(t, "resource_attr_val", ev.Attributes["resource_attr"])
+	assert.Equal(t, "my-library", ev.Attributes["library.name"])
+	assert.Equal(t, "v0.0.1", ev.Attributes["library.version"])
 
 	// link
 	ev = events[2]
@@ -148,6 +156,8 @@ func TestTranslateLegacyGrpcTraceRequest(t *testing.T) {
 	assert.Equal(t, "link", ev.Attributes["meta.annotation_type"])
 	assert.Equal(t, "span_link_attr_val", ev.Attributes["span_link_attr"])
 	assert.Equal(t, "resource_attr_val", ev.Attributes["resource_attr"])
+	assert.Equal(t, "my-library", ev.Attributes["library.name"])
+	assert.Equal(t, "v0.0.1", ev.Attributes["library.version"])
 }
 
 func TestTranslateGrpcTraceRequest(t *testing.T) {
@@ -180,7 +190,7 @@ func TestTranslateGrpcTraceRequest(t *testing.T) {
 					},
 				}},
 			},
-			InstrumentationLibrarySpans: []*trace.InstrumentationLibrarySpans{{
+			ScopeSpans: []*trace.ScopeSpans{{
 				Spans: []*trace.Span{{
 					TraceId:           traceID,
 					SpanId:            spanID,
@@ -295,7 +305,7 @@ func TestTranslateGrpcTraceRequestFromMultipleServices(t *testing.T) {
 					},
 				}},
 			},
-			InstrumentationLibrarySpans: []*trace.InstrumentationLibrarySpans{{
+			ScopeSpans: []*trace.ScopeSpans{{
 				Spans: []*trace.Span{{
 					TraceId: test.RandomBytes(16),
 					SpanId:  test.RandomBytes(8),
@@ -311,7 +321,7 @@ func TestTranslateGrpcTraceRequestFromMultipleServices(t *testing.T) {
 					},
 				}},
 			},
-			InstrumentationLibrarySpans: []*trace.InstrumentationLibrarySpans{{
+			ScopeSpans: []*trace.ScopeSpans{{
 				Spans: []*trace.Span{{
 					TraceId: test.RandomBytes(16),
 					SpanId:  test.RandomBytes(8),
@@ -364,7 +374,7 @@ func TestTranslateLegacyHttpTraceRequest(t *testing.T) {
 					},
 				}},
 			},
-			InstrumentationLibrarySpans: []*trace.InstrumentationLibrarySpans{{
+			ScopeSpans: []*trace.ScopeSpans{{
 				Spans: []*trace.Span{{
 					TraceId:           traceID,
 					SpanId:            spanID,
@@ -502,7 +512,7 @@ func TestTranslateHttpTraceRequest(t *testing.T) {
 					},
 				}},
 			},
-			InstrumentationLibrarySpans: []*trace.InstrumentationLibrarySpans{{
+			ScopeSpans: []*trace.ScopeSpans{{
 				Spans: []*trace.Span{{
 					TraceId:           traceID,
 					SpanId:            spanID,
@@ -627,7 +637,7 @@ func TestTranslateHttpTraceRequestFromMultipleServices(t *testing.T) {
 					},
 				}},
 			},
-			InstrumentationLibrarySpans: []*trace.InstrumentationLibrarySpans{{
+			ScopeSpans: []*trace.ScopeSpans{{
 				Spans: []*trace.Span{{
 					TraceId: test.RandomBytes(16),
 					SpanId:  test.RandomBytes(8),
@@ -643,7 +653,7 @@ func TestTranslateHttpTraceRequestFromMultipleServices(t *testing.T) {
 					},
 				}},
 			},
-			InstrumentationLibrarySpans: []*trace.InstrumentationLibrarySpans{{
+			ScopeSpans: []*trace.ScopeSpans{{
 				Spans: []*trace.Span{{
 					TraceId: test.RandomBytes(16),
 					SpanId:  test.RandomBytes(8),
@@ -790,7 +800,7 @@ func TestMissingServiceNameAttributeUsesDefault(t *testing.T) {
 					},
 				}},
 			},
-			InstrumentationLibrarySpans: []*trace.InstrumentationLibrarySpans{{
+			ScopeSpans: []*trace.ScopeSpans{{
 				Spans: []*trace.Span{{
 					TraceId: test.RandomBytes(16),
 					SpanId:  test.RandomBytes(8),
@@ -822,7 +832,7 @@ func TestMissingServiceNameAttributeUsesDefault(t *testing.T) {
 func TestMissingServiceNameResourceUsesDefault(t *testing.T) {
 	req := &collectortrace.ExportTraceServiceRequest{
 		ResourceSpans: []*trace.ResourceSpans{{
-			InstrumentationLibrarySpans: []*trace.InstrumentationLibrarySpans{{
+			ScopeSpans: []*trace.ScopeSpans{{
 				Spans: []*trace.Span{{
 					TraceId: test.RandomBytes(16),
 					SpanId:  test.RandomBytes(8),
@@ -911,7 +921,7 @@ func TestEmptyOrInvalidServiceNameAttributeUsesDefault(t *testing.T) {
 			req := &collectortrace.ExportTraceServiceRequest{
 				ResourceSpans: []*trace.ResourceSpans{{
 					Resource: tc.resource,
-					InstrumentationLibrarySpans: []*trace.InstrumentationLibrarySpans{{
+					ScopeSpans: []*trace.ScopeSpans{{
 						Spans: []*trace.Span{{
 							TraceId: test.RandomBytes(16),
 							SpanId:  test.RandomBytes(8),
@@ -984,7 +994,7 @@ func TestUnknownServiceNameIsTruncatedForDataset(t *testing.T) {
 							},
 						}},
 					},
-					InstrumentationLibrarySpans: []*trace.InstrumentationLibrarySpans{{
+					ScopeSpans: []*trace.ScopeSpans{{
 						Spans: []*trace.Span{{
 							TraceId: test.RandomBytes(16),
 							SpanId:  test.RandomBytes(8),
@@ -1058,7 +1068,7 @@ func TestServiceNameIsTrimmedForDataset(t *testing.T) {
 							},
 						}},
 					},
-					InstrumentationLibrarySpans: []*trace.InstrumentationLibrarySpans{{
+					ScopeSpans: []*trace.ScopeSpans{{
 						Spans: []*trace.Span{{
 							TraceId: test.RandomBytes(16),
 							SpanId:  test.RandomBytes(8),
@@ -1093,4 +1103,56 @@ func TestServiceNameIsTrimmedForDataset(t *testing.T) {
 			assert.Equal(t, tc.expectedEventServiceName, event.Attributes["service.name"])
 		})
 	}
+}
+
+func TestCanTranslateOldProtoDefWithInstrumentationSpans(t *testing.T) {
+	req := &collectortrace.ExportTraceServiceRequest{
+		ResourceSpans: []*trace.ResourceSpans{{
+			Resource: &resource.Resource{
+				Attributes: []*common.KeyValue{{
+					Key: "service.name",
+					Value: &common.AnyValue{
+						Value: &common.AnyValue_StringValue{StringValue: "my-service"},
+					},
+				}},
+			},
+			InstrumentationLibrarySpans: []*trace.InstrumentationLibrarySpans{{
+				InstrumentationLibrary: &common.InstrumentationLibrary{
+					Name:    "custom-library",
+					Version: "v1.0.0",
+				},
+				Spans: []*trace.Span{{
+					TraceId: test.RandomBytes(16),
+					SpanId:  test.RandomBytes(8),
+					Name:    "test_span_a",
+				}},
+			}},
+		}},
+	}
+
+	bodyBytes, err := proto.Marshal(req)
+	assert.Nil(t, err)
+
+	buf := new(bytes.Buffer)
+	buf.Write(bodyBytes)
+
+	body := io.NopCloser(strings.NewReader(buf.String()))
+	ri := RequestInfo{
+		ApiKey:      "abc123DEF456ghi789jklm",
+		ContentType: "application/protobuf",
+	}
+
+	result, err := TranslateTraceRequestFromReader(body, ri)
+	assert.Nil(t, err)
+
+	assert.Equal(t, 1, len(result.Batches))
+	batch := result.Batches[0]
+	assert.Equal(t, "my-service", batch.Dataset)
+
+	assert.Equal(t, 1, len(result.Batches[0].Events))
+	event := result.Batches[0].Events[0]
+	assert.Equal(t, "my-service", event.Attributes["service.name"])
+	assert.Equal(t, "test_span_a", event.Attributes["name"])
+	assert.Equal(t, "custom-library", event.Attributes["library.name"])
+	assert.Equal(t, "v1.0.0", event.Attributes["library.version"])
 }
