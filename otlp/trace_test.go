@@ -124,6 +124,8 @@ func TestTranslateLegacyGrpcTraceRequest(t *testing.T) {
 	assert.Equal(t, "my-service", ev.Attributes["service.name"])
 	assert.Equal(t, "my-library", ev.Attributes["library.name"])
 	assert.Equal(t, "v0.0.1", ev.Attributes["library.version"])
+	assert.Equal(t, "my-library", ev.Attributes["scope.name"])
+	assert.Equal(t, "v0.0.1", ev.Attributes["scope.version"])
 	assert.Equal(t, float64(endTimestamp.Nanosecond()-startTimestamp.Nanosecond())/float64(time.Millisecond), ev.Attributes["duration_ms"])
 	assert.Equal(t, trace.Status_STATUS_CODE_OK, ev.Attributes["status_code"])
 	assert.Equal(t, "span_attr_val", ev.Attributes["span_attr"])
@@ -143,6 +145,8 @@ func TestTranslateLegacyGrpcTraceRequest(t *testing.T) {
 	assert.Equal(t, "resource_attr_val", ev.Attributes["resource_attr"])
 	assert.Equal(t, "my-library", ev.Attributes["library.name"])
 	assert.Equal(t, "v0.0.1", ev.Attributes["library.version"])
+	assert.Equal(t, "my-library", ev.Attributes["scope.name"])
+	assert.Equal(t, "v0.0.1", ev.Attributes["scope.version"])
 
 	// link
 	ev = events[2]
@@ -158,6 +162,8 @@ func TestTranslateLegacyGrpcTraceRequest(t *testing.T) {
 	assert.Equal(t, "resource_attr_val", ev.Attributes["resource_attr"])
 	assert.Equal(t, "my-library", ev.Attributes["library.name"])
 	assert.Equal(t, "v0.0.1", ev.Attributes["library.version"])
+	assert.Equal(t, "my-library", ev.Attributes["scope.name"])
+	assert.Equal(t, "v0.0.1", ev.Attributes["scope.version"])
 }
 
 func TestTranslateGrpcTraceRequest(t *testing.T) {
@@ -1155,4 +1161,6 @@ func TestCanTranslateOldProtoDefWithInstrumentationSpans(t *testing.T) {
 	assert.Equal(t, "test_span_a", event.Attributes["name"])
 	assert.Equal(t, "custom-library", event.Attributes["library.name"])
 	assert.Equal(t, "v1.0.0", event.Attributes["library.version"])
+	assert.Equal(t, "custom-library", event.Attributes["scope.name"])
+	assert.Equal(t, "v1.0.0", event.Attributes["scope.version"])
 }

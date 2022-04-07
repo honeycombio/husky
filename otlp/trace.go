@@ -90,13 +90,17 @@ func TranslateTraceRequest(request *collectorTrace.ExportTraceServiceRequest, ri
 			}
 		}
 
+		// NOTE: otel spec replaced library with scope, for now we'll add both
+		// to attributes and we can review in future
 		if len(resourceSpan.ScopeSpans) > 0 {
 			for _, scopeSpan := range resourceSpan.ScopeSpans {
 				if scopeSpan.Scope != nil {
 					if len(scopeSpan.Scope.Name) > 0 {
+						resourceAttrs["scope.name"] = scopeSpan.Scope.Name
 						resourceAttrs["library.name"] = scopeSpan.Scope.Name
 					}
 					if len(scopeSpan.Scope.Version) > 0 {
+						resourceAttrs["scope.version"] = scopeSpan.Scope.Version
 						resourceAttrs["library.version"] = scopeSpan.Scope.Version
 					}
 				}
@@ -106,9 +110,11 @@ func TranslateTraceRequest(request *collectorTrace.ExportTraceServiceRequest, ri
 			for _, librarySpan := range resourceSpan.InstrumentationLibrarySpans {
 				if librarySpan.InstrumentationLibrary != nil {
 					if len(librarySpan.InstrumentationLibrary.Name) > 0 {
+						resourceAttrs["scope.name"] = librarySpan.InstrumentationLibrary.Name
 						resourceAttrs["library.name"] = librarySpan.InstrumentationLibrary.Name
 					}
 					if len(librarySpan.InstrumentationLibrary.Version) > 0 {
+						resourceAttrs["scope.version"] = librarySpan.InstrumentationLibrary.Version
 						resourceAttrs["library.version"] = librarySpan.InstrumentationLibrary.Version
 					}
 				}
