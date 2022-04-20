@@ -5,7 +5,7 @@ go 1.18
 require (
 	github.com/klauspost/compress v1.15.1
 	github.com/stretchr/testify v1.7.1
-	go.opentelemetry.io/proto/otlp v0.9.0
+	go.opentelemetry.io/proto/otlp v0.11.0
 	google.golang.org/grpc v1.45.0
 	google.golang.org/protobuf v1.28.0
 )
