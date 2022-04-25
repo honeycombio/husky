@@ -1,5 +1,17 @@
 # Husky Changelog
 
+## 0.10.4 2022-04-25
+
+### Maintenance
+
+- bump otlp to v0.11 (#66) | [@MikeGoldsmith](https://github.com/MikeGoldsmith)
+- update go to 1.18 (#57) | [@MikeGoldsmith](https://github.com/MikeGoldsmith)
+- Bump google.golang.org/grpc from 1.40.0 to 1.45.0 (#62) | [dependabot](https://github.com/apps/dependabot)
+- Bump github.com/klauspost/compress from 1.13.6 to 1.15.1 (#61) | [dependabot](https://github.com/apps/dependabot)
+- Bump google.golang.org/protobuf from 1.27.1 to 1.28.0 (#59) | [dependabot](https://github.com/apps/dependabot)
+- Bump github.com/stretchr/testify from 1.7.0 to 1.7.1 (#60) | [dependabot](https://github.com/apps/dependabot)
+- Create dependabot.yml (#58) | [@vreynolds](https://github.com/vreynolds)
+
 ## 0.10.3 2022-03-28
 
 ### Fixed
