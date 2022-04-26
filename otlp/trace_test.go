@@ -340,6 +340,79 @@ func TestTranslateGrpcTraceRequestFromMultipleServices(t *testing.T) {
 	assert.Equal(t, "test_span_b", eventsB[0].Attributes["name"])
 }
 
+func TestTranslateGrpcTraceRequestFromMultipleLibraries(t *testing.T) {
+	ri := RequestInfo{
+		ApiKey:      "abc123DEF456ghi789jklm",
+		Dataset:     "legacy-dataset",
+		ContentType: "application/protobuf",
+	}
+
+	req := &collectortrace.ExportTraceServiceRequest{
+		ResourceSpans: []*trace.ResourceSpans{{
+			Resource: &resource.Resource{
+				Attributes: []*common.KeyValue{{
+					Key: "service.name",
+					Value: &common.AnyValue{
+						Value: &common.AnyValue_StringValue{StringValue: "my-service-a"},
+					},
+				}},
+			},
+			InstrumentationLibrarySpans: []*trace.InstrumentationLibrarySpans{{
+				InstrumentationLibrary: &common.InstrumentationLibrary{
+					Name:    "First",
+					Version: "1.1.1",
+				},
+				Spans: []*trace.Span{{
+					TraceId: test.RandomBytes(16),
+					SpanId:  test.RandomBytes(8),
+					Name:    "test_span_a",
+				}},
+			}, {
+				InstrumentationLibrary: &common.InstrumentationLibrary{
+					Name:    "Second",
+					Version: "2.2.2",
+				},
+				Spans: []*trace.Span{{
+					TraceId: test.RandomBytes(16),
+					SpanId:  test.RandomBytes(8),
+					Name:    "test_span_b",
+				}},
+			}, {
+				InstrumentationLibrary: &common.InstrumentationLibrary{
+					Name: "No Version Library",
+				},
+				Spans: []*trace.Span{{
+					TraceId: test.RandomBytes(16),
+					SpanId:  test.RandomBytes(8),
+					Name:    "test_span_c",
+				}},
+			}},
+		}},
+	}
+
+	result, err := TranslateTraceRequest(req, ri)
+	assert.NoError(t, err)
+	assert.Equal(t, proto.Size(req), result.RequestSize)
+	assert.Equal(t, 1, len(result.Batches))
+	batch := result.Batches[0]
+	assert.Equal(t, "my-service-a", batch.Dataset)
+	events := batch.Events
+	assert.Equal(t, 3, len(events))
+
+	first_event := events[0]
+	assert.Equal(t, "test_span_a", first_event.Attributes["name"])
+	assert.Equal(t, "First", first_event.Attributes["library.name"])
+	assert.Equal(t, "1.1.1", first_event.Attributes["library.version"])
+	second_event := events[1]
+	assert.Equal(t, "test_span_b", second_event.Attributes["name"])
+	assert.Equal(t, "Second", second_event.Attributes["library.name"])
+	assert.Equal(t, "2.2.2", second_event.Attributes["library.version"])
+	third_event := events[2]
+	assert.Equal(t, "test_span_c", third_event.Attributes["name"])
+	assert.Equal(t, "No Version Library", third_event.Attributes["library.name"])
+	assert.Equal(t, "", third_event.Attributes["library.version"], "A library span with no library version shouldn't have a version.")
+}
+
 func TestTranslateLegacyHttpTraceRequest(t *testing.T) {
 	traceID := test.RandomBytes(16)
 	spanID := test.RandomBytes(8)
