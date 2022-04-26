@@ -410,7 +410,7 @@ func TestTranslateGrpcTraceRequestFromMultipleLibraries(t *testing.T) {
 	third_event := events[2]
 	assert.Equal(t, "test_span_c", third_event.Attributes["name"])
 	assert.Equal(t, "No Version Library", third_event.Attributes["library.name"])
-	assert.Equal(t, "", third_event.Attributes["library.version"], "A library span with no library version shouldn't have a version.")
+	assert.Nil(t, third_event.Attributes["library.version"], "A library span with no library version shouldn't have a version.")
 }
 
 func TestTranslateLegacyHttpTraceRequest(t *testing.T) {
