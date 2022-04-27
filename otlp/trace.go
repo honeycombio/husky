@@ -92,14 +92,6 @@ func TranslateTraceRequest(request *collectorTrace.ExportTraceServiceRequest, ri
 
 		for _, librarySpan := range resourceSpan.InstrumentationLibrarySpans {
 			library := librarySpan.InstrumentationLibrary
-			if library != nil {
-				if len(library.Name) > 0 {
-					resourceAttrs["library.name"] = library.Name
-				}
-				if len(library.Version) > 0 {
-					resourceAttrs["library.version"] = library.Version
-				}
-			}
 
 			for _, span := range librarySpan.GetSpans() {
 				traceID := BytesToTraceID(span.TraceId)
@@ -126,6 +118,15 @@ func TranslateTraceRequest(request *collectorTrace.ExportTraceServiceRequest, ri
 				if span.Status != nil && len(span.Status.Message) > 0 {
 					eventAttrs["status_message"] = span.Status.Message
 				}
+				if library != nil {
+					if len(library.Name) > 0 {
+						eventAttrs["library.name"] = library.Name
+					}
+					if len(library.Version) > 0 {
+						eventAttrs["library.version"] = library.Version
+					}
+				}
+
 				if span.Attributes != nil {
 					addAttributesToMap(eventAttrs, span.Attributes)
 				}
