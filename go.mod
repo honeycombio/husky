@@ -3,7 +3,7 @@ module github.com/honeycombio/husky
 go 1.18
 
 require (
-	github.com/klauspost/compress v1.15.1
+	github.com/klauspost/compress v1.15.2
 	github.com/stretchr/testify v1.7.1
 	go.opentelemetry.io/proto/otlp v0.11.0
 	google.golang.org/grpc v1.45.0
