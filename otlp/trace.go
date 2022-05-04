@@ -127,13 +127,14 @@ func TranslateTraceRequest(request *collectorTrace.ExportTraceServiceRequest, ri
 					}
 				}
 
-				if span.Attributes != nil {
-					addAttributesToMap(eventAttrs, span.Attributes)
-				}
-
 				// copy resource attributes to event attributes
 				for k, v := range resourceAttrs {
 					eventAttrs[k] = v
+				}
+
+				// copy span attribures after resource attributes so span attributes write last and are preserved
+				if span.Attributes != nil {
+					addAttributesToMap(eventAttrs, span.Attributes)
 				}
 
 				// Now we need to wrap the eventAttrs in an event so we can specify the timestamp
