@@ -1,5 +1,17 @@
 # Husky Changelog
 
+## 0.10.5 2022-05-09
+
+### Fixed
+
+- Fix library.version spillover between spans in a single batch (#69) | [@robbkidd](https://github.com/robbkidd)
+- Copy span attrs after resource attrs (#74) | [@robbkidd](https://github.com/robbkidd)
+
+### Maintenance
+
+- Bump google.golang.org/grpc from 1.45.0 to 1.46.0 (#72)
+- Bump github.com/klauspost/compress from 1.15.1 to 1.15.2 (#71)
+
 ## 0.10.4 2022-04-25
 
 ### Maintenance
