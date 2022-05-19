@@ -1168,7 +1168,7 @@ func TestServiceNameIsTrimmedForDataset(t *testing.T) {
 	}
 }
 
-func TestGetSpanStatusCode(t *testing.T) {
+func TestEvaluateSpanStatus(t *testing.T) {
 	testCases := []struct {
 		desc               string
 		status             *trace.Status
@@ -1218,7 +1218,7 @@ func TestGetSpanStatusCode(t *testing.T) {
 	}
 	for _, tC := range testCases {
 		t.Run(tC.desc, func(t *testing.T) {
-			status_code := getSpanStatusCode(tC.status)
+			status_code := evaluateSpanStatus(tC.status)
 			assert.Equal(t, tC.expectedStatusCode, status_code)
 		})
 	}

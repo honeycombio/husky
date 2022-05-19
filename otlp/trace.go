@@ -105,14 +105,14 @@ func TranslateTraceRequest(request *collectorTrace.ExportTraceServiceRequest, ri
 					"span.kind":       spanKind,
 					"name":            span.Name,
 					"duration_ms":     float64(span.EndTimeUnixNano-span.StartTimeUnixNano) / float64(time.Millisecond),
-					"status_code":     getSpanStatusCode(span.Status),
+					"status_code":     evaluateSpanStatus(span.Status),
 					"span.num_links":  len(span.Links),
 					"span.num_events": len(span.Events),
 				}
 				if span.ParentSpanId != nil {
 					eventAttrs["trace.parent_id"] = hex.EncodeToString(span.ParentSpanId)
 				}
-				if getSpanStatusCode(span.Status) == trace.Status_STATUS_CODE_ERROR {
+				if evaluateSpanStatus(span.Status) == trace.Status_STATUS_CODE_ERROR {
 					eventAttrs["error"] = true
 				}
 				if span.Status != nil && len(span.Status.Message) > 0 {
@@ -257,12 +257,12 @@ func shouldTrimTraceId(traceID []byte) bool {
 	return true
 }
 
-// getSpanStatusCode checks the value of both the deprecated code and code fields
+// evaluateSpanStatus checks the value of both the deprecated code and code fields
 // on the span status and using the rules specified in the backward compatibility
 // notes in the protobuf definitions. See:
 //
 // https://github.com/open-telemetry/opentelemetry-proto/blob/59c488bfb8fb6d0458ad6425758b70259ff4a2bd/opentelemetry/proto/trace/v1/trace.proto#L230
-func getSpanStatusCode(status *trace.Status) trace.Status_StatusCode {
+func evaluateSpanStatus(status *trace.Status) trace.Status_StatusCode {
 	if status == nil {
 		return trace.Status_STATUS_CODE_UNSET
 	}
