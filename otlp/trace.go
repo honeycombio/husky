@@ -114,7 +114,7 @@ func TranslateTraceRequest(request *collectorTrace.ExportTraceServiceRequest, ri
 				if span.ParentSpanId != nil {
 					eventAttrs["trace.parent_id"] = hex.EncodeToString(span.ParentSpanId)
 				}
-				if status_code == trace.Status_STATUS_CODE_ERROR {
+				if status_code == int(trace.Status_STATUS_CODE_ERROR) {
 					eventAttrs["error"] = true
 				}
 				if span.Status != nil && len(span.Status.Message) > 0 {
@@ -264,18 +264,18 @@ func shouldTrimTraceId(traceID []byte) bool {
 // notes in the protobuf definitions. See:
 //
 // https://github.com/open-telemetry/opentelemetry-proto/blob/59c488bfb8fb6d0458ad6425758b70259ff4a2bd/opentelemetry/proto/trace/v1/trace.proto#L230
-func evaluateSpanStatus(status *trace.Status) trace.Status_StatusCode {
+func evaluateSpanStatus(status *trace.Status) int {
 	if status == nil {
-		return trace.Status_STATUS_CODE_UNSET
+		return int(trace.Status_STATUS_CODE_UNSET)
 	}
 	if status.Code == trace.Status_STATUS_CODE_UNSET {
 		//lint:ignore SA1019 keep DepCode until we move to proto v0.12.0+
 		if status.DeprecatedCode == trace.Status_DEPRECATED_STATUS_CODE_OK {
-			return trace.Status_STATUS_CODE_UNSET
+			return int(trace.Status_STATUS_CODE_UNSET)
 		}
-		return trace.Status_STATUS_CODE_ERROR
+		return int(trace.Status_STATUS_CODE_ERROR)
 	}
-	return status.Code
+	return int(status.Code)
 }
 
 func parseOTLPBody(body io.ReadCloser, contentEncoding string) (request *collectorTrace.ExportTraceServiceRequest, err error) {
