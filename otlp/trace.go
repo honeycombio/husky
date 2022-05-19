@@ -98,6 +98,8 @@ func TranslateTraceRequest(request *collectorTrace.ExportTraceServiceRequest, ri
 				spanID := hex.EncodeToString(span.SpanId)
 
 				spanKind := getSpanKind(span.Kind)
+				status_code := evaluateSpanStatus(span.Status)
+
 				eventAttrs := map[string]interface{}{
 					"trace.trace_id":  traceID,
 					"trace.span_id":   spanID,
@@ -105,14 +107,14 @@ func TranslateTraceRequest(request *collectorTrace.ExportTraceServiceRequest, ri
 					"span.kind":       spanKind,
 					"name":            span.Name,
 					"duration_ms":     float64(span.EndTimeUnixNano-span.StartTimeUnixNano) / float64(time.Millisecond),
-					"status_code":     evaluateSpanStatus(span.Status),
+					"status_code":     status_code,
 					"span.num_links":  len(span.Links),
 					"span.num_events": len(span.Events),
 				}
 				if span.ParentSpanId != nil {
 					eventAttrs["trace.parent_id"] = hex.EncodeToString(span.ParentSpanId)
 				}
-				if evaluateSpanStatus(span.Status) == trace.Status_STATUS_CODE_ERROR {
+				if status_code == trace.Status_STATUS_CODE_ERROR {
 					eventAttrs["error"] = true
 				}
 				if span.Status != nil && len(span.Status.Message) > 0 {
