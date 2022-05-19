@@ -1173,11 +1173,13 @@ func TestEvaluateSpanStatus(t *testing.T) {
 		desc               string
 		status             *trace.Status
 		expectedStatusCode int
+		expectedIsError    bool
 	}{
 		{
 			desc:               "returns unset when status is nil",
 			status:             nil,
 			expectedStatusCode: int(trace.Status_STATUS_CODE_UNSET),
+			expectedIsError:    false,
 		},
 		// Cases for the rules for old receivers at:
 		// https://github.com/open-telemetry/opentelemetry-proto/blob/59c488bfb8fb6d0458ad6425758b70259ff4a2bd/opentelemetry/proto/trace/v1/trace.proto#L251-L266
@@ -1192,6 +1194,7 @@ func TestEvaluateSpanStatus(t *testing.T) {
 				Message:        "Old OK!",
 			},
 			expectedStatusCode: int(trace.Status_STATUS_CODE_UNSET),
+			expectedIsError:    false,
 		},
 		//   If code==STATUS_CODE_UNSET [and] deprecated_code!=DEPRECATED_STATUS_CODE_OK
 		//   then the receiver MUST interpret the overall status to be STATUS_CODE_ERROR.
@@ -1203,6 +1206,7 @@ func TestEvaluateSpanStatus(t *testing.T) {
 				Message:        "Old not OK!",
 			},
 			expectedStatusCode: int(trace.Status_STATUS_CODE_ERROR),
+			expectedIsError:    true,
 		},
 		//   If code!=STATUS_CODE_UNSET then the value of `deprecated_code` MUST be
 		//   ignored, the `code` field is the sole carrier of the status.
@@ -1214,12 +1218,14 @@ func TestEvaluateSpanStatus(t *testing.T) {
 				Message:        "Old OK!",
 			},
 			expectedStatusCode: int(trace.Status_STATUS_CODE_ERROR),
+			expectedIsError:    true,
 		},
 	}
 	for _, tC := range testCases {
 		t.Run(tC.desc, func(t *testing.T) {
-			status_code := evaluateSpanStatus(tC.status)
+			status_code, isError := evaluateSpanStatus(tC.status)
 			assert.Equal(t, tC.expectedStatusCode, status_code)
+			assert.Equal(t, tC.expectedIsError, isError)
 		})
 	}
 }
