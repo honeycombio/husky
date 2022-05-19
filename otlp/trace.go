@@ -267,6 +267,7 @@ func getSpanStatusCode(status *trace.Status) trace.Status_StatusCode {
 		return trace.Status_STATUS_CODE_UNSET
 	}
 	if status.Code == trace.Status_STATUS_CODE_UNSET {
+		//lint:ignore SA1019 keep DepCode until we move to proto v0.12.0+
 		if status.DeprecatedCode == trace.Status_DEPRECATED_STATUS_CODE_OK {
 			return trace.Status_STATUS_CODE_UNSET
 		}
