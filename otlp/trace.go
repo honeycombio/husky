@@ -272,8 +272,11 @@ func shouldTrimTraceId(traceID []byte) bool {
 //
 // See: https://github.com/open-telemetry/opentelemetry-proto/blob/59c488bfb8fb6d0458ad6425758b70259ff4a2bd/opentelemetry/proto/trace/v1/trace.proto#L230
 func evaluateSpanStatus(status *trace.Status) (int, bool) {
+	const unsetStatus = int(trace.Status_STATUS_CODE_UNSET)
+	const errorStatus = int(trace.Status_STATUS_CODE_ERROR)
+
 	if status == nil {
-		return int(trace.Status_STATUS_CODE_UNSET), false
+		return unsetStatus, false
 	}
 
 	isError := false
@@ -287,7 +290,7 @@ func evaluateSpanStatus(status *trace.Status) (int, bool) {
 	case trace.Status_STATUS_CODE_UNSET:
 		//lint:ignore SA1019 keep DepCode until we move to proto v0.12.0+
 		if status.DeprecatedCode != trace.Status_DEPRECATED_STATUS_CODE_OK {
-			retStatusCode = int(trace.Status_STATUS_CODE_ERROR)
+			retStatusCode = errorStatus
 			isError = true
 		}
 	}
