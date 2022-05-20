@@ -1223,8 +1223,8 @@ func TestEvaluateSpanStatus(t *testing.T) {
 	}
 	for _, tC := range testCases {
 		t.Run(tC.desc, func(t *testing.T) {
-			status_code, isError := evaluateSpanStatus(tC.status)
-			assert.Equal(t, tC.expectedStatusCode, status_code)
+			statusCode, isError := evaluateSpanStatus(tC.status)
+			assert.Equal(t, tC.expectedStatusCode, statusCode)
 			assert.Equal(t, tC.expectedIsError, isError)
 		})
 	}

@@ -98,7 +98,7 @@ func TranslateTraceRequest(request *collectorTrace.ExportTraceServiceRequest, ri
 				spanID := hex.EncodeToString(span.SpanId)
 
 				spanKind := getSpanKind(span.Kind)
-				status_code, isError := evaluateSpanStatus(span.Status)
+				statusCode, isError := evaluateSpanStatus(span.Status)
 
 				eventAttrs := map[string]interface{}{
 					"trace.trace_id":  traceID,
@@ -107,7 +107,7 @@ func TranslateTraceRequest(request *collectorTrace.ExportTraceServiceRequest, ri
 					"span.kind":       spanKind,
 					"name":            span.Name,
 					"duration_ms":     float64(span.EndTimeUnixNano-span.StartTimeUnixNano) / float64(time.Millisecond),
-					"status_code":     status_code,
+					"status_code":     statusCode,
 					"span.num_links":  len(span.Links),
 					"span.num_events": len(span.Events),
 				}
@@ -277,7 +277,7 @@ func evaluateSpanStatus(status *trace.Status) (int, bool) {
 	}
 
 	isError := false
-	status_code := int(status.Code)
+	retStatusCode := int(status.Code)
 
 	switch status.Code {
 	case trace.Status_STATUS_CODE_OK:
@@ -287,14 +287,14 @@ func evaluateSpanStatus(status *trace.Status) (int, bool) {
 	case trace.Status_STATUS_CODE_UNSET:
 		//lint:ignore SA1019 keep DepCode until we move to proto v0.12.0+
 		if status.DeprecatedCode == trace.Status_DEPRECATED_STATUS_CODE_OK {
-			status_code = int(trace.Status_STATUS_CODE_UNSET)
+			retStatusCode = int(trace.Status_STATUS_CODE_UNSET)
 		} else {
-			status_code = int(trace.Status_STATUS_CODE_ERROR)
+			retStatusCode = int(trace.Status_STATUS_CODE_ERROR)
 			isError = true
 		}
 	}
 
-	return status_code, isError
+	return retStatusCode, isError
 }
 
 func parseOTLPBody(body io.ReadCloser, contentEncoding string) (request *collectorTrace.ExportTraceServiceRequest, err error) {
