@@ -1,5 +1,11 @@
 # Husky Changelog
 
+## 0.10.6 2022-05-20
+
+### Fixed
+
+- Convert OTLP span status.code type to integer earlier in the transform (#78) | [@robbkidd](https://github.com/robbkidd)
+
 ## 0.10.5 2022-05-09
 
 ### Fixed
