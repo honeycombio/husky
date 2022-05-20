@@ -98,6 +98,8 @@ func TranslateTraceRequest(request *collectorTrace.ExportTraceServiceRequest, ri
 				spanID := hex.EncodeToString(span.SpanId)
 
 				spanKind := getSpanKind(span.Kind)
+				statusCode, isError := evaluateSpanStatus(span.Status)
+
 				eventAttrs := map[string]interface{}{
 					"trace.trace_id":  traceID,
 					"trace.span_id":   spanID,
@@ -105,14 +107,14 @@ func TranslateTraceRequest(request *collectorTrace.ExportTraceServiceRequest, ri
 					"span.kind":       spanKind,
 					"name":            span.Name,
 					"duration_ms":     float64(span.EndTimeUnixNano-span.StartTimeUnixNano) / float64(time.Millisecond),
-					"status_code":     getSpanStatusCode(span.Status),
+					"status_code":     statusCode,
 					"span.num_links":  len(span.Links),
 					"span.num_events": len(span.Events),
 				}
 				if span.ParentSpanId != nil {
 					eventAttrs["trace.parent_id"] = hex.EncodeToString(span.ParentSpanId)
 				}
-				if getSpanStatusCode(span.Status) == trace.Status_STATUS_CODE_ERROR {
+				if isError {
 					eventAttrs["error"] = true
 				}
 				if span.Status != nil && len(span.Status.Message) > 0 {
@@ -257,22 +259,43 @@ func shouldTrimTraceId(traceID []byte) bool {
 	return true
 }
 
-// getSpanStatusCode checks the value of both the deprecated code and code fields
-// on the span status and using the rules specified in the backward compatibility
-// notes in the protobuf definitions. See:
+// evaluateSpanStatus returns the integer value of the span's status code and
+// a bool for whether to consider the status an error.
 //
-// https://github.com/open-telemetry/opentelemetry-proto/blob/59c488bfb8fb6d0458ad6425758b70259ff4a2bd/opentelemetry/proto/trace/v1/trace.proto#L230
-func getSpanStatusCode(status *trace.Status) trace.Status_StatusCode {
+// The type conversion from proto enum value to an integer is done here because
+// the events we produce from OTLP spans have no knowledge of or interest in
+// the OTLP types generated from enums in the proto definitions.
+//
+// Until we don't have to process OTLP traces from proto <= v0.11.0, this
+// function checks the value of both the status.Code and status.DeprecatedCode
+// fields on the span according to the rules for backward compatibility.
+//
+// See: https://github.com/open-telemetry/opentelemetry-proto/blob/59c488bfb8fb6d0458ad6425758b70259ff4a2bd/opentelemetry/proto/trace/v1/trace.proto#L230
+func evaluateSpanStatus(status *trace.Status) (int, bool) {
+	const unsetStatus = int(trace.Status_STATUS_CODE_UNSET)
+	const errorStatus = int(trace.Status_STATUS_CODE_ERROR)
+
 	if status == nil {
-		return trace.Status_STATUS_CODE_UNSET
+		return unsetStatus, false
 	}
-	if status.Code == trace.Status_STATUS_CODE_UNSET {
-		if status.DeprecatedCode == trace.Status_DEPRECATED_STATUS_CODE_OK {
-			return trace.Status_STATUS_CODE_UNSET
+
+	isError := false
+	retStatusCode := int(status.Code)
+
+	switch status.Code {
+	case trace.Status_STATUS_CODE_OK:
+		// OK, thumbs up. Let's do this.
+	case trace.Status_STATUS_CODE_ERROR:
+		isError = true
+	case trace.Status_STATUS_CODE_UNSET:
+		//lint:ignore SA1019 keep DepCode until we move to proto v0.12.0+
+		if status.DeprecatedCode != trace.Status_DEPRECATED_STATUS_CODE_OK {
+			retStatusCode = errorStatus
+			isError = true
 		}
-		return trace.Status_STATUS_CODE_ERROR
 	}
-	return status.Code
+
+	return retStatusCode, isError
 }
 
 func parseOTLPBody(body io.ReadCloser, contentEncoding string) (request *collectorTrace.ExportTraceServiceRequest, err error) {

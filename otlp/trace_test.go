@@ -119,7 +119,7 @@ func TestTranslateLegacyGrpcTraceRequest(t *testing.T) {
 	assert.Equal(t, "test_span", ev.Attributes["name"])
 	assert.Equal(t, "my-service", ev.Attributes["service.name"])
 	assert.Equal(t, float64(endTimestamp.Nanosecond()-startTimestamp.Nanosecond())/float64(time.Millisecond), ev.Attributes["duration_ms"])
-	assert.Equal(t, trace.Status_STATUS_CODE_OK, ev.Attributes["status_code"])
+	assert.Equal(t, int(trace.Status_STATUS_CODE_OK), ev.Attributes["status_code"])
 	assert.Equal(t, "span_attr_val", ev.Attributes["span_attr"])
 	assert.Equal(t, "resource_attr_val", ev.Attributes["resource_attr"])
 	assert.Equal(t, 1, ev.Attributes["span.num_links"])
@@ -247,7 +247,7 @@ func TestTranslateGrpcTraceRequest(t *testing.T) {
 	assert.Equal(t, "client", ev.Attributes["span.kind"])
 	assert.Equal(t, "test_span", ev.Attributes["name"])
 	assert.Equal(t, float64(endTimestamp.Nanosecond()-startTimestamp.Nanosecond())/float64(time.Millisecond), ev.Attributes["duration_ms"])
-	assert.Equal(t, trace.Status_STATUS_CODE_OK, ev.Attributes["status_code"])
+	assert.Equal(t, int(trace.Status_STATUS_CODE_OK), ev.Attributes["status_code"])
 	assert.Equal(t, "span_attr_val", ev.Attributes["span_attr"])
 	assert.Equal(t, "resource_attr_val", ev.Attributes["resource_attr"])
 	assert.Equal(t, 1, ev.Attributes["span.num_links"])
@@ -523,7 +523,7 @@ func TestTranslateLegacyHttpTraceRequest(t *testing.T) {
 			assert.Equal(t, "test_span", ev.Attributes["name"])
 			assert.Equal(t, "my-service", ev.Attributes["service.name"])
 			assert.Equal(t, float64(endTimestamp.Nanosecond()-startTimestamp.Nanosecond())/float64(time.Millisecond), ev.Attributes["duration_ms"])
-			assert.Equal(t, trace.Status_STATUS_CODE_OK, ev.Attributes["status_code"])
+			assert.Equal(t, int(trace.Status_STATUS_CODE_OK), ev.Attributes["status_code"])
 			assert.Equal(t, "span_attr_val", ev.Attributes["span_attr"])
 			assert.Equal(t, "resource_attr_val", ev.Attributes["resource_attr"])
 
@@ -661,7 +661,7 @@ func TestTranslateHttpTraceRequest(t *testing.T) {
 			assert.Equal(t, "test_span", ev.Attributes["name"])
 			assert.Equal(t, "my-service", ev.Attributes["service.name"])
 			assert.Equal(t, float64(endTimestamp.Nanosecond()-startTimestamp.Nanosecond())/float64(time.Millisecond), ev.Attributes["duration_ms"])
-			assert.Equal(t, trace.Status_STATUS_CODE_OK, ev.Attributes["status_code"])
+			assert.Equal(t, int(trace.Status_STATUS_CODE_OK), ev.Attributes["status_code"])
 			assert.Equal(t, "span_attr_val", ev.Attributes["span_attr"])
 			assert.Equal(t, "resource_attr_val", ev.Attributes["resource_attr"])
 
@@ -1164,6 +1164,68 @@ func TestServiceNameIsTrimmedForDataset(t *testing.T) {
 			assert.Equal(t, 1, len(result.Batches[0].Events))
 			event := result.Batches[0].Events[0]
 			assert.Equal(t, tc.expectedEventServiceName, event.Attributes["service.name"])
+		})
+	}
+}
+
+func TestEvaluateSpanStatus(t *testing.T) {
+	testCases := []struct {
+		desc               string
+		status             *trace.Status
+		expectedStatusCode int
+		expectedIsError    bool
+	}{
+		{
+			desc:               "returns unset when status is nil",
+			status:             nil,
+			expectedStatusCode: int(trace.Status_STATUS_CODE_UNSET),
+			expectedIsError:    false,
+		},
+		// Cases for the rules for old receivers at:
+		// https://github.com/open-telemetry/opentelemetry-proto/blob/59c488bfb8fb6d0458ad6425758b70259ff4a2bd/opentelemetry/proto/trace/v1/trace.proto#L251-L266
+		//
+		//   If code==STATUS_CODE_UNSET [and] deprecated_code==DEPRECATED_STATUS_CODE_OK
+		//   then the receiver MUST interpret the overall status to be STATUS_CODE_UNSET.
+		{
+			desc: "returns unset when code is UNSET and deprecated_code is OK",
+			status: &trace.Status{
+				Code:           trace.Status_STATUS_CODE_UNSET,
+				DeprecatedCode: trace.Status_DEPRECATED_STATUS_CODE_OK,
+				Message:        "Old OK!",
+			},
+			expectedStatusCode: int(trace.Status_STATUS_CODE_UNSET),
+			expectedIsError:    false,
+		},
+		//   If code==STATUS_CODE_UNSET [and] deprecated_code!=DEPRECATED_STATUS_CODE_OK
+		//   then the receiver MUST interpret the overall status to be STATUS_CODE_ERROR.
+		{
+			desc: "returns error when code is UNSET and deprecated_code is not OK",
+			status: &trace.Status{
+				Code:           trace.Status_STATUS_CODE_UNSET,
+				DeprecatedCode: trace.Status_DEPRECATED_STATUS_CODE_ABORTED,
+				Message:        "Old not OK!",
+			},
+			expectedStatusCode: int(trace.Status_STATUS_CODE_ERROR),
+			expectedIsError:    true,
+		},
+		//   If code!=STATUS_CODE_UNSET then the value of `deprecated_code` MUST be
+		//   ignored, the `code` field is the sole carrier of the status.
+		{
+			desc: "returns code when code is not UNSET and deprecated_code is anything",
+			status: &trace.Status{
+				Code:           trace.Status_STATUS_CODE_ERROR,
+				DeprecatedCode: trace.Status_DEPRECATED_STATUS_CODE_OK,
+				Message:        "Old OK!",
+			},
+			expectedStatusCode: int(trace.Status_STATUS_CODE_ERROR),
+			expectedIsError:    true,
+		},
+	}
+	for _, tC := range testCases {
+		t.Run(tC.desc, func(t *testing.T) {
+			statusCode, isError := evaluateSpanStatus(tC.status)
+			assert.Equal(t, tC.expectedStatusCode, statusCode)
+			assert.Equal(t, tC.expectedIsError, isError)
 		})
 	}
 }
