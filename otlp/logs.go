@@ -72,7 +72,9 @@ func TranslateLogsRequest(request *collectorLogs.ExportLogsServiceRequest, ri Re
 					eventAttrs["severity_text"] = log.SeverityText
 				}
 				if log.Body != nil {
-					eventAttrs["body"] = log.Body.Value
+					if val := getValue(log.Body); val != nil {
+						eventAttrs["body"] = val
+					}
 				}
 				if library != nil {
 					if len(library.Name) > 0 {

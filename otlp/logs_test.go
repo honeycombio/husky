@@ -211,6 +211,79 @@ func TestCanDetectLogSeverity(t *testing.T) {
 	}
 }
 
+func TestCanExtractBody(t *testing.T) {
+	testCases := []struct {
+		name          string
+		body          *common.AnyValue
+		expectedValue interface{}
+	}{
+		{
+			name:          "string",
+			body:          &common.AnyValue{Value: &common.AnyValue_StringValue{StringValue: "string_body"}},
+			expectedValue: "string_body",
+		},
+		{
+			name:          "int",
+			body:          &common.AnyValue{Value: &common.AnyValue_IntValue{IntValue: 100}},
+			expectedValue: int64(100),
+		},
+		{
+			name:          "bool",
+			body:          &common.AnyValue{Value: &common.AnyValue_BoolValue{BoolValue: true}},
+			expectedValue: true,
+		},
+		{
+			name:          "double",
+			body:          &common.AnyValue{Value: &common.AnyValue_DoubleValue{DoubleValue: 12.34}},
+			expectedValue: 12.34,
+		},
+		{
+			name: "array",
+			body: &common.AnyValue{Value: &common.AnyValue_ArrayValue{ArrayValue: &common.ArrayValue{Values: []*common.AnyValue{
+				{Value: &common.AnyValue_StringValue{StringValue: "one"}},
+				{Value: &common.AnyValue_IntValue{IntValue: 2}},
+				{Value: &common.AnyValue_BoolValue{BoolValue: true}},
+			},
+			}}},
+			expectedValue: "[\"one\",2,true]",
+		},
+		{
+			name: "kvlist",
+			body: &common.AnyValue{Value: &common.AnyValue_KvlistValue{KvlistValue: &common.KeyValueList{
+				Values: []*common.KeyValue{
+					{Key: "key1", Value: &common.AnyValue{Value: &common.AnyValue_StringValue{StringValue: "value1"}}},
+					{Key: "key2", Value: &common.AnyValue{Value: &common.AnyValue_IntValue{IntValue: 2}}},
+					{Key: "key3", Value: &common.AnyValue{Value: &common.AnyValue_BoolValue{BoolValue: true}}},
+				},
+			}}},
+			expectedValue: "[{\"key1\":\"value1\"},{\"key2\":2},{\"key3\":true}]",
+		},
+	}
+	ri := RequestInfo{
+		ApiKey:      "apikey",
+		ContentType: "application/protobuf",
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			req := &collectorlogs.ExportLogsServiceRequest{
+				ResourceLogs: []*logs.ResourceLogs{{
+					InstrumentationLibraryLogs: []*logs.InstrumentationLibraryLogs{{
+						Logs: []*logs.LogRecord{{
+							Body: tc.body,
+						}},
+					}},
+				}},
+			}
+
+			result, err := TranslateLogsRequest(req, ri)
+			assert.NotNil(t, result)
+			assert.Nil(t, err)
+			assert.Equal(t, tc.expectedValue, result.Batches[0].Events[0].Attributes["body"])
+		})
+	}
+}
+
 func TestLogsRequestWithInvalidContentTypeReturnsError(t *testing.T) {
 	req := &collectorlogs.ExportLogsServiceRequest{}
 	ri := RequestInfo{
