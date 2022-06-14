@@ -49,20 +49,11 @@ func TestTranslateLogsRequest(t *testing.T) {
 					TimeUnixNano:   uint64(startTimestamp.Nanosecond()),
 					SeverityText:   "test_severity_text",
 					SeverityNumber: logs.SeverityNumber_SEVERITY_NUMBER_DEBUG,
-					Body: &common.AnyValue{
-						Value: &common.AnyValue_StringValue{StringValue: ""},
-					},
 					Attributes: []*common.KeyValue{
 						{
 							Key: "span_attr",
 							Value: &common.AnyValue{
 								Value: &common.AnyValue_StringValue{StringValue: "span_attr_val"},
-							},
-						},
-						{
-							Key: "sampleRate",
-							Value: &common.AnyValue{
-								Value: &common.AnyValue_IntValue{IntValue: 100},
 							},
 						},
 					},
@@ -88,6 +79,9 @@ func TestTranslateLogsRequest(t *testing.T) {
 	assert.Equal(t, "test_log", ev.Attributes["name"])
 	assert.Equal(t, "test_severity_text", ev.Attributes["severity_text"])
 	assert.Equal(t, "debug", ev.Attributes["severity"])
+	assert.Equal(t, "my-service", ev.Attributes["service.name"])
+	assert.Equal(t, "span_attr_val", ev.Attributes["span_attr"])
+	assert.Equal(t, "resource_attr_val", ev.Attributes["resource_attr"])
 }
 
 func TestTranslateClassicLogsRequest(t *testing.T) {
@@ -124,20 +118,11 @@ func TestTranslateClassicLogsRequest(t *testing.T) {
 					TimeUnixNano:   uint64(startTimestamp.Nanosecond()),
 					SeverityText:   "test_severity_text",
 					SeverityNumber: logs.SeverityNumber_SEVERITY_NUMBER_DEBUG,
-					Body: &common.AnyValue{
-						Value: &common.AnyValue_StringValue{StringValue: ""},
-					},
 					Attributes: []*common.KeyValue{
 						{
 							Key: "span_attr",
 							Value: &common.AnyValue{
 								Value: &common.AnyValue_StringValue{StringValue: "span_attr_val"},
-							},
-						},
-						{
-							Key: "sampleRate",
-							Value: &common.AnyValue{
-								Value: &common.AnyValue_IntValue{IntValue: 100},
 							},
 						},
 					},
@@ -163,46 +148,68 @@ func TestTranslateClassicLogsRequest(t *testing.T) {
 	assert.Equal(t, "test_log", ev.Attributes["name"])
 	assert.Equal(t, "test_severity_text", ev.Attributes["severity_text"])
 	assert.Equal(t, "debug", ev.Attributes["severity"])
+	assert.Equal(t, "my-service", ev.Attributes["service.name"])
+	assert.Equal(t, "span_attr_val", ev.Attributes["span_attr"])
+	assert.Equal(t, "resource_attr_val", ev.Attributes["resource_attr"])
 }
 
-// TODO: test different log severities are translated
-// func TestCanDetectLogSeverity(t *testing.T) {
-// 	testCases := []struct {
-// 		name             string
-// 		severity         logs.SeverityNumber
-// 		expectedSeverity string
-// 	}{
-// 		{
-// 			name:             "debug",
-// 			severity:         logs.SeverityNumber_SEVERITY_NUMBER_DEBUG,
-// 			expectedSeverity: "debug",
-// 		},
-// 	}
+func TestCanDetectLogSeverity(t *testing.T) {
+	testCases := []struct {
+		name       string
+		severities []logs.SeverityNumber
+	}{
+		{
+			name:       "trace",
+			severities: []logs.SeverityNumber{logs.SeverityNumber_SEVERITY_NUMBER_TRACE, logs.SeverityNumber_SEVERITY_NUMBER_TRACE2, logs.SeverityNumber_SEVERITY_NUMBER_TRACE3, logs.SeverityNumber_SEVERITY_NUMBER_TRACE4},
+		},
+		{
+			name:       "debug",
+			severities: []logs.SeverityNumber{logs.SeverityNumber_SEVERITY_NUMBER_DEBUG, logs.SeverityNumber_SEVERITY_NUMBER_DEBUG2, logs.SeverityNumber_SEVERITY_NUMBER_DEBUG3, logs.SeverityNumber_SEVERITY_NUMBER_DEBUG4},
+		},
+		{
+			name:       "info",
+			severities: []logs.SeverityNumber{logs.SeverityNumber_SEVERITY_NUMBER_INFO, logs.SeverityNumber_SEVERITY_NUMBER_INFO2, logs.SeverityNumber_SEVERITY_NUMBER_INFO3, logs.SeverityNumber_SEVERITY_NUMBER_INFO4},
+		},
+		{
+			name:       "warn",
+			severities: []logs.SeverityNumber{logs.SeverityNumber_SEVERITY_NUMBER_WARN, logs.SeverityNumber_SEVERITY_NUMBER_WARN2, logs.SeverityNumber_SEVERITY_NUMBER_WARN3, logs.SeverityNumber_SEVERITY_NUMBER_WARN4},
+		},
+		{
+			name:       "fatal",
+			severities: []logs.SeverityNumber{logs.SeverityNumber_SEVERITY_NUMBER_FATAL, logs.SeverityNumber_SEVERITY_NUMBER_FATAL2, logs.SeverityNumber_SEVERITY_NUMBER_FATAL3, logs.SeverityNumber_SEVERITY_NUMBER_FATAL4},
+		},
+		{
+			name:       "unspecified",
+			severities: []logs.SeverityNumber{logs.SeverityNumber_SEVERITY_NUMBER_UNSPECIFIED, -100, 100}, // includes a couple of unknown values
+		},
+	}
+	ri := RequestInfo{
+		ApiKey:      "apikey",
+		ContentType: "application/protobuf",
+	}
 
-// 	for _, tc := range testCases {
-// 		t.Run(tc.name, func(t *testing.T) {
-// 			req := &collectorlogs.ExportLogsServiceRequest{
-// 				ResourceLogs: []*logs.ResourceLogs{{
-// 					InstrumentationLibraryLogs: []*logs.InstrumentationLibraryLogs{{
-// 						Logs: []*logs.LogRecord{{
-// 							Name:           "test_log",
-// 							SeverityNumber: tc.severity,
-// 						}},
-// 					}},
-// 				}},
-// 			}
-// 			ri := RequestInfo{
-// 				ApiKey:      "apikey",
-// 				ContentType: "application/protobuf",
-// 			}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			for _, severity := range tc.severities {
+				req := &collectorlogs.ExportLogsServiceRequest{
+					ResourceLogs: []*logs.ResourceLogs{{
+						InstrumentationLibraryLogs: []*logs.InstrumentationLibraryLogs{{
+							Logs: []*logs.LogRecord{{
+								Name:           "test_log",
+								SeverityNumber: logs.SeverityNumber(severity),
+							}},
+						}},
+					}},
+				}
 
-// 			result, err := TranslateLogsRequest(req, ri)
-// 			assert.Nil(t, result)
-// 			assert.Equal(t, ErrInvalidContentType, err)
-// 			assert.Equal(t, tc.expectedSeverity, result.Batches[0].Events[0].Attributes["severity"])
-// 		})
-// 	}
-// }
+				result, err := TranslateLogsRequest(req, ri)
+				assert.NotNil(t, result)
+				assert.Nil(t, err)
+				assert.Equal(t, tc.name, result.Batches[0].Events[0].Attributes["severity"])
+			}
+		})
+	}
+}
 
 func TestLogsRequestWithInvalidContentTypeReturnsError(t *testing.T) {
 	req := &collectorlogs.ExportLogsServiceRequest{}
