@@ -11,6 +11,8 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
+// TranslateLogsRequestFromReader translates an OTLP log request into Honeycomb-friendly structure from a reader (eg HTTP body)
+// RequestInfo is the parsed information from the gRPC metadata
 func TranslateLogsRequestFromReader(body io.ReadCloser, ri RequestInfo) (*TranslateTraceRequestResult, error) {
 	if err := ri.ValidateLogsHeaders(); err != nil {
 		return nil, err
@@ -22,7 +24,7 @@ func TranslateLogsRequestFromReader(body io.ReadCloser, ri RequestInfo) (*Transl
 	return TranslateLogsRequest(request, ri)
 }
 
-// TranslateTraceRequest translates an OTLP/gRPC request into Honeycomb-friendly structure
+// TranslateLogsRequest translates an OTLP proto log request into Honeycomb-friendly structure
 // RequestInfo is the parsed information from the gRPC metadata
 func TranslateLogsRequest(request *collectorLogs.ExportLogsServiceRequest, ri RequestInfo) (*TranslateTraceRequestResult, error) {
 	if err := ri.ValidateLogsHeaders(); err != nil {
