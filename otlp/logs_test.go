@@ -75,7 +75,7 @@ func TestTranslateLogsRequest(t *testing.T) {
 	ev := events[0]
 	assert.Equal(t, startTimestamp.Nanosecond(), ev.Timestamp.Nanosecond())
 	assert.Equal(t, BytesToTraceID(traceID), ev.Attributes["trace.trace_id"])
-	assert.Equal(t, hex.EncodeToString(spanID), ev.Attributes["trace.span_id"])
+	assert.Equal(t, hex.EncodeToString(spanID), ev.Attributes["trace.parent_id"])
 	assert.Equal(t, "test_log", ev.Attributes["name"])
 	assert.Equal(t, "test_severity_text", ev.Attributes["severity_text"])
 	assert.Equal(t, "debug", ev.Attributes["severity"])
@@ -144,7 +144,7 @@ func TestTranslateClassicLogsRequest(t *testing.T) {
 	ev := events[0]
 	assert.Equal(t, startTimestamp.Nanosecond(), ev.Timestamp.Nanosecond())
 	assert.Equal(t, BytesToTraceID(traceID), ev.Attributes["trace.trace_id"])
-	assert.Equal(t, hex.EncodeToString(spanID), ev.Attributes["trace.span_id"])
+	assert.Equal(t, hex.EncodeToString(spanID), ev.Attributes["trace.parent_id"])
 	assert.Equal(t, "test_log", ev.Attributes["name"])
 	assert.Equal(t, "test_severity_text", ev.Attributes["severity_text"])
 	assert.Equal(t, "debug", ev.Attributes["severity"])
