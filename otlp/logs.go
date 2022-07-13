@@ -62,6 +62,7 @@ func TranslateLogsRequest(request *collectorLogs.ExportLogsServiceRequest, ri Re
 					"severity":            getLogSeverity(log.SeverityNumber),
 					"severity_code":       int(log.SeverityNumber),
 					"meta.telemetry_type": "log",
+					"flags":               log.Flags,
 				}
 				if len(log.TraceId) > 0 {
 					eventAttrs["trace.trace_id"] = BytesToTraceID(log.TraceId)
