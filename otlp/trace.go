@@ -278,24 +278,10 @@ func evaluateSpanStatus(status *trace.Status) (int, bool) {
 	if status == nil {
 		return unsetStatus, false
 	}
-
-	isError := false
-	retStatusCode := int(status.Code)
-
-	switch status.Code {
-	case trace.Status_STATUS_CODE_OK:
-		// OK, thumbs up. Let's do this.
-	case trace.Status_STATUS_CODE_ERROR:
-		isError = true
-	case trace.Status_STATUS_CODE_UNSET:
-		//lint:ignore SA1019 keep DepCode until we move to proto v0.12.0+
-		if status.DeprecatedCode != trace.Status_DEPRECATED_STATUS_CODE_OK {
-			retStatusCode = errorStatus
-			isError = true
-		}
+	if status.Code == trace.Status_STATUS_CODE_ERROR {
+		return errorStatus, true
 	}
-
-	return retStatusCode, isError
+	return int(status.Code), false
 }
 
 func parseOTLPBody(body io.ReadCloser, contentEncoding string) (request *collectorTrace.ExportTraceServiceRequest, err error) {
