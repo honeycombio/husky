@@ -1,13 +1,21 @@
 package otlp
 
 import (
+	"bytes"
+	"compress/gzip"
 	"context"
 	"encoding/json"
+	"io"
+	"io/ioutil"
 	"net/http"
 	"regexp"
+	"time"
 
+	"github.com/klauspost/compress/zstd"
 	common "go.opentelemetry.io/proto/otlp/common/v1"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/reflect/protoreflect"
 )
 
 const (
@@ -22,6 +30,29 @@ const (
 )
 
 var legacyApiKeyPattern = regexp.MustCompile("^[0-9a-f]{32}$")
+
+// TranslateTraceRequestResult represents an OTLP trace request translated into Honeycomb-friendly structure
+// RequestSize is total byte size of the entire OTLP request
+// Batches represent events grouped by their target dataset
+type TranslateTraceRequestResult struct {
+	RequestSize int
+	Batches     []Batch
+}
+
+// Batch represents Honeycomb events grouped by their target dataset
+// SizeBytes is the total byte size of the OTLP structure that represents this batch
+type Batch struct {
+	Dataset   string
+	SizeBytes int
+	Events    []Event
+}
+
+// Event represents a single Honeycomb event
+type Event struct {
+	Attributes map[string]interface{}
+	Timestamp  time.Time
+	SampleRate int32
+}
 
 // RequestInfo represents information parsed from either HTTP headers or gRPC metadata
 type RequestInfo struct {
@@ -52,6 +83,19 @@ func (ri *RequestInfo) ValidateTracesHeaders() error {
 
 // ValidateMetricsHeaders validates required headers/metadata for a metric OTLP request
 func (ri *RequestInfo) ValidateMetricsHeaders() error {
+	if len(ri.ApiKey) == 0 {
+		return ErrMissingAPIKeyHeader
+	}
+	if isLegacy(ri.ApiKey) && len(ri.Dataset) == 0 {
+		return ErrMissingDatasetHeader
+	}
+	if ri.ContentType != "application/protobuf" && ri.ContentType != "application/x-protobuf" {
+		return ErrInvalidContentType
+	}
+	return nil
+}
+
+func (ri *RequestInfo) ValidateLogsHeaders() error {
 	if len(ri.ApiKey) == 0 {
 		return ErrMissingAPIKeyHeader
 	}
@@ -152,4 +196,45 @@ func getValue(value *common.AnyValue) interface{} {
 
 func isLegacy(apiKey string) bool {
 	return legacyApiKeyPattern.MatchString(apiKey)
+}
+
+func parseOtlpRequestBody(body io.ReadCloser, contentEncoding string, request protoreflect.ProtoMessage) error {
+	defer body.Close()
+	bodyBytes, err := ioutil.ReadAll(body)
+	if err != nil {
+		return err
+	}
+	bodyReader := bytes.NewReader(bodyBytes)
+
+	var reader io.Reader
+	switch contentEncoding {
+	case "gzip":
+		gzipReader, err := gzip.NewReader(bodyReader)
+		defer gzipReader.Close()
+		if err != nil {
+			return err
+		}
+		reader = gzipReader
+	case "zstd":
+		zstdReader, err := zstd.NewReader(bodyReader)
+		defer zstdReader.Close()
+		if err != nil {
+			return err
+		}
+		reader = zstdReader
+	default:
+		reader = bodyReader
+	}
+
+	bytes, err := ioutil.ReadAll(reader)
+	if err != nil {
+		return err
+	}
+
+	err = proto.Unmarshal(bytes, request)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
