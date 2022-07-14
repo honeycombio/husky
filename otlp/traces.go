@@ -248,16 +248,24 @@ func shouldTrimTraceId(traceID []byte) bool {
 //
 // See: https://github.com/open-telemetry/opentelemetry-proto/blob/59c488bfb8fb6d0458ad6425758b70259ff4a2bd/opentelemetry/proto/trace/v1/trace.proto#L230
 func evaluateSpanStatus(status *trace.Status) (int, bool) {
+	const okStatus = int(trace.Status_STATUS_CODE_OK)
 	const unsetStatus = int(trace.Status_STATUS_CODE_UNSET)
 	const errorStatus = int(trace.Status_STATUS_CODE_ERROR)
 
 	if status == nil {
 		return unsetStatus, false
 	}
-	if status.Code == trace.Status_STATUS_CODE_ERROR {
+
+	switch status.Code {
+	case trace.Status_STATUS_CODE_OK:
+		return okStatus, false
+	case trace.Status_STATUS_CODE_UNSET:
+		return unsetStatus, false
+	case trace.Status_STATUS_CODE_ERROR:
 		return errorStatus, true
+	default:
+		return int(status.Code), false
 	}
-	return int(status.Code), false
 }
 
 func getSampleRate(attrs map[string]interface{}) int32 {
