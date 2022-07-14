@@ -1,5 +1,18 @@
 # Husky Changelog
 
+## 0.11.0 2022-07-14
+
+### Enhancements
+
+- Add OTLP logs support (#82) | [@MikeGoldsmith](https://github.com/MikeGoldsmith)
+
+### Maintenance
+
+- Bump github.com/klauspost/compress from 1.15.5 to 1.15.8 (#85)
+- Bump google.golang.org/grpc from 1.46.0 to 1.48.0 (#86)
+- Bump github.com/stretchr/testify from 1.7.1 to 1.8.0 (#83)
+- Bump github.com/klauspost/compress from 1.15.2 to 1.15.5 (#80)
+
 ## 0.10.6 2022-05-20
 
 ### Fixed
