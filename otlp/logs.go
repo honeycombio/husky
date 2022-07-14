@@ -59,10 +59,10 @@ func TranslateLogsRequest(request *collectorLogs.ExportLogsServiceRequest, ri Re
 
 			for _, log := range librarySpan.GetLogs() {
 				eventAttrs := map[string]interface{}{
-					"severity":            getLogSeverity(log.SeverityNumber),
-					"severity_code":       int(log.SeverityNumber),
-					"meta.telemetry_type": "log",
-					"flags":               log.Flags,
+					"severity":         getLogSeverity(log.SeverityNumber),
+					"severity_code":    int(log.SeverityNumber),
+					"meta.signal_type": "log",
+					"flags":            log.Flags,
 				}
 				if len(log.TraceId) > 0 {
 					eventAttrs["trace.trace_id"] = BytesToTraceID(log.TraceId)
@@ -95,7 +95,7 @@ func TranslateLogsRequest(request *collectorLogs.ExportLogsServiceRequest, ri Re
 					eventAttrs[k] = v
 				}
 
-				// copy span attribures after resource attributes so span attributes write last and are preserved
+				// copy span attributes after resource attributes so span attributes write last and are preserved
 				if log.Attributes != nil {
 					addAttributesToMap(eventAttrs, log.Attributes)
 				}
