@@ -1184,44 +1184,32 @@ func TestEvaluateSpanStatus(t *testing.T) {
 			expectedStatusCode: int(trace.Status_STATUS_CODE_UNSET),
 			expectedIsError:    false,
 		},
-		// Cases for the rules for old receivers at:
-		// https://github.com/open-telemetry/opentelemetry-proto/blob/59c488bfb8fb6d0458ad6425758b70259ff4a2bd/opentelemetry/proto/trace/v1/trace.proto#L251-L266
-		//
-		//   If code==STATUS_CODE_UNSET [and] deprecated_code==DEPRECATED_STATUS_CODE_OK
-		//   then the receiver MUST interpret the overall status to be STATUS_CODE_UNSET.
 		{
-			desc: "returns unset when code is UNSET and deprecated_code is OK",
+			desc: "returns unset when code is UNSET",
 			status: &trace.Status{
-				Code:           trace.Status_STATUS_CODE_UNSET,
-				DeprecatedCode: trace.Status_DEPRECATED_STATUS_CODE_OK,
-				Message:        "Old OK!",
+				Code:    trace.Status_STATUS_CODE_UNSET,
+				Message: "Old OK!",
 			},
 			expectedStatusCode: int(trace.Status_STATUS_CODE_UNSET),
 			expectedIsError:    false,
 		},
-		//   If code==STATUS_CODE_UNSET [and] deprecated_code!=DEPRECATED_STATUS_CODE_OK
-		//   then the receiver MUST interpret the overall status to be STATUS_CODE_ERROR.
 		{
-			desc: "returns error when code is UNSET and deprecated_code is not OK",
+			desc: "returns error when code is ERROR",
 			status: &trace.Status{
-				Code:           trace.Status_STATUS_CODE_UNSET,
-				DeprecatedCode: trace.Status_DEPRECATED_STATUS_CODE_ABORTED,
-				Message:        "Old not OK!",
+				Code:    trace.Status_STATUS_CODE_ERROR,
+				Message: "Old OK!",
 			},
 			expectedStatusCode: int(trace.Status_STATUS_CODE_ERROR),
 			expectedIsError:    true,
 		},
-		//   If code!=STATUS_CODE_UNSET then the value of `deprecated_code` MUST be
-		//   ignored, the `code` field is the sole carrier of the status.
 		{
-			desc: "returns code when code is not UNSET and deprecated_code is anything",
+			desc: "returns ok when code is OK",
 			status: &trace.Status{
-				Code:           trace.Status_STATUS_CODE_ERROR,
-				DeprecatedCode: trace.Status_DEPRECATED_STATUS_CODE_OK,
-				Message:        "Old OK!",
+				Code:    trace.Status_STATUS_CODE_OK,
+				Message: "Old OK!",
 			},
-			expectedStatusCode: int(trace.Status_STATUS_CODE_ERROR),
-			expectedIsError:    true,
+			expectedStatusCode: int(trace.Status_STATUS_CODE_OK),
+			expectedIsError:    false,
 		},
 	}
 	for _, tC := range testCases {
