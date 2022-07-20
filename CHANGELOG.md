@@ -1,5 +1,11 @@
 # Husky Changelog
 
+## 0.11.1 2022-07-20
+
+### Enhancements
+
+- Add meta.annotation_type to log events | [@MikeGoldsmith](https://github.com/MikeGoldsmith)
+
 ## 0.11.0 2022-07-14
 
 ### Enhancements
