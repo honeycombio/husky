@@ -1,17 +1,13 @@
 package otlp
 
 import (
-	"bytes"
-	"compress/gzip"
 	"encoding/hex"
 	"io"
-	"io/ioutil"
 	"math"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/klauspost/compress/zstd"
 	collectorTrace "go.opentelemetry.io/proto/otlp/collector/trace/v1"
 	trace "go.opentelemetry.io/proto/otlp/trace/v1"
 	"google.golang.org/protobuf/proto"
@@ -24,37 +20,14 @@ const (
 	defaultServiceName = "unknown_service"
 )
 
-// TranslateTraceRequestResult represents an OTLP trace request translated into Honeycomb-friendly structure
-// RequestSize is total byte size of the entire OTLP request
-// Batches represent events grouped by their target dataset
-type TranslateTraceRequestResult struct {
-	RequestSize int
-	Batches     []Batch
-}
-
-// Batch represents Honeycomb events grouped by their target dataset
-// SizeBytes is the total byte size of the OTLP structure that represents this batch
-type Batch struct {
-	Dataset   string
-	SizeBytes int
-	Events    []Event
-}
-
-// Event represents a single Honeycomb event
-type Event struct {
-	Attributes map[string]interface{}
-	Timestamp  time.Time
-	SampleRate int32
-}
-
 // TranslateTraceRequestFromReader translates an OTLP/HTTP request into Honeycomb-friendly structure
 // RequestInfo is the parsed information from the HTTP headers
 func TranslateTraceRequestFromReader(body io.ReadCloser, ri RequestInfo) (*TranslateTraceRequestResult, error) {
 	if err := ri.ValidateTracesHeaders(); err != nil {
 		return nil, err
 	}
-	request, err := parseOTLPBody(body, ri.ContentEncoding)
-	if err != nil {
+	request := &collectorTrace.ExportTraceServiceRequest{}
+	if err := parseOtlpRequestBody(body, ri.ContentEncoding, request); err != nil {
 		return nil, ErrFailedParseBody
 	}
 	return TranslateTraceRequest(request, ri)
@@ -101,15 +74,16 @@ func TranslateTraceRequest(request *collectorTrace.ExportTraceServiceRequest, ri
 				statusCode, isError := evaluateSpanStatus(span.Status)
 
 				eventAttrs := map[string]interface{}{
-					"trace.trace_id":  traceID,
-					"trace.span_id":   spanID,
-					"type":            spanKind,
-					"span.kind":       spanKind,
-					"name":            span.Name,
-					"duration_ms":     float64(span.EndTimeUnixNano-span.StartTimeUnixNano) / float64(time.Millisecond),
-					"status_code":     statusCode,
-					"span.num_links":  len(span.Links),
-					"span.num_events": len(span.Events),
+					"trace.trace_id":   traceID,
+					"trace.span_id":    spanID,
+					"type":             spanKind,
+					"span.kind":        spanKind,
+					"name":             span.Name,
+					"duration_ms":      float64(span.EndTimeUnixNano-span.StartTimeUnixNano) / float64(time.Millisecond),
+					"status_code":      statusCode,
+					"span.num_links":   len(span.Links),
+					"span.num_events":  len(span.Events),
+					"meta.signal_type": "trace",
 				}
 				if span.ParentSpanId != nil {
 					eventAttrs["trace.parent_id"] = hex.EncodeToString(span.ParentSpanId)
@@ -156,6 +130,7 @@ func TranslateTraceRequest(request *collectorTrace.ExportTraceServiceRequest, ri
 						"name":                 sevent.Name,
 						"parent_name":          span.Name,
 						"meta.annotation_type": "span_event",
+						"meta.signal_type":     "trace",
 					}
 
 					if sevent.Attributes != nil {
@@ -178,6 +153,7 @@ func TranslateTraceRequest(request *collectorTrace.ExportTraceServiceRequest, ri
 						"trace.link.span_id":   hex.EncodeToString(slink.SpanId),
 						"parent_name":          span.Name,
 						"meta.annotation_type": "link",
+						"meta.signal_type":     "trace",
 					}
 
 					if slink.Attributes != nil {
@@ -290,48 +266,6 @@ func evaluateSpanStatus(status *trace.Status) (int, bool) {
 	default:
 		return int(status.Code), false
 	}
-}
-
-func parseOTLPBody(body io.ReadCloser, contentEncoding string) (request *collectorTrace.ExportTraceServiceRequest, err error) {
-	defer body.Close()
-	bodyBytes, err := ioutil.ReadAll(body)
-	if err != nil {
-		return nil, err
-	}
-	bodyReader := bytes.NewReader(bodyBytes)
-
-	var reader io.Reader
-	switch contentEncoding {
-	case "gzip":
-		gzipReader, err := gzip.NewReader(bodyReader)
-		defer gzipReader.Close()
-		if err != nil {
-			return nil, err
-		}
-		reader = gzipReader
-	case "zstd":
-		zstdReader, err := zstd.NewReader(bodyReader)
-		defer zstdReader.Close()
-		if err != nil {
-			return nil, err
-		}
-		reader = zstdReader
-	default:
-		reader = bodyReader
-	}
-
-	bytes, err := ioutil.ReadAll(reader)
-	if err != nil {
-		return nil, err
-	}
-
-	request = &collectorTrace.ExportTraceServiceRequest{}
-	err = proto.Unmarshal(bytes, request)
-	if err != nil {
-		return nil, err
-	}
-
-	return request, nil
 }
 
 func getSampleRate(attrs map[string]interface{}) int32 {
