@@ -13,7 +13,7 @@ import (
 
 // TranslateLogsRequestFromReader translates an OTLP log request into Honeycomb-friendly structure from a reader (eg HTTP body)
 // RequestInfo is the parsed information from the gRPC metadata
-func TranslateLogsRequestFromReader(body io.ReadCloser, ri RequestInfo) (*TranslateTraceRequestResult, error) {
+func TranslateLogsRequestFromReader(body io.ReadCloser, ri RequestInfo) (*TranslateOTLPRequestResult, error) {
 	if err := ri.ValidateLogsHeaders(); err != nil {
 		return nil, err
 	}
@@ -26,7 +26,7 @@ func TranslateLogsRequestFromReader(body io.ReadCloser, ri RequestInfo) (*Transl
 
 // TranslateLogsRequest translates an OTLP proto log request into Honeycomb-friendly structure
 // RequestInfo is the parsed information from the gRPC metadata
-func TranslateLogsRequest(request *collectorLogs.ExportLogsServiceRequest, ri RequestInfo) (*TranslateTraceRequestResult, error) {
+func TranslateLogsRequest(request *collectorLogs.ExportLogsServiceRequest, ri RequestInfo) (*TranslateOTLPRequestResult, error) {
 	if err := ri.ValidateLogsHeaders(); err != nil {
 		return nil, err
 	}
@@ -116,7 +116,7 @@ func TranslateLogsRequest(request *collectorLogs.ExportLogsServiceRequest, ri Re
 			Events:    events,
 		})
 	}
-	return &TranslateTraceRequestResult{
+	return &TranslateOTLPRequestResult{
 		RequestSize: proto.Size(request),
 		Batches:     batches,
 	}, nil
