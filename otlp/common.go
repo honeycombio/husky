@@ -95,6 +95,7 @@ func (ri *RequestInfo) ValidateMetricsHeaders() error {
 	return nil
 }
 
+// ValidateLogsHeaders validates required headers/metadata for a logs OTLP request
 func (ri *RequestInfo) ValidateLogsHeaders() error {
 	if len(ri.ApiKey) == 0 {
 		return ErrMissingAPIKeyHeader
