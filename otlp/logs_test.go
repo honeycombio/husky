@@ -42,10 +42,9 @@ func TestTranslateLogsRequest(t *testing.T) {
 				}},
 			},
 			InstrumentationLibraryLogs: []*logs.InstrumentationLibraryLogs{{
-				Logs: []*logs.LogRecord{{
+				LogRecords: []*logs.LogRecord{{
 					TraceId:        traceID,
 					SpanId:         spanID,
-					Name:           "test_log",
 					TimeUnixNano:   uint64(startTimestamp.Nanosecond()),
 					SeverityText:   "test_severity_text",
 					SeverityNumber: logs.SeverityNumber_SEVERITY_NUMBER_DEBUG,
@@ -79,7 +78,6 @@ func TestTranslateLogsRequest(t *testing.T) {
 	assert.Equal(t, "log", ev.Attributes["meta.signal_type"])
 	assert.Equal(t, "span_event", ev.Attributes["meta.annotation_type"])
 	assert.Equal(t, uint32(0), ev.Attributes["flags"])
-	assert.Equal(t, "test_log", ev.Attributes["name"])
 	assert.Equal(t, "test_severity_text", ev.Attributes["severity_text"])
 	assert.Equal(t, "debug", ev.Attributes["severity"])
 	assert.Equal(t, "my-service", ev.Attributes["service.name"])
@@ -114,10 +112,9 @@ func TestTranslateClassicLogsRequest(t *testing.T) {
 				}},
 			},
 			InstrumentationLibraryLogs: []*logs.InstrumentationLibraryLogs{{
-				Logs: []*logs.LogRecord{{
+				LogRecords: []*logs.LogRecord{{
 					TraceId:        traceID,
 					SpanId:         spanID,
-					Name:           "test_log",
 					TimeUnixNano:   uint64(startTimestamp.Nanosecond()),
 					SeverityText:   "test_severity_text",
 					SeverityNumber: logs.SeverityNumber_SEVERITY_NUMBER_DEBUG,
@@ -151,7 +148,6 @@ func TestTranslateClassicLogsRequest(t *testing.T) {
 	assert.Equal(t, "log", ev.Attributes["meta.signal_type"])
 	assert.Equal(t, "span_event", ev.Attributes["meta.annotation_type"])
 	assert.Equal(t, uint32(0), ev.Attributes["flags"])
-	assert.Equal(t, "test_log", ev.Attributes["name"])
 	assert.Equal(t, "test_severity_text", ev.Attributes["severity_text"])
 	assert.Equal(t, "debug", ev.Attributes["severity"])
 	assert.Equal(t, "my-service", ev.Attributes["service.name"])
@@ -200,8 +196,7 @@ func TestCanDetectLogSeverity(t *testing.T) {
 				req := &collectorlogs.ExportLogsServiceRequest{
 					ResourceLogs: []*logs.ResourceLogs{{
 						InstrumentationLibraryLogs: []*logs.InstrumentationLibraryLogs{{
-							Logs: []*logs.LogRecord{{
-								Name:           "test_log",
+							LogRecords: []*logs.LogRecord{{
 								SeverityNumber: logs.SeverityNumber(severity),
 							}},
 						}},
@@ -275,7 +270,7 @@ func TestCanExtractBody(t *testing.T) {
 			req := &collectorlogs.ExportLogsServiceRequest{
 				ResourceLogs: []*logs.ResourceLogs{{
 					InstrumentationLibraryLogs: []*logs.InstrumentationLibraryLogs{{
-						Logs: []*logs.LogRecord{{
+						LogRecords: []*logs.LogRecord{{
 							Body: tc.body,
 						}},
 					}},

@@ -57,7 +57,7 @@ func TranslateLogsRequest(request *collectorLogs.ExportLogsServiceRequest, ri Re
 		for _, librarySpan := range resourceLog.InstrumentationLibraryLogs {
 			library := librarySpan.InstrumentationLibrary
 
-			for _, log := range librarySpan.GetLogs() {
+			for _, log := range librarySpan.LogRecords {
 				eventAttrs := map[string]interface{}{
 					"severity":             getLogSeverity(log.SeverityNumber),
 					"severity_code":        int(log.SeverityNumber),
@@ -70,9 +70,6 @@ func TranslateLogsRequest(request *collectorLogs.ExportLogsServiceRequest, ri Re
 				}
 				if len(log.SpanId) > 0 {
 					eventAttrs["trace.parent_id"] = hex.EncodeToString(log.SpanId)
-				}
-				if log.Name != "" {
-					eventAttrs["name"] = log.Name
 				}
 				if log.SeverityText != "" {
 					eventAttrs["severity_text"] = log.SeverityText
