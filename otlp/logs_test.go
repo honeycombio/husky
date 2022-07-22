@@ -329,8 +329,7 @@ func TestLogsWithoutTraceIdDoesNotGetAnnotationType(t *testing.T) {
 				}},
 			},
 			InstrumentationLibraryLogs: []*logs.InstrumentationLibraryLogs{{
-				Logs: []*logs.LogRecord{{
-					Name:           "test_log",
+				LogRecords: []*logs.LogRecord{{
 					TimeUnixNano:   uint64(startTimestamp.Nanosecond()),
 					SeverityText:   "test_severity_text",
 					SeverityNumber: logs.SeverityNumber_SEVERITY_NUMBER_DEBUG,
@@ -353,7 +352,6 @@ func TestLogsWithoutTraceIdDoesNotGetAnnotationType(t *testing.T) {
 	assert.Equal(t, startTimestamp.Nanosecond(), ev.Timestamp.Nanosecond())
 	assert.Equal(t, "log", ev.Attributes["meta.signal_type"])
 	assert.Equal(t, uint32(0), ev.Attributes["flags"])
-	assert.Equal(t, "test_log", ev.Attributes["name"])
 	assert.Equal(t, "test_severity_text", ev.Attributes["severity_text"])
 	assert.Equal(t, "debug", ev.Attributes["severity"])
 	assert.Equal(t, "my-service", ev.Attributes["service.name"])
