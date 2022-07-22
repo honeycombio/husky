@@ -13,7 +13,7 @@ import (
 
 // TranslateLogsRequestFromReader translates an OTLP log request into Honeycomb-friendly structure from a reader (eg HTTP body)
 // RequestInfo is the parsed information from the gRPC metadata
-func TranslateLogsRequestFromReader(body io.ReadCloser, ri RequestInfo) (*TranslateTraceRequestResult, error) {
+func TranslateLogsRequestFromReader(body io.ReadCloser, ri RequestInfo) (*TranslateOTLPRequestResult, error) {
 	if err := ri.ValidateLogsHeaders(); err != nil {
 		return nil, err
 	}
@@ -26,7 +26,7 @@ func TranslateLogsRequestFromReader(body io.ReadCloser, ri RequestInfo) (*Transl
 
 // TranslateLogsRequest translates an OTLP proto log request into Honeycomb-friendly structure
 // RequestInfo is the parsed information from the gRPC metadata
-func TranslateLogsRequest(request *collectorLogs.ExportLogsServiceRequest, ri RequestInfo) (*TranslateTraceRequestResult, error) {
+func TranslateLogsRequest(request *collectorLogs.ExportLogsServiceRequest, ri RequestInfo) (*TranslateOTLPRequestResult, error) {
 	if err := ri.ValidateLogsHeaders(); err != nil {
 		return nil, err
 	}
@@ -59,14 +59,15 @@ func TranslateLogsRequest(request *collectorLogs.ExportLogsServiceRequest, ri Re
 
 			for _, log := range librarySpan.GetLogRecords() {
 				eventAttrs := map[string]interface{}{
-					"severity":             getLogSeverity(log.SeverityNumber),
-					"severity_code":        int(log.SeverityNumber),
-					"meta.signal_type":     "log",
-					"meta.annotation_type": "span_event",
-					"flags":                log.Flags,
+					"severity":         getLogSeverity(log.SeverityNumber),
+					"severity_code":    int(log.SeverityNumber),
+					"meta.signal_type": "log",
+					"flags":            log.Flags,
 				}
 				if len(log.TraceId) > 0 {
 					eventAttrs["trace.trace_id"] = BytesToTraceID(log.TraceId)
+					// only add meta.annotation_type if the log is associated to a trace
+					eventAttrs["meta.annotation_type"] = "span_event"
 				}
 				if len(log.SpanId) > 0 {
 					eventAttrs["trace.parent_id"] = hex.EncodeToString(log.SpanId)
@@ -113,7 +114,7 @@ func TranslateLogsRequest(request *collectorLogs.ExportLogsServiceRequest, ri Re
 			Events:    events,
 		})
 	}
-	return &TranslateTraceRequestResult{
+	return &TranslateOTLPRequestResult{
 		RequestSize: proto.Size(request),
 		Batches:     batches,
 	}, nil

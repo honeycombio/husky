@@ -22,7 +22,7 @@ const (
 
 // TranslateTraceRequestFromReader translates an OTLP/HTTP request into Honeycomb-friendly structure
 // RequestInfo is the parsed information from the HTTP headers
-func TranslateTraceRequestFromReader(body io.ReadCloser, ri RequestInfo) (*TranslateTraceRequestResult, error) {
+func TranslateTraceRequestFromReader(body io.ReadCloser, ri RequestInfo) (*TranslateOTLPRequestResult, error) {
 	if err := ri.ValidateTracesHeaders(); err != nil {
 		return nil, err
 	}
@@ -35,7 +35,7 @@ func TranslateTraceRequestFromReader(body io.ReadCloser, ri RequestInfo) (*Trans
 
 // TranslateTraceRequest translates an OTLP/gRPC request into Honeycomb-friendly structure
 // RequestInfo is the parsed information from the gRPC metadata
-func TranslateTraceRequest(request *collectorTrace.ExportTraceServiceRequest, ri RequestInfo) (*TranslateTraceRequestResult, error) {
+func TranslateTraceRequest(request *collectorTrace.ExportTraceServiceRequest, ri RequestInfo) (*TranslateOTLPRequestResult, error) {
 	if err := ri.ValidateTracesHeaders(); err != nil {
 		return nil, err
 	}
@@ -175,7 +175,7 @@ func TranslateTraceRequest(request *collectorTrace.ExportTraceServiceRequest, ri
 			Events:    events,
 		})
 	}
-	return &TranslateTraceRequestResult{
+	return &TranslateOTLPRequestResult{
 		RequestSize: proto.Size(request),
 		Batches:     batches,
 	}, nil

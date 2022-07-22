@@ -31,10 +31,10 @@ const (
 
 var legacyApiKeyPattern = regexp.MustCompile("^[0-9a-f]{32}$")
 
-// TranslateTraceRequestResult represents an OTLP trace request translated into Honeycomb-friendly structure
+// TranslateOTLPRequestResult represents an OTLP request translated into Honeycomb-friendly structure
 // RequestSize is total byte size of the entire OTLP request
 // Batches represent events grouped by their target dataset
-type TranslateTraceRequestResult struct {
+type TranslateOTLPRequestResult struct {
 	RequestSize int
 	Batches     []Batch
 }
@@ -95,6 +95,7 @@ func (ri *RequestInfo) ValidateMetricsHeaders() error {
 	return nil
 }
 
+// ValidateLogsHeaders validates required headers/metadata for a logs OTLP request
 func (ri *RequestInfo) ValidateLogsHeaders() error {
 	if len(ri.ApiKey) == 0 {
 		return ErrMissingAPIKeyHeader
