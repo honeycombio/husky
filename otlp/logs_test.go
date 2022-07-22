@@ -314,3 +314,56 @@ func TestLogsRequestWithInvalidBodyReturnsError(t *testing.T) {
 	assert.Nil(t, result)
 	assert.Equal(t, ErrFailedParseBody, err)
 }
+
+func TestLogsWithoutTraceIdDoesNotGetAnnotationType(t *testing.T) {
+	startTimestamp := time.Now()
+
+	ri := RequestInfo{
+		ApiKey:      "a1a1a1a1a1a1a1a1a1a1a1",
+		ContentType: "application/protobuf",
+	}
+
+	req := &collectorlogs.ExportLogsServiceRequest{
+		ResourceLogs: []*logs.ResourceLogs{{
+			Resource: &resource.Resource{
+				Attributes: []*common.KeyValue{{
+					Key: "service.name",
+					Value: &common.AnyValue{
+						Value: &common.AnyValue_StringValue{StringValue: "my-service"},
+					},
+				}},
+			},
+			InstrumentationLibraryLogs: []*logs.InstrumentationLibraryLogs{{
+				Logs: []*logs.LogRecord{{
+					Name:           "test_log",
+					TimeUnixNano:   uint64(startTimestamp.Nanosecond()),
+					SeverityText:   "test_severity_text",
+					SeverityNumber: logs.SeverityNumber_SEVERITY_NUMBER_DEBUG,
+				}},
+			}},
+		}},
+	}
+
+	result, err := TranslateLogsRequest(req, ri)
+	assert.Nil(t, err)
+	assert.Equal(t, proto.Size(req), result.RequestSize)
+	assert.Equal(t, 1, len(result.Batches))
+	batch := result.Batches[0]
+	assert.Equal(t, "my-service", batch.Dataset)
+	assert.Equal(t, proto.Size(req.ResourceLogs[0]), batch.SizeBytes)
+	events := batch.Events
+	assert.Equal(t, 1, len(events))
+
+	ev := events[0]
+	assert.Equal(t, startTimestamp.Nanosecond(), ev.Timestamp.Nanosecond())
+	assert.Equal(t, "log", ev.Attributes["meta.signal_type"])
+	assert.Equal(t, uint32(0), ev.Attributes["flags"])
+	assert.Equal(t, "test_log", ev.Attributes["name"])
+	assert.Equal(t, "test_severity_text", ev.Attributes["severity_text"])
+	assert.Equal(t, "debug", ev.Attributes["severity"])
+	assert.Equal(t, "my-service", ev.Attributes["service.name"])
+
+	assert.Nil(t, ev.Attributes["trace.trace_id"])
+	assert.Nil(t, ev.Attributes["trace.span_id"])
+	assert.Nil(t, ev.Attributes["meta.annotation_type"])
+}

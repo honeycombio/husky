@@ -59,14 +59,15 @@ func TranslateLogsRequest(request *collectorLogs.ExportLogsServiceRequest, ri Re
 
 			for _, log := range librarySpan.GetLogs() {
 				eventAttrs := map[string]interface{}{
-					"severity":             getLogSeverity(log.SeverityNumber),
-					"severity_code":        int(log.SeverityNumber),
-					"meta.signal_type":     "log",
-					"meta.annotation_type": "span_event",
-					"flags":                log.Flags,
+					"severity":         getLogSeverity(log.SeverityNumber),
+					"severity_code":    int(log.SeverityNumber),
+					"meta.signal_type": "log",
+					"flags":            log.Flags,
 				}
 				if len(log.TraceId) > 0 {
 					eventAttrs["trace.trace_id"] = BytesToTraceID(log.TraceId)
+					// only add meta.annotation_type if the log is associated to a trace
+					eventAttrs["meta.annotation_type"] = "span_event"
 				}
 				if len(log.SpanId) > 0 {
 					eventAttrs["trace.parent_id"] = hex.EncodeToString(log.SpanId)
