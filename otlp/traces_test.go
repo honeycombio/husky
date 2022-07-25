@@ -51,7 +51,7 @@ func TestTranslateLegacyGrpcTraceRequest(t *testing.T) {
 					},
 				}},
 			},
-			InstrumentationLibrarySpans: []*trace.InstrumentationLibrarySpans{{
+			ScopeSpans: []*trace.ScopeSpans{{
 				Spans: []*trace.Span{{
 					TraceId:           traceID,
 					SpanId:            spanID,
@@ -183,7 +183,7 @@ func TestTranslateGrpcTraceRequest(t *testing.T) {
 					},
 				}},
 			},
-			InstrumentationLibrarySpans: []*trace.InstrumentationLibrarySpans{{
+			ScopeSpans: []*trace.ScopeSpans{{
 				Spans: []*trace.Span{{
 					TraceId:           traceID,
 					SpanId:            spanID,
@@ -298,7 +298,7 @@ func TestTranslateGrpcTraceRequestFromMultipleServices(t *testing.T) {
 					},
 				}},
 			},
-			InstrumentationLibrarySpans: []*trace.InstrumentationLibrarySpans{{
+			ScopeSpans: []*trace.ScopeSpans{{
 				Spans: []*trace.Span{{
 					TraceId: test.RandomBytes(16),
 					SpanId:  test.RandomBytes(8),
@@ -314,7 +314,7 @@ func TestTranslateGrpcTraceRequestFromMultipleServices(t *testing.T) {
 					},
 				}},
 			},
-			InstrumentationLibrarySpans: []*trace.InstrumentationLibrarySpans{{
+			ScopeSpans: []*trace.ScopeSpans{{
 				Spans: []*trace.Span{{
 					TraceId: test.RandomBytes(16),
 					SpanId:  test.RandomBytes(8),
@@ -360,8 +360,8 @@ func TestTranslateGrpcTraceRequestFromMultipleLibraries(t *testing.T) {
 					},
 				}},
 			},
-			InstrumentationLibrarySpans: []*trace.InstrumentationLibrarySpans{{
-				InstrumentationLibrary: &common.InstrumentationLibrary{
+			ScopeSpans: []*trace.ScopeSpans{{
+				Scope: &common.InstrumentationScope{
 					Name:    "First",
 					Version: "1.1.1",
 				},
@@ -371,7 +371,7 @@ func TestTranslateGrpcTraceRequestFromMultipleLibraries(t *testing.T) {
 					Name:    "test_span_a",
 				}},
 			}, {
-				InstrumentationLibrary: &common.InstrumentationLibrary{
+				Scope: &common.InstrumentationScope{
 					Name:    "Second",
 					Version: "2.2.2",
 				},
@@ -381,7 +381,7 @@ func TestTranslateGrpcTraceRequestFromMultipleLibraries(t *testing.T) {
 					Name:    "test_span_b",
 				}},
 			}, {
-				InstrumentationLibrary: &common.InstrumentationLibrary{
+				Scope: &common.InstrumentationScope{
 					Name: "No Version Library",
 				},
 				Spans: []*trace.Span{{
@@ -440,7 +440,7 @@ func TestTranslateLegacyHttpTraceRequest(t *testing.T) {
 					},
 				}},
 			},
-			InstrumentationLibrarySpans: []*trace.InstrumentationLibrarySpans{{
+			ScopeSpans: []*trace.ScopeSpans{{
 				Spans: []*trace.Span{{
 					TraceId:           traceID,
 					SpanId:            spanID,
@@ -578,7 +578,7 @@ func TestTranslateHttpTraceRequest(t *testing.T) {
 					},
 				}},
 			},
-			InstrumentationLibrarySpans: []*trace.InstrumentationLibrarySpans{{
+			ScopeSpans: []*trace.ScopeSpans{{
 				Spans: []*trace.Span{{
 					TraceId:           traceID,
 					SpanId:            spanID,
@@ -703,7 +703,7 @@ func TestTranslateHttpTraceRequestFromMultipleServices(t *testing.T) {
 					},
 				}},
 			},
-			InstrumentationLibrarySpans: []*trace.InstrumentationLibrarySpans{{
+			ScopeSpans: []*trace.ScopeSpans{{
 				Spans: []*trace.Span{{
 					TraceId: test.RandomBytes(16),
 					SpanId:  test.RandomBytes(8),
@@ -719,7 +719,7 @@ func TestTranslateHttpTraceRequestFromMultipleServices(t *testing.T) {
 					},
 				}},
 			},
-			InstrumentationLibrarySpans: []*trace.InstrumentationLibrarySpans{{
+			ScopeSpans: []*trace.ScopeSpans{{
 				Spans: []*trace.Span{{
 					TraceId: test.RandomBytes(16),
 					SpanId:  test.RandomBytes(8),
@@ -866,7 +866,7 @@ func TestMissingServiceNameAttributeUsesDefault(t *testing.T) {
 					},
 				}},
 			},
-			InstrumentationLibrarySpans: []*trace.InstrumentationLibrarySpans{{
+			ScopeSpans: []*trace.ScopeSpans{{
 				Spans: []*trace.Span{{
 					TraceId: test.RandomBytes(16),
 					SpanId:  test.RandomBytes(8),
@@ -898,7 +898,7 @@ func TestMissingServiceNameAttributeUsesDefault(t *testing.T) {
 func TestMissingServiceNameResourceUsesDefault(t *testing.T) {
 	req := &collectortrace.ExportTraceServiceRequest{
 		ResourceSpans: []*trace.ResourceSpans{{
-			InstrumentationLibrarySpans: []*trace.InstrumentationLibrarySpans{{
+			ScopeSpans: []*trace.ScopeSpans{{
 				Spans: []*trace.Span{{
 					TraceId: test.RandomBytes(16),
 					SpanId:  test.RandomBytes(8),
@@ -987,7 +987,7 @@ func TestEmptyOrInvalidServiceNameAttributeUsesDefault(t *testing.T) {
 			req := &collectortrace.ExportTraceServiceRequest{
 				ResourceSpans: []*trace.ResourceSpans{{
 					Resource: tc.resource,
-					InstrumentationLibrarySpans: []*trace.InstrumentationLibrarySpans{{
+					ScopeSpans: []*trace.ScopeSpans{{
 						Spans: []*trace.Span{{
 							TraceId: test.RandomBytes(16),
 							SpanId:  test.RandomBytes(8),
@@ -1060,7 +1060,7 @@ func TestUnknownServiceNameIsTruncatedForDataset(t *testing.T) {
 							},
 						}},
 					},
-					InstrumentationLibrarySpans: []*trace.InstrumentationLibrarySpans{{
+					ScopeSpans: []*trace.ScopeSpans{{
 						Spans: []*trace.Span{{
 							TraceId: test.RandomBytes(16),
 							SpanId:  test.RandomBytes(8),
@@ -1134,7 +1134,7 @@ func TestServiceNameIsTrimmedForDataset(t *testing.T) {
 							},
 						}},
 					},
-					InstrumentationLibrarySpans: []*trace.InstrumentationLibrarySpans{{
+					ScopeSpans: []*trace.ScopeSpans{{
 						Spans: []*trace.Span{{
 							TraceId: test.RandomBytes(16),
 							SpanId:  test.RandomBytes(8),

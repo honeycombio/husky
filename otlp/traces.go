@@ -63,10 +63,10 @@ func TranslateTraceRequest(request *collectorTrace.ExportTraceServiceRequest, ri
 			}
 		}
 
-		for _, librarySpan := range resourceSpan.InstrumentationLibrarySpans {
-			library := librarySpan.InstrumentationLibrary
+		for _, scopeSpan := range resourceSpan.ScopeSpans {
+			scope := scopeSpan.Scope
 
-			for _, span := range librarySpan.GetSpans() {
+			for _, span := range scopeSpan.GetSpans() {
 				traceID := BytesToTraceID(span.TraceId)
 				spanID := hex.EncodeToString(span.SpanId)
 
@@ -94,12 +94,12 @@ func TranslateTraceRequest(request *collectorTrace.ExportTraceServiceRequest, ri
 				if span.Status != nil && len(span.Status.Message) > 0 {
 					eventAttrs["status_message"] = span.Status.Message
 				}
-				if library != nil {
-					if len(library.Name) > 0 {
-						eventAttrs["library.name"] = library.Name
+				if scope != nil {
+					if len(scope.Name) > 0 {
+						eventAttrs["library.name"] = scope.Name
 					}
-					if len(library.Version) > 0 {
-						eventAttrs["library.version"] = library.Version
+					if len(scope.Version) > 0 {
+						eventAttrs["library.version"] = scope.Version
 					}
 				}
 
