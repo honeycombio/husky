@@ -71,7 +71,7 @@ func TranslateTraceRequest(request *collectorTrace.ExportTraceServiceRequest, ri
 				spanID := hex.EncodeToString(span.SpanId)
 
 				spanKind := getSpanKind(span.Kind)
-				statusCode, isError := evaluateSpanStatus(span.Status)
+				statusCode, isError := getSpanStatusCode(span.Status)
 
 				eventAttrs := map[string]interface{}{
 					"trace.trace_id":   traceID,
@@ -235,37 +235,17 @@ func shouldTrimTraceId(traceID []byte) bool {
 	return true
 }
 
-// evaluateSpanStatus returns the integer value of the span's status code and
+// getSpanStatusCode returns the integer value of the span's status code and
 // a bool for whether to consider the status an error.
 //
 // The type conversion from proto enum value to an integer is done here because
 // the events we produce from OTLP spans have no knowledge of or interest in
 // the OTLP types generated from enums in the proto definitions.
-//
-// Until we don't have to process OTLP traces from proto <= v0.11.0, this
-// function checks the value of both the status.Code and status.DeprecatedCode
-// fields on the span according to the rules for backward compatibility.
-//
-// See: https://github.com/open-telemetry/opentelemetry-proto/blob/59c488bfb8fb6d0458ad6425758b70259ff4a2bd/opentelemetry/proto/trace/v1/trace.proto#L230
-func evaluateSpanStatus(status *trace.Status) (int, bool) {
-	const okStatus = int(trace.Status_STATUS_CODE_OK)
-	const unsetStatus = int(trace.Status_STATUS_CODE_UNSET)
-	const errorStatus = int(trace.Status_STATUS_CODE_ERROR)
-
+func getSpanStatusCode(status *trace.Status) (int, bool) {
 	if status == nil {
-		return unsetStatus, false
+		return int(trace.Status_STATUS_CODE_UNSET), false
 	}
-
-	switch status.Code {
-	case trace.Status_STATUS_CODE_OK:
-		return okStatus, false
-	case trace.Status_STATUS_CODE_UNSET:
-		return unsetStatus, false
-	case trace.Status_STATUS_CODE_ERROR:
-		return errorStatus, true
-	default:
-		return int(status.Code), false
-	}
+	return int(status.Code), status.Code == trace.Status_STATUS_CODE_ERROR
 }
 
 func getSampleRate(attrs map[string]interface{}) int32 {
