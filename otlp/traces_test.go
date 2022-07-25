@@ -1188,7 +1188,7 @@ func TestEvaluateSpanStatus(t *testing.T) {
 			desc: "returns unset when code is UNSET",
 			status: &trace.Status{
 				Code:    trace.Status_STATUS_CODE_UNSET,
-				Message: "Old OK!",
+				Message: "UNSET!",
 			},
 			expectedStatusCode: int(trace.Status_STATUS_CODE_UNSET),
 			expectedIsError:    false,
@@ -1197,7 +1197,7 @@ func TestEvaluateSpanStatus(t *testing.T) {
 			desc: "returns error when code is ERROR",
 			status: &trace.Status{
 				Code:    trace.Status_STATUS_CODE_ERROR,
-				Message: "Old OK!",
+				Message: "ERROR!",
 			},
 			expectedStatusCode: int(trace.Status_STATUS_CODE_ERROR),
 			expectedIsError:    true,
@@ -1206,7 +1206,7 @@ func TestEvaluateSpanStatus(t *testing.T) {
 			desc: "returns ok when code is OK",
 			status: &trace.Status{
 				Code:    trace.Status_STATUS_CODE_OK,
-				Message: "Old OK!",
+				Message: "OK!",
 			},
 			expectedStatusCode: int(trace.Status_STATUS_CODE_OK),
 			expectedIsError:    false,
