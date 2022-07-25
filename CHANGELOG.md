@@ -1,5 +1,15 @@
 # Husky Changelog
 
+## 0.11.2 2022-07-22
+
+### Fixed
+
+- only set meta.annotation_type field when log is part of trace (#95) | [@MikeGoldsmith](https://github.com/MikeGoldsmith)
+
+### Maintenance
+
+- Rename translate OTLP request structs to be generic (#94) | [@MikeGoldsmith](https://github.com/MikeGoldsmith)
+
 ## 0.11.1 2022-07-20
 
 ### Enhancements

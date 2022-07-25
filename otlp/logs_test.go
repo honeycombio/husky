@@ -41,7 +41,7 @@ func TestTranslateLogsRequest(t *testing.T) {
 					},
 				}},
 			},
-			InstrumentationLibraryLogs: []*logs.InstrumentationLibraryLogs{{
+			ScopeLogs: []*logs.ScopeLogs{{
 				LogRecords: []*logs.LogRecord{{
 					TraceId:        traceID,
 					SpanId:         spanID,
@@ -111,7 +111,7 @@ func TestTranslateClassicLogsRequest(t *testing.T) {
 					},
 				}},
 			},
-			InstrumentationLibraryLogs: []*logs.InstrumentationLibraryLogs{{
+			ScopeLogs: []*logs.ScopeLogs{{
 				LogRecords: []*logs.LogRecord{{
 					TraceId:        traceID,
 					SpanId:         spanID,
@@ -195,7 +195,7 @@ func TestCanDetectLogSeverity(t *testing.T) {
 			for _, severity := range tc.severities {
 				req := &collectorlogs.ExportLogsServiceRequest{
 					ResourceLogs: []*logs.ResourceLogs{{
-						InstrumentationLibraryLogs: []*logs.InstrumentationLibraryLogs{{
+						ScopeLogs: []*logs.ScopeLogs{{
 							LogRecords: []*logs.LogRecord{{
 								SeverityNumber: logs.SeverityNumber(severity),
 							}},
@@ -269,7 +269,7 @@ func TestCanExtractBody(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			req := &collectorlogs.ExportLogsServiceRequest{
 				ResourceLogs: []*logs.ResourceLogs{{
-					InstrumentationLibraryLogs: []*logs.InstrumentationLibraryLogs{{
+					ScopeLogs: []*logs.ScopeLogs{{
 						LogRecords: []*logs.LogRecord{{
 							Body: tc.body,
 						}},
@@ -328,7 +328,7 @@ func TestLogsWithoutTraceIdDoesNotGetAnnotationType(t *testing.T) {
 					},
 				}},
 			},
-			InstrumentationLibraryLogs: []*logs.InstrumentationLibraryLogs{{
+			ScopeLogs: []*logs.ScopeLogs{{
 				LogRecords: []*logs.LogRecord{{
 					TimeUnixNano:   uint64(startTimestamp.Nanosecond()),
 					SeverityText:   "test_severity_text",

@@ -54,8 +54,8 @@ func TranslateLogsRequest(request *collectorLogs.ExportLogsServiceRequest, ri Re
 			}
 		}
 
-		for _, librarySpan := range resourceLog.InstrumentationLibraryLogs {
-			library := librarySpan.InstrumentationLibrary
+		for _, librarySpan := range resourceLog.ScopeLogs {
+			library := librarySpan.Scope
 
 			for _, log := range librarySpan.GetLogRecords() {
 				eventAttrs := map[string]interface{}{
