@@ -777,7 +777,7 @@ func TestInvalidContentTypeReturnsError(t *testing.T) {
 }
 
 func TestInvalidBodyReturnsError(t *testing.T) {
-	bodyBytes := test.RandomBytes(10)
+	bodyBytes := []byte{0x00, 0x01, 0x02, 0x03, 0x04}
 	body := io.NopCloser(bytes.NewReader(bodyBytes))
 	ri := RequestInfo{
 		ApiKey:      "apikey",
