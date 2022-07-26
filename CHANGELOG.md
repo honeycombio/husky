@@ -4,7 +4,10 @@
 
 ### Enhancements
 
+!!! Breaking Changes !!!
+
 - Update OTLP proto to v0.18 (#87) | [@MikeGoldsmith](https://github.com/MikeGoldsmith)
+  - Husky will no longer support translating Deprecated metric types into Honeycomb events.
 
 ### Fixed
 
