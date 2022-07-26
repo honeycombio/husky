@@ -51,7 +51,7 @@ func TestTranslateLegacyGrpcTraceRequest(t *testing.T) {
 					},
 				}},
 			},
-			InstrumentationLibrarySpans: []*trace.InstrumentationLibrarySpans{{
+			ScopeSpans: []*trace.ScopeSpans{{
 				Spans: []*trace.Span{{
 					TraceId:           traceID,
 					SpanId:            spanID,
@@ -183,7 +183,7 @@ func TestTranslateGrpcTraceRequest(t *testing.T) {
 					},
 				}},
 			},
-			InstrumentationLibrarySpans: []*trace.InstrumentationLibrarySpans{{
+			ScopeSpans: []*trace.ScopeSpans{{
 				Spans: []*trace.Span{{
 					TraceId:           traceID,
 					SpanId:            spanID,
@@ -298,7 +298,7 @@ func TestTranslateGrpcTraceRequestFromMultipleServices(t *testing.T) {
 					},
 				}},
 			},
-			InstrumentationLibrarySpans: []*trace.InstrumentationLibrarySpans{{
+			ScopeSpans: []*trace.ScopeSpans{{
 				Spans: []*trace.Span{{
 					TraceId: test.RandomBytes(16),
 					SpanId:  test.RandomBytes(8),
@@ -314,7 +314,7 @@ func TestTranslateGrpcTraceRequestFromMultipleServices(t *testing.T) {
 					},
 				}},
 			},
-			InstrumentationLibrarySpans: []*trace.InstrumentationLibrarySpans{{
+			ScopeSpans: []*trace.ScopeSpans{{
 				Spans: []*trace.Span{{
 					TraceId: test.RandomBytes(16),
 					SpanId:  test.RandomBytes(8),
@@ -360,8 +360,8 @@ func TestTranslateGrpcTraceRequestFromMultipleLibraries(t *testing.T) {
 					},
 				}},
 			},
-			InstrumentationLibrarySpans: []*trace.InstrumentationLibrarySpans{{
-				InstrumentationLibrary: &common.InstrumentationLibrary{
+			ScopeSpans: []*trace.ScopeSpans{{
+				Scope: &common.InstrumentationScope{
 					Name:    "First",
 					Version: "1.1.1",
 				},
@@ -371,7 +371,7 @@ func TestTranslateGrpcTraceRequestFromMultipleLibraries(t *testing.T) {
 					Name:    "test_span_a",
 				}},
 			}, {
-				InstrumentationLibrary: &common.InstrumentationLibrary{
+				Scope: &common.InstrumentationScope{
 					Name:    "Second",
 					Version: "2.2.2",
 				},
@@ -381,7 +381,7 @@ func TestTranslateGrpcTraceRequestFromMultipleLibraries(t *testing.T) {
 					Name:    "test_span_b",
 				}},
 			}, {
-				InstrumentationLibrary: &common.InstrumentationLibrary{
+				Scope: &common.InstrumentationScope{
 					Name: "No Version Library",
 				},
 				Spans: []*trace.Span{{
@@ -440,7 +440,7 @@ func TestTranslateLegacyHttpTraceRequest(t *testing.T) {
 					},
 				}},
 			},
-			InstrumentationLibrarySpans: []*trace.InstrumentationLibrarySpans{{
+			ScopeSpans: []*trace.ScopeSpans{{
 				Spans: []*trace.Span{{
 					TraceId:           traceID,
 					SpanId:            spanID,
@@ -578,7 +578,7 @@ func TestTranslateHttpTraceRequest(t *testing.T) {
 					},
 				}},
 			},
-			InstrumentationLibrarySpans: []*trace.InstrumentationLibrarySpans{{
+			ScopeSpans: []*trace.ScopeSpans{{
 				Spans: []*trace.Span{{
 					TraceId:           traceID,
 					SpanId:            spanID,
@@ -703,7 +703,7 @@ func TestTranslateHttpTraceRequestFromMultipleServices(t *testing.T) {
 					},
 				}},
 			},
-			InstrumentationLibrarySpans: []*trace.InstrumentationLibrarySpans{{
+			ScopeSpans: []*trace.ScopeSpans{{
 				Spans: []*trace.Span{{
 					TraceId: test.RandomBytes(16),
 					SpanId:  test.RandomBytes(8),
@@ -719,7 +719,7 @@ func TestTranslateHttpTraceRequestFromMultipleServices(t *testing.T) {
 					},
 				}},
 			},
-			InstrumentationLibrarySpans: []*trace.InstrumentationLibrarySpans{{
+			ScopeSpans: []*trace.ScopeSpans{{
 				Spans: []*trace.Span{{
 					TraceId: test.RandomBytes(16),
 					SpanId:  test.RandomBytes(8),
@@ -866,7 +866,7 @@ func TestMissingServiceNameAttributeUsesDefault(t *testing.T) {
 					},
 				}},
 			},
-			InstrumentationLibrarySpans: []*trace.InstrumentationLibrarySpans{{
+			ScopeSpans: []*trace.ScopeSpans{{
 				Spans: []*trace.Span{{
 					TraceId: test.RandomBytes(16),
 					SpanId:  test.RandomBytes(8),
@@ -898,7 +898,7 @@ func TestMissingServiceNameAttributeUsesDefault(t *testing.T) {
 func TestMissingServiceNameResourceUsesDefault(t *testing.T) {
 	req := &collectortrace.ExportTraceServiceRequest{
 		ResourceSpans: []*trace.ResourceSpans{{
-			InstrumentationLibrarySpans: []*trace.InstrumentationLibrarySpans{{
+			ScopeSpans: []*trace.ScopeSpans{{
 				Spans: []*trace.Span{{
 					TraceId: test.RandomBytes(16),
 					SpanId:  test.RandomBytes(8),
@@ -987,7 +987,7 @@ func TestEmptyOrInvalidServiceNameAttributeUsesDefault(t *testing.T) {
 			req := &collectortrace.ExportTraceServiceRequest{
 				ResourceSpans: []*trace.ResourceSpans{{
 					Resource: tc.resource,
-					InstrumentationLibrarySpans: []*trace.InstrumentationLibrarySpans{{
+					ScopeSpans: []*trace.ScopeSpans{{
 						Spans: []*trace.Span{{
 							TraceId: test.RandomBytes(16),
 							SpanId:  test.RandomBytes(8),
@@ -1060,7 +1060,7 @@ func TestUnknownServiceNameIsTruncatedForDataset(t *testing.T) {
 							},
 						}},
 					},
-					InstrumentationLibrarySpans: []*trace.InstrumentationLibrarySpans{{
+					ScopeSpans: []*trace.ScopeSpans{{
 						Spans: []*trace.Span{{
 							TraceId: test.RandomBytes(16),
 							SpanId:  test.RandomBytes(8),
@@ -1134,7 +1134,7 @@ func TestServiceNameIsTrimmedForDataset(t *testing.T) {
 							},
 						}},
 					},
-					InstrumentationLibrarySpans: []*trace.InstrumentationLibrarySpans{{
+					ScopeSpans: []*trace.ScopeSpans{{
 						Spans: []*trace.Span{{
 							TraceId: test.RandomBytes(16),
 							SpanId:  test.RandomBytes(8),
@@ -1184,49 +1184,37 @@ func TestEvaluateSpanStatus(t *testing.T) {
 			expectedStatusCode: int(trace.Status_STATUS_CODE_UNSET),
 			expectedIsError:    false,
 		},
-		// Cases for the rules for old receivers at:
-		// https://github.com/open-telemetry/opentelemetry-proto/blob/59c488bfb8fb6d0458ad6425758b70259ff4a2bd/opentelemetry/proto/trace/v1/trace.proto#L251-L266
-		//
-		//   If code==STATUS_CODE_UNSET [and] deprecated_code==DEPRECATED_STATUS_CODE_OK
-		//   then the receiver MUST interpret the overall status to be STATUS_CODE_UNSET.
 		{
-			desc: "returns unset when code is UNSET and deprecated_code is OK",
+			desc: "returns unset when code is UNSET",
 			status: &trace.Status{
-				Code:           trace.Status_STATUS_CODE_UNSET,
-				DeprecatedCode: trace.Status_DEPRECATED_STATUS_CODE_OK,
-				Message:        "Old OK!",
+				Code:    trace.Status_STATUS_CODE_UNSET,
+				Message: "UNSET!",
 			},
 			expectedStatusCode: int(trace.Status_STATUS_CODE_UNSET),
 			expectedIsError:    false,
 		},
-		//   If code==STATUS_CODE_UNSET [and] deprecated_code!=DEPRECATED_STATUS_CODE_OK
-		//   then the receiver MUST interpret the overall status to be STATUS_CODE_ERROR.
 		{
-			desc: "returns error when code is UNSET and deprecated_code is not OK",
+			desc: "returns error when code is ERROR",
 			status: &trace.Status{
-				Code:           trace.Status_STATUS_CODE_UNSET,
-				DeprecatedCode: trace.Status_DEPRECATED_STATUS_CODE_ABORTED,
-				Message:        "Old not OK!",
+				Code:    trace.Status_STATUS_CODE_ERROR,
+				Message: "ERROR!",
 			},
 			expectedStatusCode: int(trace.Status_STATUS_CODE_ERROR),
 			expectedIsError:    true,
 		},
-		//   If code!=STATUS_CODE_UNSET then the value of `deprecated_code` MUST be
-		//   ignored, the `code` field is the sole carrier of the status.
 		{
-			desc: "returns code when code is not UNSET and deprecated_code is anything",
+			desc: "returns ok when code is OK",
 			status: &trace.Status{
-				Code:           trace.Status_STATUS_CODE_ERROR,
-				DeprecatedCode: trace.Status_DEPRECATED_STATUS_CODE_OK,
-				Message:        "Old OK!",
+				Code:    trace.Status_STATUS_CODE_OK,
+				Message: "OK!",
 			},
-			expectedStatusCode: int(trace.Status_STATUS_CODE_ERROR),
-			expectedIsError:    true,
+			expectedStatusCode: int(trace.Status_STATUS_CODE_OK),
+			expectedIsError:    false,
 		},
 	}
 	for _, tC := range testCases {
 		t.Run(tC.desc, func(t *testing.T) {
-			statusCode, isError := evaluateSpanStatus(tC.status)
+			statusCode, isError := getSpanStatusCode(tC.status)
 			assert.Equal(t, tC.expectedStatusCode, statusCode)
 			assert.Equal(t, tC.expectedIsError, isError)
 		})

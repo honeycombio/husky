@@ -54,10 +54,10 @@ func TranslateLogsRequest(request *collectorLogs.ExportLogsServiceRequest, ri Re
 			}
 		}
 
-		for _, librarySpan := range resourceLog.InstrumentationLibraryLogs {
-			library := librarySpan.InstrumentationLibrary
+		for _, scopeLog := range resourceLog.ScopeLogs {
+			scope := scopeLog.Scope
 
-			for _, log := range librarySpan.GetLogs() {
+			for _, log := range scopeLog.GetLogRecords() {
 				eventAttrs := map[string]interface{}{
 					"severity":         getLogSeverity(log.SeverityNumber),
 					"severity_code":    int(log.SeverityNumber),
@@ -72,9 +72,6 @@ func TranslateLogsRequest(request *collectorLogs.ExportLogsServiceRequest, ri Re
 				if len(log.SpanId) > 0 {
 					eventAttrs["trace.parent_id"] = hex.EncodeToString(log.SpanId)
 				}
-				if log.Name != "" {
-					eventAttrs["name"] = log.Name
-				}
 				if log.SeverityText != "" {
 					eventAttrs["severity_text"] = log.SeverityText
 				}
@@ -83,12 +80,12 @@ func TranslateLogsRequest(request *collectorLogs.ExportLogsServiceRequest, ri Re
 						eventAttrs["body"] = val
 					}
 				}
-				if library != nil {
-					if len(library.Name) > 0 {
-						eventAttrs["library.name"] = library.Name
+				if scope != nil {
+					if len(scope.Name) > 0 {
+						eventAttrs["library.name"] = scope.Name
 					}
-					if len(library.Version) > 0 {
-						eventAttrs["library.version"] = library.Version
+					if len(scope.Version) > 0 {
+						eventAttrs["library.version"] = scope.Version
 					}
 				}
 
