@@ -1,5 +1,11 @@
 # Husky Changelog
 
+## 0.12.0 2022-07-26
+
+### Enhancements
+
+- Update OTLP proto to v0.18 (#87) | [@MikeGoldsmith](https://github.com/MikeGoldsmith)
+
 ## 0.11.2 2022-07-22
 
 ### Fixed
