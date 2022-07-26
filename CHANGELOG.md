@@ -1,5 +1,18 @@
 # Husky Changelog
 
+## 0.12.0 2022-07-26
+
+### Enhancements
+
+!!! Breaking Changes !!!
+
+- Update OTLP proto to v0.18 (#87) | [@MikeGoldsmith](https://github.com/MikeGoldsmith)
+  - Husky will no longer support translating Deprecated metric types into Honeycomb events.
+
+### Fixed
+
+- Fix flaky invalid OTLP request body test (#98) | [@MikeGoldsmith](https://github.com/MikeGoldsmith)
+
 ## 0.11.2 2022-07-22
 
 ### Fixed
