@@ -21,3 +21,5 @@ require (
 	google.golang.org/genproto v0.0.0-20211118181313-81c1377c94b1 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
+
+replace go.opentelemetry.io/proto/otlp => ./internal/go.opentelemetry.io/proto/otlp
