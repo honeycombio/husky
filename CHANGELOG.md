@@ -1,5 +1,12 @@
 # Husky Changelog
 
+## 0.13.0 2022-08-02
+
+### Enhancements
+
+- Add copy of genereted OTLP proto files (#100) | [@kentquirk](https://github.com/kentquirk)
+  - Includes re-adding previously depreate metrics types (IntSum, IntGauge & IntHistogram) and StringKeyValue
+
 ## 0.12.0 2022-07-26
 
 ### Enhancements
