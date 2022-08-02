@@ -4,7 +4,7 @@
 
 ### Enhancements
 
-- Add copy of genereted OTLP proto files (#100) | [@MikeGoldsmith](https://github.com/MikeGoldsmith)
+- Add copy of genereted OTLP proto files (#100) | [@kentquirk](https://github.com/kentquirk)
   - Includes re-adding previously depreate metrics types (IntSum, IntGauge & IntHistogram) and StringKeyValue
 
 ## 0.12.0 2022-07-26
