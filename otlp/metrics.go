@@ -1,7 +1,6 @@
 package otlp
 
 import (
-	"context"
 	"fmt"
 	"io"
 	"sort"
@@ -12,6 +11,7 @@ import (
 	collectorMetrics "go.opentelemetry.io/proto/otlp/collector/metrics/v1"
 	common "go.opentelemetry.io/proto/otlp/common/v1"
 	metrics "go.opentelemetry.io/proto/otlp/metrics/v1"
+	resource "go.opentelemetry.io/proto/otlp/resource/v1"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -41,8 +41,10 @@ func TranslateMetricsRequest(request *collectorMetrics.ExportMetricsServiceReque
 	isLegacy := isLegacy(ri.ApiKey)
 
 	for _, resourceMetric := range request.ResourceMetrics {
+
 		eventsByKey := make(map[string]Event)
 		resourceAttrs := make(map[string]interface{})
+		var events []Event
 
 		var dataset string
 		if isLegacy {
@@ -117,6 +119,12 @@ func TranslateMetricsRequest(request *collectorMetrics.ExportMetricsServiceReque
 				}
 			}
 		}
+
+		// do something with events and eventsbykey
+		for _, event := range eventsByKey {
+			events = append(events, event)
+		}
+
 		batches = append(batches, Batch{
 			Dataset:   dataset,
 			SizeBytes: proto.Size(resourceMetric),
@@ -124,7 +132,10 @@ func TranslateMetricsRequest(request *collectorMetrics.ExportMetricsServiceReque
 		})
 	}
 
-	return &TranslateOTLPRequestResult{}, nil
+	return &TranslateOTLPRequestResult{
+		RequestSize: proto.Size(request),
+		Batches:     batches,
+	}, nil
 }
 
 type dataPointWithLabelsOrAttributes interface {
@@ -242,6 +253,20 @@ func calculateQuantiles(count uint64, bucketCounts []uint64, bounds []float64) m
 	return quantiles
 }
 
+func buildEventFromDataPoint(dataPoint dataPointWithLabelsOrAttributes, data map[string]any, resource *resource.Resource, ts time.Time) Event {
+	for _, label := range dataPoint.GetLabels() {
+		data[label.GetKey()] = label.GetValue()
+	}
+	addAttributesToMap(data, dataPoint.GetAttributes())
+	addAttributesToMap(data, resource.GetAttributes())
+	event := Event{
+		Attributes: data,
+		Timestamp:  ts,
+		SampleRate: 1,
+	}
+	return event
+}
+
 func addNumberDataPointsToEvents(metricName string, resourceMetric *metrics.ResourceMetrics, eventsByKey map[string]Event, otlpDataPoints []*metrics.NumberDataPoint) int {
 	resourceKey := attributesToString(resourceMetric.GetResource().GetAttributes())
 	dataPointsOverwritten := 0
@@ -262,11 +287,11 @@ func addNumberDataPointsToEvents(metricName string, resourceMetric *metrics.Reso
 			// datapoint already exists, add metric name & value
 			// NOTE: it is possible to overwrite a value here if we receive multiple
 			// data points with the same label set and timestamp
-			if _, present := eventsByKey[eventKey].Data[metricName]; present {
+			if _, present := eventsByKey[eventKey].Attributes[metricName]; present {
 				dataPointsOverwritten++ // track how often we're overwriting
 			}
 
-			eventsByKey[eventKey].Data[metricName] = value
+			eventsByKey[eventKey].Attributes[metricName] = value
 		} else {
 			// create new data
 			data := make(map[string]any)
@@ -279,7 +304,7 @@ func addNumberDataPointsToEvents(metricName string, resourceMetric *metrics.Reso
 	return dataPointsOverwritten
 }
 
-func addHistogramDataPointsToEvents(ctx context.Context, metricName string, resourceMetric *metrics.ResourceMetrics, eventsByKey map[string]Event, histogramDatapoints []*metrics.HistogramDataPoint) int {
+func addHistogramDataPointsToEvents(metricName string, resourceMetric *metrics.ResourceMetrics, eventsByKey map[string]Event, histogramDatapoints []*metrics.HistogramDataPoint) int {
 	resourceKey := attributesToString(resourceMetric.GetResource().GetAttributes())
 	dataPointsOverwritten := 0
 
@@ -290,15 +315,15 @@ func addHistogramDataPointsToEvents(ctx context.Context, metricName string, reso
 		if _, ok := eventsByKey[eventKey]; ok {
 			// datapoint already exists, add metric aggregates
 			// NOTE: it is possible to overwrite a value here if we recevive multiple data points with the same label set and timestamp
-			if _, present := eventsByKey[eventKey].Data[metricName]; present {
+			if _, present := eventsByKey[eventKey].Attributes[metricName]; present {
 				dataPointsOverwritten++ // track how often we're overwriting
 			}
 
-			eventsByKey[eventKey].Data[metricName+".count"] = int64(dataPoint.GetCount()) // truncate to int64 from uint64
-			eventsByKey[eventKey].Data[metricName+".sum"] = dataPoint.GetSum()
-			eventsByKey[eventKey].Data[metricName+".avg"] = dataPoint.GetSum() / float64(dataPoint.GetCount())
+			eventsByKey[eventKey].Attributes[metricName+".count"] = int64(dataPoint.GetCount()) // truncate to int64 from uint64
+			eventsByKey[eventKey].Attributes[metricName+".sum"] = dataPoint.GetSum()
+			eventsByKey[eventKey].Attributes[metricName+".avg"] = dataPoint.GetSum() / float64(dataPoint.GetCount())
 			for key, val := range calculateQuantiles(dataPoint.GetCount(), dataPoint.GetBucketCounts(), dataPoint.GetExplicitBounds()) {
-				eventsByKey[eventKey].Data[metricName+key] = val
+				eventsByKey[eventKey].Attributes[metricName+key] = val
 			}
 		} else {
 			data := make(map[string]any)
@@ -325,10 +350,10 @@ func addSummaryDataPointsToEvents(metricName string, resourceMetric *metrics.Res
 
 		if _, ok := eventsByKey[eventKey]; ok {
 			// datapoint already exists, just add metric aggregates
-			if _, present := eventsByKey[eventKey].Data[metricName]; present {
+			if _, present := eventsByKey[eventKey].Attributes[metricName]; present {
 				dataPointsOverwritten++ // track how often we're overwriting
 			}
-			addSummaryDatapointToMap(metricName, dataPoint, eventsByKey[eventKey].Data)
+			addSummaryDatapointToMap(metricName, dataPoint, eventsByKey[eventKey].Attributes)
 		} else {
 			// create new datapoint and add labels
 			data := make(map[string]any)
@@ -337,4 +362,32 @@ func addSummaryDataPointsToEvents(metricName string, resourceMetric *metrics.Res
 		}
 	}
 	return dataPointsOverwritten
+}
+
+func addSummaryDatapointToMap(metricName string, dp *metrics.SummaryDataPoint, data map[string]any) {
+	data[metricName+".count"] = int64(dp.GetCount()) // truncate to int64 from uint64
+	data[metricName+".sum"] = dp.GetSum()
+	data[metricName+".avg"] = dp.GetSum() / float64(dp.GetCount())
+
+	for _, qv := range dp.GetQuantileValues() {
+		switch qv.GetQuantile() {
+		case 0.0:
+			data[metricName+".min"] = qv.GetValue()
+		case 1.0:
+			data[metricName+".max"] = qv.GetValue()
+		default:
+			data[formatQuantileKey(metricName, qv.GetQuantile())] = qv.GetValue()
+		}
+	}
+}
+
+// formatQuantileKey formats a quantile value (range between 0.0 and 1.0) into a field name. The quantile
+// value does not include the preceeding 0./1. and trims any unneccesary trailing 0s.
+// eg 0.50 returns <metric-name>.p50, 0.01 returns <metric-name>.p01, 0.999 returns <metric-name>.p999
+func formatQuantileKey(metricName string, quantile float64) string {
+	return fmt.Sprintf(
+		"%s.p%s",
+		metricName,
+		strings.TrimSuffix(strconv.FormatFloat(quantile, 'f', 3, 64)[2:], "0"),
+	)
 }
