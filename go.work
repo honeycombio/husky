@@ -2,5 +2,5 @@ go 1.18
 
 use (
 	./
-	./internal/go.opentelemetry.io/proto/otlp
+	./proto/otlp
 )
