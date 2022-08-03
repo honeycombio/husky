@@ -3,9 +3,9 @@ module github.com/honeycombio/husky
 go 1.18
 
 require (
+	github.com/honeycombio/husky/proto/otlp v0.0.0-00010101000000-000000000000
 	github.com/klauspost/compress v1.15.9
 	github.com/stretchr/testify v1.8.0
-	go.opentelemetry.io/proto/otlp v0.18.0
 	google.golang.org/grpc v1.48.0
 	google.golang.org/protobuf v1.28.1
 )

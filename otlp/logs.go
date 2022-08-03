@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
-	collectorLogs "go.opentelemetry.io/proto/otlp/collector/logs/v1"
-	logs "go.opentelemetry.io/proto/otlp/logs/v1"
+	collectorLogs "github.com/honeycombio/husky/proto/otlp/collector/logs/v1"
+	logs "github.com/honeycombio/husky/proto/otlp/logs/v1"
 	"google.golang.org/protobuf/proto"
 )
 
