@@ -11,8 +11,8 @@ import (
 	"regexp"
 	"time"
 
+	common "github.com/honeycombio/husky/proto/otlp/common/v1"
 	"github.com/klauspost/compress/zstd"
-	common "go.opentelemetry.io/proto/otlp/common/v1"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
