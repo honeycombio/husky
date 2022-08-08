@@ -18,7 +18,7 @@ import (
 // TranslateTraceRequestFromReader translates an OTLP/HTTP request into Honeycomb-friendly structure
 // RequestInfo is the parsed information from the HTTP headers
 func TranslateMetricseRequestFromReader(body io.ReadCloser, ri RequestInfo) (*TranslateOTLPRequestResult, error) {
-	if err := ri.ValidateTracesHeaders(); err != nil {
+	if err := ri.ValidateMetricsHeaders(); err != nil {
 		return nil, err
 	}
 	request := &collectorMetrics.ExportMetricsServiceRequest{}
@@ -31,6 +31,8 @@ func TranslateMetricseRequestFromReader(body io.ReadCloser, ri RequestInfo) (*Tr
 // TranslateTraceRequest translates an OTLP/gRPC request into Honeycomb-friendly structure
 // RequestInfo is the parsed information from the gRPC metadata
 func TranslateMetricsRequest(request *collectorMetrics.ExportMetricsServiceRequest, ri RequestInfo) (*TranslateOTLPRequestResult, error) {
+	const defaultDataset = "unknown_metrics"
+
 	if err := ri.ValidateMetricsHeaders(); err != nil {
 		return nil, err
 	}
@@ -38,7 +40,7 @@ func TranslateMetricsRequest(request *collectorMetrics.ExportMetricsServiceReque
 	dataPointsOverwritten := 0
 
 	var batches []Batch
-	isLegacy := isLegacy(ri.ApiKey)
+	// isLegacy := isLegacy(ri.ApiKey)
 
 	for _, resourceMetric := range request.ResourceMetrics {
 
@@ -46,38 +48,42 @@ func TranslateMetricsRequest(request *collectorMetrics.ExportMetricsServiceReque
 		resourceAttrs := make(map[string]interface{})
 		var events []Event
 
-		var dataset string
-		if isLegacy {
-			dataset = ri.Dataset
-		} else {
-			serviceName, ok := resourceAttrs["service.name"].(string)
-			if !ok ||
-				strings.TrimSpace(serviceName) == "" ||
-				strings.HasPrefix(serviceName, "unknown_service") {
-				dataset = defaultServiceName
-			} else {
-				dataset = strings.TrimSpace(serviceName)
-			}
+		if resourceMetric.Resource != nil {
+			addAttributesToMap(resourceAttrs, resourceMetric.Resource.Attributes)
 		}
 
-		// Does this metric have resource attributes?
-		if resourceMetric.GetResource() != nil {
-			addAttributesToMap(resourceAttrs, resourceMetric.GetResource().GetAttributes())
+		// need to get some clarity about dataset logic for now, we need to keep doing what we're doing in shepherd
+		var dataset string
+		dataset = ri.Dataset
+		if dataset == "" {
+			dataset = defaultDataset
 		}
+		// if isLegacy {
+		// 	dataset = ri.Dataset
+		// } else {
+		// 	serviceName, ok := resourceAttrs["service.name"].(string)
+		// 	if !ok ||
+		// 		strings.TrimSpace(serviceName) == "" ||
+		// 		strings.HasPrefix(serviceName, "unknown_service") {
+		// 		dataset = defaultDataset
+		// 	} else {
+		// 		dataset = strings.TrimSpace(ri.Dataset)
+		// 	}
+		// }
 
 		for _, scopeMetric := range resourceMetric.GetScopeMetrics() {
 			// scope := scopeMetric.GetScope()
 			// if scope != nil {
 			// 	libraryString := ""
-			// 	if scope.GetName() != "" {
-			// 		libraryString = scope.GetName()
-			// 	}
-			// 	if scope.GetVersion() != "" {
-			// 		libraryString = libraryString + "/" + scope.GetVersion()
-			// 	}
-			// 	if libraryString != "" {
-			// 		libraryNamesAndVersions = append(libraryNamesAndVersions, libraryString)
-			// 	}
+			// 	// if scope.GetName() != "" {
+			// 	// 	libraryString = scope.GetName()
+			// 	// }
+			// 	// if scope.GetVersion() != "" {
+			// 	// 	libraryString = libraryString + "/" + scope.GetVersion()
+			// 	// }
+			// 	// if libraryString != "" {
+			// 	// 	libraryNamesAndVersions = append(libraryNamesAndVersions, libraryString)
+			// 	// }
 			// }
 
 			// TODO: handle datapoint flags that may indicate datapoints with a null value (requires OTLP >0.9.0)
@@ -254,9 +260,20 @@ func calculateQuantiles(count uint64, bucketCounts []uint64, bounds []float64) m
 }
 
 func buildEventFromDataPoint(dataPoint dataPointWithLabelsOrAttributes, data map[string]any, resource *resource.Resource, ts time.Time) Event {
+	eventAttrs := map[string]interface{}{
+		"meta.signal_type":     "metric",
+		"meta.annotation_type": "metric_event",
+	}
+
 	for _, label := range dataPoint.GetLabels() {
 		data[label.GetKey()] = label.GetValue()
 	}
+
+	// copy basic event attrs to data
+	for k, v := range eventAttrs {
+		data[k] = v
+	}
+
 	addAttributesToMap(data, dataPoint.GetAttributes())
 	addAttributesToMap(data, resource.GetAttributes())
 	event := Event{
