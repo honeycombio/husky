@@ -43,6 +43,7 @@ func TranslateMetricsRequest(request *collectorMetrics.ExportMetricsServiceReque
 	eventsByKey := make(map[string]Event)
 	var events []Event
 	var dataset string
+	var totalSize int
 
 	for _, resourceMetric := range request.ResourceMetrics {
 
@@ -57,6 +58,8 @@ func TranslateMetricsRequest(request *collectorMetrics.ExportMetricsServiceReque
 		if dataset == "" {
 			dataset = defaultDataset
 		}
+
+		totalSize += proto.Size(resourceMetric)
 
 		for _, scopeMetric := range resourceMetric.GetScopeMetrics() {
 			// TODO: handle datapoint flags that may indicate datapoints with a null value (requires OTLP >0.9.0)
@@ -92,9 +95,9 @@ func TranslateMetricsRequest(request *collectorMetrics.ExportMetricsServiceReque
 	}
 
 	batches = append(batches, Batch{
-		Dataset: dataset,
-		// SizeBytes: proto.Size(),
-		Events: events,
+		Dataset:   dataset,
+		SizeBytes: totalSize,
+		Events:    events,
 	})
 
 	return &TranslateOTLPRequestResult{
@@ -143,7 +146,6 @@ func createEventKey(resourceKey string, ts time.Time, dp dataPointWithLabelsOrAt
 // the same code to handle both types later on.
 func repackageDeprecatedOTLPIntDataPoints(dataPoints []*metrics.IntDataPoint) (wrapped []*metrics.NumberDataPoint) {
 	for _, dp := range dataPoints {
-		fmt.Printf("%v", int64(dp.GetTimeUnixNano()))
 		wrapped = append(wrapped, &metrics.NumberDataPoint{
 			Labels:       dp.GetLabels(),
 			TimeUnixNano: dp.GetTimeUnixNano(),
@@ -249,7 +251,6 @@ func addNumberDataPointsToEvents(metricName string, resourceMetric *metrics.Reso
 	dataPointsOverwritten := 0
 
 	for _, dataPoint := range otlpDataPoints {
-		fmt.Printf("%v", int64(dataPoint.GetTimeUnixNano()))
 		ts := time.Unix(0, int64(dataPoint.GetTimeUnixNano())).UTC().Truncate(1 * time.Second)
 		eventKey := createEventKey(resourceKey, ts, dataPoint)
 

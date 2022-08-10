@@ -49,12 +49,10 @@ func TestTranslateMetricsRequest(t *testing.T) {
 	assert.Equal(t, 1, len(result.Batches))
 	batch := result.Batches[0]
 	assert.Equal(t, "unknown_metrics", batch.Dataset)
-	// should fail
 	assert.Equal(t, proto.Size(req.ResourceMetrics[0]), batch.SizeBytes)
 	events := batch.Events
 	assert.Equal(t, 1, len(events))
 	ev := events[0]
-	fmt.Printf("%v", ev)
 	assert.Equal(t, "metric", ev.Attributes["meta.signal_type"])
 	assert.Equal(t, "metric_event", ev.Attributes["meta.annotation_type"])
 	assert.Equal(t, "my-service", ev.Attributes["service.name"])
@@ -94,12 +92,10 @@ func TestTranslateClassicMetricsRequest(t *testing.T) {
 	assert.Equal(t, 1, len(result.Batches))
 	batch := result.Batches[0]
 	assert.Equal(t, "legacy-dataset", batch.Dataset)
-	// should fail
 	assert.Equal(t, proto.Size(req.ResourceMetrics[0]), batch.SizeBytes)
 	events := batch.Events
 	assert.Equal(t, 1, len(events))
 	ev := events[0]
-	fmt.Printf("%v", ev)
 	assert.Equal(t, "metric", ev.Attributes["meta.signal_type"])
 	assert.Equal(t, "metric_event", ev.Attributes["meta.annotation_type"])
 	assert.Equal(t, "my-service", ev.Attributes["service.name"])
@@ -145,7 +141,6 @@ func TestDeprecatedIntGauge(t *testing.T) {
 	batch := result.Batches[0]
 	events := batch.Events
 	ev := events[0]
-	fmt.Printf("%v", ev.Timestamp)
 	assert.Equal(t, "unknown_metrics", batch.Dataset)
 	assert.Equal(t, int64(13), ev.Attributes["testMetricName"])
 }
@@ -187,7 +182,6 @@ func TestGauge(t *testing.T) {
 	batch := result.Batches[0]
 	events := batch.Events
 	ev := events[0]
-	fmt.Printf("%v", ev.Timestamp)
 	assert.Equal(t, "unknown_metrics", batch.Dataset)
 	assert.Equal(t, int64(2), ev.Attributes["testMetricName"])
 
@@ -231,7 +225,6 @@ func TestDeprecatedIntSum(t *testing.T) {
 	batch := result.Batches[0]
 	events := batch.Events
 	ev := events[0]
-	fmt.Printf("%v", ev.Timestamp)
 	assert.Equal(t, "unknown_metrics", batch.Dataset)
 	assert.Equal(t, int64(13), ev.Attributes["testMetricName"])
 }
