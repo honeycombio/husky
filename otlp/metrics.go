@@ -8,10 +8,10 @@ import (
 	"strings"
 	"time"
 
-	collectorMetrics "go.opentelemetry.io/proto/otlp/collector/metrics/v1"
-	common "go.opentelemetry.io/proto/otlp/common/v1"
-	metrics "go.opentelemetry.io/proto/otlp/metrics/v1"
-	resource "go.opentelemetry.io/proto/otlp/resource/v1"
+	collectorMetrics "github.com/honeycombio/husky/proto/otlp/collector/metrics/v1"
+	common "github.com/honeycombio/husky/proto/otlp/common/v1"
+	metrics "github.com/honeycombio/husky/proto/otlp/metrics/v1"
+	resource "github.com/honeycombio/husky/proto/otlp/resource/v1"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -40,103 +40,61 @@ func TranslateMetricsRequest(request *collectorMetrics.ExportMetricsServiceReque
 	dataPointsOverwritten := 0
 
 	var batches []Batch
-	// isLegacy := isLegacy(ri.ApiKey)
+	eventsByKey := make(map[string]Event)
+	var events []Event
+	var dataset string
 
 	for _, resourceMetric := range request.ResourceMetrics {
 
-		eventsByKey := make(map[string]Event)
 		resourceAttrs := make(map[string]interface{})
-		var events []Event
 
 		if resourceMetric.Resource != nil {
 			addAttributesToMap(resourceAttrs, resourceMetric.Resource.Attributes)
 		}
 
 		// need to get some clarity about dataset logic for now, we need to keep doing what we're doing in shepherd
-		var dataset string
 		dataset = ri.Dataset
 		if dataset == "" {
 			dataset = defaultDataset
 		}
-		// if isLegacy {
-		// 	dataset = ri.Dataset
-		// } else {
-		// 	serviceName, ok := resourceAttrs["service.name"].(string)
-		// 	if !ok ||
-		// 		strings.TrimSpace(serviceName) == "" ||
-		// 		strings.HasPrefix(serviceName, "unknown_service") {
-		// 		dataset = defaultDataset
-		// 	} else {
-		// 		dataset = strings.TrimSpace(ri.Dataset)
-		// 	}
-		// }
 
 		for _, scopeMetric := range resourceMetric.GetScopeMetrics() {
-			// scope := scopeMetric.GetScope()
-			// if scope != nil {
-			// 	libraryString := ""
-			// 	// if scope.GetName() != "" {
-			// 	// 	libraryString = scope.GetName()
-			// 	// }
-			// 	// if scope.GetVersion() != "" {
-			// 	// 	libraryString = libraryString + "/" + scope.GetVersion()
-			// 	// }
-			// 	// if libraryString != "" {
-			// 	// 	libraryNamesAndVersions = append(libraryNamesAndVersions, libraryString)
-			// 	// }
-			// }
-
 			// TODO: handle datapoint flags that may indicate datapoints with a null value (requires OTLP >0.9.0)
 			// https://app.asana.com/0/1199917178609623/1200450178355226/f
 			for _, metric := range scopeMetric.GetMetrics() {
 				switch metric.Data.(type) {
 				case *metrics.Metric_IntGauge:
-					// numMetricsByType["int_gauge"]++
-					// numDatapointsByMetricType["int_gauge"] += len(metric.GetIntGauge().GetDataPoints())
 					dataPointsOverwritten += addNumberDataPointsToEvents(metric.Name, resourceMetric, eventsByKey, repackageDeprecatedOTLPIntDataPoints(metric.GetIntGauge().GetDataPoints()))
 				case *metrics.Metric_Gauge:
-					// numMetricsByType["gauge"]++
-					// numDatapointsByMetricType["gauge"] += len(metric.GetGauge().GetDataPoints())
 					dataPointsOverwritten += addNumberDataPointsToEvents(metric.Name, resourceMetric, eventsByKey, metric.GetGauge().GetDataPoints())
 				case *metrics.Metric_IntSum:
-					// numMetricsByType["int_sum"]++
-					// numDatapointsByMetricType["int_sum"] += len(metric.GetIntSum().GetDataPoints())
 					dataPointsOverwritten += addNumberDataPointsToEvents(metric.Name, resourceMetric, eventsByKey, repackageDeprecatedOTLPIntDataPoints(metric.GetIntSum().GetDataPoints()))
 				case *metrics.Metric_Sum:
-					// numMetricsByType["sum"]++
-					// numDatapointsByMetricType["sum"] += len(metric.GetSum().GetDataPoints())
 					dataPointsOverwritten += addNumberDataPointsToEvents(metric.Name, resourceMetric, eventsByKey, metric.GetSum().GetDataPoints())
 				case *metrics.Metric_IntHistogram:
-					// numMetricsByType["int_histogram"]++
-					// numDatapointsByMetricType["int_histogram"] += len(metric.GetIntHistogram().GetDataPoints())
 					dataPointsOverwritten += addHistogramDataPointsToEvents(metric.Name, resourceMetric, eventsByKey, repackageDeprecatedOTLPIntHistogramDataPoints(metric.GetIntHistogram().GetDataPoints()))
 				case *metrics.Metric_Histogram:
-					// numMetricsByType["histogram"]++
-					// numDatapointsByMetricType["histogram"] += len(metric.GetHistogram().GetDataPoints())
 					dataPointsOverwritten += addHistogramDataPointsToEvents(metric.Name, resourceMetric, eventsByKey, metric.GetHistogram().GetDataPoints())
 				case *metrics.Metric_Summary:
-					// numMetricsByType["summary"]++
-					// numDatapointsByMetricType["summary"] += len(metric.GetSummary().GetDataPoints())
 					dataPointsOverwritten += addSummaryDataPointsToEvents(metric.Name, resourceMetric, eventsByKey, metric.GetSummary().GetDataPoints())
 				case nil:
 				default:
-					// this will generate sentry error and be reported in #alerts Slack channel
+					// need to make sure this still generates a Sentry error
 					continue
 				}
 			}
 		}
-
-		// do something with events and eventsbykey
-		for _, event := range eventsByKey {
-			events = append(events, event)
-		}
-
-		batches = append(batches, Batch{
-			Dataset:   dataset,
-			SizeBytes: proto.Size(resourceMetric),
-			Events:    events,
-		})
 	}
+
+	for _, event := range eventsByKey {
+		events = append(events, event)
+	}
+
+	batches = append(batches, Batch{
+		Dataset: dataset,
+		// SizeBytes: proto.Size(),
+		Events: events,
+	})
 
 	return &TranslateOTLPRequestResult{
 		RequestSize: proto.Size(request),
