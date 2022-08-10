@@ -367,20 +367,6 @@ func TestSummaries(t *testing.T) {
 	assert.Equal(t, event.Attributes["summaryMetricName.max"], float64(959.31))
 }
 
-func TestNilMetric(t *testing.T) {
-	ri := RequestInfo{
-		ApiKey:      "a1a1a1a1a1a1a1a1a1a1a1",
-		ContentType: "application/protobuf",
-	}
-
-	resource := createResource([]map[string]string{{"service.name": "kafka", "broker": "2770"}})
-	req := createExportMetricsServiceRequest(
-		[]*metrics.ResourceMetrics{createResourceMetric([]*metrics.Metric{nil}, resource)})
-
-	TranslateMetricsRequest(req, ri)
-	// assert.Nil(t, err)
-}
-
 func TestAttributeValues(t *testing.T) {
 	ri := RequestInfo{
 		ApiKey:      "a1a1a1a1a1a1a1a1a1a1a1",
