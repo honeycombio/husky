@@ -530,8 +530,6 @@ func createResource(attributes []map[string]string) *resource.Resource {
 	}
 }
 
-// nolint: unused // false positive, used in skipped test
-// https://github.com/dominikh/go-tools/issues/633
 func createHistogramDataPoint(
 	count uint64,
 	sum float64,
@@ -568,8 +566,6 @@ func createIntHistogramDataPoint(
 	}
 }
 
-// nolint: unused // false positive, used in skipped test
-// https://github.com/dominikh/go-tools/issues/633
 func createHistogramMetric(name string, datapoints []*metrics.HistogramDataPoint) *metrics.Metric {
 	return &metrics.Metric{
 		Name: name,
