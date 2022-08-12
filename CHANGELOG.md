@@ -1,5 +1,12 @@
 # Husky Changelog
 
+## 0.13.1 2022-08-12
+
+### Enhancements
+
+- Replace usage of OTLP proto with internal copy (#106) | [@MikeGoldsmith](https://github.com/MikeGoldsmith)
+  - Exposes the forked OTLP proto files for internal and external use
+
 ## 0.13.0 2022-08-02
 
 ### Enhancements
