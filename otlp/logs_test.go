@@ -42,6 +42,18 @@ func TestTranslateLogsRequest(t *testing.T) {
 				}},
 			},
 			ScopeLogs: []*logs.ScopeLogs{{
+				Scope: &common.InstrumentationScope{
+					Name:    "scope-name",
+					Version: "scope-version",
+					Attributes: []*common.KeyValue{
+						{
+							Key: "scope_attr",
+							Value: &common.AnyValue{
+								Value: &common.AnyValue_StringValue{StringValue: "scope_attr_val"},
+							},
+						},
+					},
+				},
 				LogRecords: []*logs.LogRecord{{
 					TraceId:        traceID,
 					SpanId:         spanID,
@@ -83,6 +95,7 @@ func TestTranslateLogsRequest(t *testing.T) {
 	assert.Equal(t, "my-service", ev.Attributes["service.name"])
 	assert.Equal(t, "span_attr_val", ev.Attributes["span_attr"])
 	assert.Equal(t, "resource_attr_val", ev.Attributes["resource_attr"])
+	assert.Equal(t, "scope_attr_val", ev.Attributes["scope_attr"])
 }
 
 func TestTranslateClassicLogsRequest(t *testing.T) {
