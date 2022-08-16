@@ -1,5 +1,14 @@
 # Husky Changelog
 
+## 0.14.0 2022-08-16
+
+### Enhancements
+
+- Replace usage of OTLP proto with internal copy (#106) | [@MikeGoldsmith](https://github.com/MikeGoldsmith)
+  - Exposes the forked OTLP proto files for internal and external use
+- Update OTLP proto to v0.19.0 (#110) | [@MikeGoldsmith](https://github.com/MikeGoldsmith)
+- Add support for scope attributes when translating traces & metrics requests (#111) | [@MikeGoldsmith](https://github.com/MikeGoldsmith)
+
 ## 0.13.0 2022-08-02
 
 ### Enhancements
