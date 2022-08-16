@@ -56,6 +56,7 @@ func TranslateLogsRequest(request *collectorLogs.ExportLogsServiceRequest, ri Re
 
 		for _, scopeLog := range resourceLog.ScopeLogs {
 			scope := scopeLog.Scope
+			addScopeToMap(resourceAttrs, scope)
 
 			for _, log := range scopeLog.GetLogRecords() {
 				eventAttrs := map[string]interface{}{

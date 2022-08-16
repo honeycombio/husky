@@ -159,6 +159,20 @@ func addAttributesToMap(attrs map[string]interface{}, attributes []*common.KeyVa
 	}
 }
 
+func addScopeToMap(attrs map[string]interface{}, scope *common.InstrumentationScope) {
+	if scope != nil {
+		if scope.Name != "" {
+			attrs["instrumentation_scope.name"] = scope.Name
+		}
+		if scope.Version != "" {
+			attrs["instrumentation_scope.version"] = scope.Version
+		}
+		if scope.Attributes != nil {
+			addAttributesToMap(attrs, scope.Attributes)
+		}
+	}
+}
+
 func getValue(value *common.AnyValue) interface{} {
 	switch value.Value.(type) {
 	case *common.AnyValue_StringValue:

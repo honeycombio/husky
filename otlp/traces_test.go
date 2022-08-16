@@ -52,6 +52,18 @@ func TestTranslateLegacyGrpcTraceRequest(t *testing.T) {
 				}},
 			},
 			ScopeSpans: []*trace.ScopeSpans{{
+				Scope: &common.InstrumentationScope{
+					Name:    "instr_scope_name",
+					Version: "instr_scope_version",
+					Attributes: []*common.KeyValue{
+						{
+							Key: "scope_attr",
+							Value: &common.AnyValue{
+								Value: &common.AnyValue_StringValue{StringValue: "scope_attr_val"},
+							},
+						},
+					},
+				},
 				Spans: []*trace.Span{{
 					TraceId:           traceID,
 					SpanId:            spanID,
@@ -125,6 +137,9 @@ func TestTranslateLegacyGrpcTraceRequest(t *testing.T) {
 	assert.Equal(t, "resource_attr_val", ev.Attributes["resource_attr"])
 	assert.Equal(t, 1, ev.Attributes["span.num_links"])
 	assert.Equal(t, 1, ev.Attributes["span.num_events"])
+	assert.Equal(t, "instr_scope_name", ev.Attributes["instrumentation_scope.name"])
+	assert.Equal(t, "instr_scope_version", ev.Attributes["instrumentation_scope.version"])
+	assert.Equal(t, "scope_attr_val", ev.Attributes["scope_attr"])
 
 	// event
 	ev = events[1]
@@ -137,6 +152,9 @@ func TestTranslateLegacyGrpcTraceRequest(t *testing.T) {
 	assert.Equal(t, "span_event", ev.Attributes["meta.annotation_type"])
 	assert.Equal(t, "span_event_attr_val", ev.Attributes["span_event_attr"])
 	assert.Equal(t, "resource_attr_val", ev.Attributes["resource_attr"])
+	assert.Equal(t, "instr_scope_name", ev.Attributes["instrumentation_scope.name"])
+	assert.Equal(t, "instr_scope_version", ev.Attributes["instrumentation_scope.version"])
+	assert.Equal(t, "scope_attr_val", ev.Attributes["scope_attr"])
 
 	// link
 	ev = events[2]
@@ -151,6 +169,9 @@ func TestTranslateLegacyGrpcTraceRequest(t *testing.T) {
 	assert.Equal(t, "link", ev.Attributes["meta.annotation_type"])
 	assert.Equal(t, "span_link_attr_val", ev.Attributes["span_link_attr"])
 	assert.Equal(t, "resource_attr_val", ev.Attributes["resource_attr"])
+	assert.Equal(t, "instr_scope_name", ev.Attributes["instrumentation_scope.name"])
+	assert.Equal(t, "instr_scope_version", ev.Attributes["instrumentation_scope.version"])
+	assert.Equal(t, "scope_attr_val", ev.Attributes["scope_attr"])
 }
 
 func TestTranslateGrpcTraceRequest(t *testing.T) {
