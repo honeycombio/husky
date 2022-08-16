@@ -65,9 +65,7 @@ func TranslateTraceRequest(request *collectorTrace.ExportTraceServiceRequest, ri
 
 		for _, scopeSpan := range resourceSpan.ScopeSpans {
 			scope := scopeSpan.Scope
-			if scope != nil {
-				addAttributesToMap(resourceAttrs, scope.Attributes)
-			}
+			addScopeToMap(resourceAttrs, scope)
 
 			for _, span := range scopeSpan.GetSpans() {
 				traceID := BytesToTraceID(span.TraceId)
