@@ -790,7 +790,7 @@ func TestInvalidContentTypeReturnsError(t *testing.T) {
 	ri := RequestInfo{
 		ApiKey:      "apikey",
 		Dataset:     "dataset",
-		ContentType: "application/json",
+		ContentType: "application/binary",
 	}
 
 	result, err := TranslateTraceRequestFromReader(body, ri)
