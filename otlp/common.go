@@ -14,6 +14,7 @@ import (
 	common "github.com/honeycombio/husky/proto/otlp/common/v1"
 	"github.com/klauspost/compress/zstd"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 )
@@ -75,10 +76,12 @@ func (ri *RequestInfo) ValidateTracesHeaders() error {
 	if isLegacy(ri.ApiKey) && len(ri.Dataset) == 0 {
 		return ErrMissingDatasetHeader
 	}
-	if ri.ContentType != "application/protobuf" && ri.ContentType != "application/x-protobuf" {
+	switch ri.ContentType {
+	case "application/protobuf", "application/x-protobuf", "application/json":
+		return nil
+	default:
 		return ErrInvalidContentType
 	}
-	return nil
 }
 
 // ValidateMetricsHeaders validates required headers/metadata for a metric OTLP request
@@ -213,7 +216,7 @@ func isLegacy(apiKey string) bool {
 	return legacyApiKeyPattern.MatchString(apiKey)
 }
 
-func parseOtlpRequestBody(body io.ReadCloser, contentEncoding string, request protoreflect.ProtoMessage) error {
+func parseOtlpRequestBody(body io.ReadCloser, contentType string, contentEncoding string, request protoreflect.ProtoMessage) error {
 	defer body.Close()
 	bodyBytes, err := ioutil.ReadAll(body)
 	if err != nil {
@@ -246,7 +249,11 @@ func parseOtlpRequestBody(body io.ReadCloser, contentEncoding string, request pr
 		return err
 	}
 
-	err = proto.Unmarshal(bytes, request)
+	if contentType == "application/json" {
+		err = protojson.Unmarshal(bytes, request)
+	} else {
+		err = proto.Unmarshal(bytes, request)
+	}
 	if err != nil {
 		return err
 	}

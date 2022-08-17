@@ -18,6 +18,7 @@ import (
 	"github.com/honeycombio/husky/test"
 	"github.com/klauspost/compress/zstd"
 	"github.com/stretchr/testify/assert"
+	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -1240,4 +1241,68 @@ func TestEvaluateSpanStatus(t *testing.T) {
 			assert.Equal(t, tC.expectedIsError, isError)
 		})
 	}
+}
+
+func TestJsonRequest(t *testing.T) {
+	traceId := test.RandomBytes(16)
+	spanId := test.RandomBytes(8)
+	request := collectortrace.ExportTraceServiceRequest{
+		ResourceSpans: []*trace.ResourceSpans{
+			{
+				Resource: &resource.Resource{
+					Attributes: []*common.KeyValue{
+						{
+							Key: "resource-attr",
+							Value: &common.AnyValue{
+								Value: &common.AnyValue_StringValue{StringValue: "resource-attr-val"},
+							},
+						},
+					},
+				},
+				ScopeSpans: []*trace.ScopeSpans{
+					{
+						Scope: &common.InstrumentationScope{
+							Name:    "scope-name",
+							Version: "scope-version",
+							Attributes: []*common.KeyValue{
+								{
+									Key: "scope-attr",
+									Value: &common.AnyValue{
+										Value: &common.AnyValue_StringValue{StringValue: "scope-attr-val"},
+									},
+								},
+							},
+						},
+						Spans: []*trace.Span{
+							{
+								TraceId: traceId,
+								SpanId:  spanId,
+								Name:    "span-name",
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	bodyBytes, err := protojson.Marshal(&request)
+	assert.Nil(t, err)
+
+	buf := new(bytes.Buffer)
+	buf.Write(bodyBytes)
+
+	body := io.NopCloser(strings.NewReader(buf.String()))
+	ri := RequestInfo{
+		ApiKey:      "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+		Dataset:     "legacy-dataset",
+		ContentType: "application/json",
+	}
+
+	result, err := TranslateTraceRequestFromReader(body, ri)
+	assert.Nil(t, err)
+
+	assert.Equal(t, 1, len(result.Batches))
+	assert.Equal(t, "legacy-dataset", result.Batches[0].Dataset)
+	assert.Equal(t, 1, len(result.Batches[0].Events))
 }
