@@ -251,10 +251,13 @@ func parseOtlpRequestBody(body io.ReadCloser, contentType string, contentEncodin
 		return err
 	}
 
-	if contentType == "application/json" {
-		err = protojson.Unmarshal(bytes, request)
-	} else {
+	switch contentType {
+	case "application/protobuf":
 		err = proto.Unmarshal(bytes, request)
+	case "application/json":
+		err = protojson.Unmarshal(bytes, request)
+	default:
+		return ErrInvalidContentType
 	}
 	if err != nil {
 		return err
