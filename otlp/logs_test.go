@@ -521,7 +521,7 @@ func TestLogsRequestWithInvalidContentTypeReturnsError(t *testing.T) {
 	req := &collectorlogs.ExportLogsServiceRequest{}
 	ri := RequestInfo{
 		ApiKey:      "apikey",
-		ContentType: "application/json",
+		ContentType: "application/binary",
 	}
 
 	result, err := TranslateLogsRequest(req, ri)
