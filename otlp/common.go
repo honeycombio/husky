@@ -106,10 +106,12 @@ func (ri *RequestInfo) ValidateLogsHeaders() error {
 	if isLegacy(ri.ApiKey) && len(ri.Dataset) == 0 {
 		return ErrMissingDatasetHeader
 	}
-	if ri.ContentType != "application/protobuf" && ri.ContentType != "application/x-protobuf" {
+	switch ri.ContentType {
+	case "application/protobuf", "application/x-protobuf", "application/json":
+		return nil
+	default:
 		return ErrInvalidContentType
 	}
-	return nil
 }
 
 // GetRequestInfoFromGrpcMetadata parses relevant gRPC metadata from an incoming request context
