@@ -5,7 +5,6 @@ import (
 	"io"
 	"math"
 	"strconv"
-	"strings"
 	"time"
 
 	collectorTrace "github.com/honeycombio/husky/proto/otlp/collector/trace/v1"
@@ -17,7 +16,6 @@ const (
 	traceIDShortLength = 8
 	traceIDLongLength  = 16
 	defaultSampleRate  = int32(1)
-	defaultServiceName = "unknown_service"
 )
 
 // TranslateTraceRequestFromReader translates an OTLP/HTTP request into Honeycomb-friendly structure
@@ -40,32 +38,13 @@ func TranslateTraceRequest(request *collectorTrace.ExportTraceServiceRequest, ri
 		return nil, err
 	}
 	var batches []Batch
-	isLegacy := isLegacy(ri.ApiKey)
 	for _, resourceSpan := range request.ResourceSpans {
 		var events []Event
-		resourceAttrs := make(map[string]interface{})
-
-		if resourceSpan.Resource != nil {
-			addAttributesToMap(resourceAttrs, resourceSpan.Resource.Attributes)
-		}
-
-		var dataset string
-		if isLegacy {
-			dataset = ri.Dataset
-		} else {
-			serviceName, ok := resourceAttrs["service.name"].(string)
-			if !ok ||
-				strings.TrimSpace(serviceName) == "" ||
-				strings.HasPrefix(serviceName, "unknown_service") {
-				dataset = defaultServiceName
-			} else {
-				dataset = strings.TrimSpace(serviceName)
-			}
-		}
+		resourceAttrs := getResourceAttributes(resourceSpan.Resource)
+		dataset := getDataset(ri, resourceAttrs)
 
 		for _, scopeSpan := range resourceSpan.ScopeSpans {
-			scope := scopeSpan.Scope
-			addScopeToMap(resourceAttrs, scope)
+			scopeAttrs := getScopeAttributes(scopeSpan.Scope)
 
 			for _, span := range scopeSpan.GetSpans() {
 				traceID := BytesToTraceID(span.TraceId)
@@ -95,21 +74,14 @@ func TranslateTraceRequest(request *collectorTrace.ExportTraceServiceRequest, ri
 				if span.Status != nil && len(span.Status.Message) > 0 {
 					eventAttrs["status_message"] = span.Status.Message
 				}
-				if scope != nil {
-					if len(scope.Name) > 0 {
-						eventAttrs["library.name"] = scope.Name
-					}
-					if len(scope.Version) > 0 {
-						eventAttrs["library.version"] = scope.Version
-					}
-				}
 
-				// copy resource attributes to event attributes
+				// copy resource & scope attributes then span attributes
 				for k, v := range resourceAttrs {
 					eventAttrs[k] = v
 				}
-
-				// copy span attribures after resource attributes so span attributes write last and are preserved
+				for k, v := range scopeAttrs {
+					eventAttrs[k] = v
+				}
 				if span.Attributes != nil {
 					addAttributesToMap(eventAttrs, span.Attributes)
 				}
@@ -134,11 +106,15 @@ func TranslateTraceRequest(request *collectorTrace.ExportTraceServiceRequest, ri
 						"meta.signal_type":     "trace",
 					}
 
-					if sevent.Attributes != nil {
-						addAttributesToMap(attrs, sevent.Attributes)
-					}
+					// copy resource & scope attributes then span event attributes
 					for k, v := range resourceAttrs {
 						attrs[k] = v
+					}
+					for k, v := range scopeAttrs {
+						attrs[k] = v
+					}
+					if sevent.Attributes != nil {
+						addAttributesToMap(attrs, sevent.Attributes)
 					}
 					events = append(events, Event{
 						Attributes: attrs,
@@ -157,11 +133,15 @@ func TranslateTraceRequest(request *collectorTrace.ExportTraceServiceRequest, ri
 						"meta.signal_type":     "trace",
 					}
 
-					if slink.Attributes != nil {
-						addAttributesToMap(attrs, slink.Attributes)
-					}
+					// copy resource & scope attributes then span link attributes
 					for k, v := range resourceAttrs {
 						attrs[k] = v
+					}
+					for k, v := range scopeAttrs {
+						attrs[k] = v
+					}
+					if slink.Attributes != nil {
+						addAttributesToMap(attrs, slink.Attributes)
 					}
 					events = append(events, Event{
 						Attributes: attrs,
