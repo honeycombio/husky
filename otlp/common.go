@@ -9,9 +9,11 @@ import (
 	"io/ioutil"
 	"net/http"
 	"regexp"
+	"strings"
 	"time"
 
 	common "github.com/honeycombio/husky/proto/otlp/common/v1"
+	resource "github.com/honeycombio/husky/proto/otlp/resource/v1"
 	"github.com/klauspost/compress/zstd"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/encoding/protojson"
@@ -28,6 +30,7 @@ const (
 	contentTypeHeader        = "content-type"
 	contentEncodingHeader    = "content-encoding"
 	gRPCAcceptEncodingHeader = "grpc-accept-encoding"
+	defaultServiceName       = "unknown_service"
 )
 
 var legacyApiKeyPattern = regexp.MustCompile("^[0-9a-f]{32}$")
@@ -68,12 +71,16 @@ type RequestInfo struct {
 	GRPCAcceptEncoding string
 }
 
+func (ri RequestInfo) hasLegacyKey() bool {
+	return legacyApiKeyPattern.MatchString(ri.ApiKey)
+}
+
 // ValidateTracesHeaders validates required headers/metadata for a trace OTLP request
 func (ri *RequestInfo) ValidateTracesHeaders() error {
 	if len(ri.ApiKey) == 0 {
 		return ErrMissingAPIKeyHeader
 	}
-	if isLegacy(ri.ApiKey) && len(ri.Dataset) == 0 {
+	if ri.hasLegacyKey() && len(ri.Dataset) == 0 {
 		return ErrMissingDatasetHeader
 	}
 	switch ri.ContentType {
@@ -89,7 +96,7 @@ func (ri *RequestInfo) ValidateMetricsHeaders() error {
 	if len(ri.ApiKey) == 0 {
 		return ErrMissingAPIKeyHeader
 	}
-	if isLegacy(ri.ApiKey) && len(ri.Dataset) == 0 {
+	if ri.hasLegacyKey() && len(ri.Dataset) == 0 {
 		return ErrMissingDatasetHeader
 	}
 	if ri.ContentType != "application/protobuf" && ri.ContentType != "application/x-protobuf" {
@@ -103,7 +110,7 @@ func (ri *RequestInfo) ValidateLogsHeaders() error {
 	if len(ri.ApiKey) == 0 {
 		return ErrMissingAPIKeyHeader
 	}
-	if isLegacy(ri.ApiKey) && len(ri.Dataset) == 0 {
+	if ri.hasLegacyKey() && len(ri.Dataset) == 0 {
 		return ErrMissingDatasetHeader
 	}
 	switch ri.ContentType {
@@ -164,18 +171,43 @@ func addAttributesToMap(attrs map[string]interface{}, attributes []*common.KeyVa
 	}
 }
 
-func addScopeToMap(attrs map[string]interface{}, scope *common.InstrumentationScope) {
+func getResourceAttributes(resource *resource.Resource) map[string]interface{} {
+	attrs := map[string]interface{}{}
+	if resource != nil {
+		addAttributesToMap(attrs, resource.Attributes)
+	}
+	return attrs
+}
+
+func getScopeAttributes(scope *common.InstrumentationScope) map[string]interface{} {
+	attrs := map[string]interface{}{}
 	if scope != nil {
 		if scope.Name != "" {
-			attrs["instrumentation_scope.name"] = scope.Name
+			attrs["library.name"] = scope.Name
 		}
 		if scope.Version != "" {
-			attrs["instrumentation_scope.version"] = scope.Version
+			attrs["library.version"] = scope.Version
 		}
-		if scope.Attributes != nil {
-			addAttributesToMap(attrs, scope.Attributes)
+		addAttributesToMap(attrs, scope.Attributes)
+	}
+	return attrs
+}
+
+func getDataset(ri RequestInfo, attrs map[string]interface{}) string {
+	var dataset string
+	if ri.hasLegacyKey() {
+		dataset = ri.Dataset
+	} else {
+		serviceName, ok := attrs["service.name"].(string)
+		if !ok ||
+			strings.TrimSpace(serviceName) == "" ||
+			strings.HasPrefix(serviceName, "unknown_service") {
+			dataset = defaultServiceName
+		} else {
+			dataset = strings.TrimSpace(serviceName)
 		}
 	}
+	return dataset
 }
 
 func getValue(value *common.AnyValue) interface{} {
@@ -212,10 +244,6 @@ func getValue(value *common.AnyValue) interface{} {
 		}
 	}
 	return nil
-}
-
-func isLegacy(apiKey string) bool {
-	return legacyApiKeyPattern.MatchString(apiKey)
 }
 
 func parseOtlpRequestBody(body io.ReadCloser, contentType string, contentEncoding string, request protoreflect.ProtoMessage) error {

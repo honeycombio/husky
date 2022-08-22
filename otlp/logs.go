@@ -3,7 +3,6 @@ package otlp
 import (
 	"encoding/hex"
 	"io"
-	"strings"
 	"time"
 
 	collectorLogs "github.com/honeycombio/husky/proto/otlp/collector/logs/v1"
@@ -31,80 +30,54 @@ func TranslateLogsRequest(request *collectorLogs.ExportLogsServiceRequest, ri Re
 		return nil, err
 	}
 	batches := []Batch{}
-	isLegacy := isLegacy(ri.ApiKey)
 	for _, resourceLog := range request.ResourceLogs {
 		var events []Event
-		resourceAttrs := make(map[string]interface{})
-
-		if resourceLog.Resource != nil {
-			addAttributesToMap(resourceAttrs, resourceLog.Resource.Attributes)
-		}
-
-		var dataset string
-		if isLegacy {
-			dataset = ri.Dataset
-		} else {
-			serviceName, ok := resourceAttrs["service.name"].(string)
-			if !ok ||
-				strings.TrimSpace(serviceName) == "" ||
-				strings.HasPrefix(serviceName, "unknown_service") {
-				dataset = defaultServiceName
-			} else {
-				dataset = strings.TrimSpace(serviceName)
-			}
-		}
+		resourceAttrs := getResourceAttributes(resourceLog.Resource)
+		dataset := getDataset(ri, resourceAttrs)
 
 		for _, scopeLog := range resourceLog.ScopeLogs {
-			scope := scopeLog.Scope
-			addScopeToMap(resourceAttrs, scope)
+			scopeAttrs := getScopeAttributes(scopeLog.Scope)
 
 			for _, log := range scopeLog.GetLogRecords() {
-				eventAttrs := map[string]interface{}{
+				attrs := map[string]interface{}{
 					"severity":         getLogSeverity(log.SeverityNumber),
 					"severity_code":    int(log.SeverityNumber),
 					"meta.signal_type": "log",
 					"flags":            log.Flags,
 				}
 				if len(log.TraceId) > 0 {
-					eventAttrs["trace.trace_id"] = BytesToTraceID(log.TraceId)
+					attrs["trace.trace_id"] = BytesToTraceID(log.TraceId)
 					// only add meta.annotation_type if the log is associated to a trace
-					eventAttrs["meta.annotation_type"] = "span_event"
+					attrs["meta.annotation_type"] = "span_event"
 				}
 				if len(log.SpanId) > 0 {
-					eventAttrs["trace.parent_id"] = hex.EncodeToString(log.SpanId)
+					attrs["trace.parent_id"] = hex.EncodeToString(log.SpanId)
 				}
 				if log.SeverityText != "" {
-					eventAttrs["severity_text"] = log.SeverityText
+					attrs["severity_text"] = log.SeverityText
 				}
 				if log.Body != nil {
 					if val := getValue(log.Body); val != nil {
-						eventAttrs["body"] = val
-					}
-				}
-				if scope != nil {
-					if len(scope.Name) > 0 {
-						eventAttrs["library.name"] = scope.Name
-					}
-					if len(scope.Version) > 0 {
-						eventAttrs["library.version"] = scope.Version
+						attrs["body"] = val
 					}
 				}
 
-				// copy resource attributes to event attributes
+				// copy resource & scope attributes then log attributes
 				for k, v := range resourceAttrs {
-					eventAttrs[k] = v
+					attrs[k] = v
 				}
-
-				// copy span attributes after resource attributes so span attributes write last and are preserved
+				for k, v := range scopeAttrs {
+					attrs[k] = v
+				}
 				if log.Attributes != nil {
-					addAttributesToMap(eventAttrs, log.Attributes)
+					addAttributesToMap(attrs, log.Attributes)
 				}
 
 				// Now we need to wrap the eventAttrs in an event so we can specify the timestamp
 				// which is the StartTime as a time.Time object
 				timestamp := time.Unix(0, int64(log.TimeUnixNano)).UTC()
 				events = append(events, Event{
-					Attributes: eventAttrs,
+					Attributes: attrs,
 					Timestamp:  timestamp,
 				})
 			}
