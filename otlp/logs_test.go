@@ -280,8 +280,8 @@ func TestTranslateHttpLogsRequest(t *testing.T) {
 			assert.Equal(t, "my-service", ev.Attributes["service.name"])
 			assert.Equal(t, "span_attr_val", ev.Attributes["span_attr"])
 			assert.Equal(t, "resource_attr_val", ev.Attributes["resource_attr"])
-			assert.Equal(t, "instr_scope_name", ev.Attributes["instrumentation_scope.name"])
-			assert.Equal(t, "instr_scope_version", ev.Attributes["instrumentation_scope.version"])
+			assert.Equal(t, "instr_scope_name", ev.Attributes["library.name"])
+			assert.Equal(t, "instr_scope_version", ev.Attributes["library.version"])
 			assert.Equal(t, "scope_attr_val", ev.Attributes["scope_attr"])
 		}
 	}
