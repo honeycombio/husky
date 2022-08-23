@@ -135,13 +135,13 @@ func TestValidateTracesHeaders(t *testing.T) {
 		{apikey: "abc123DEF456ghi789jklm", dataset: "", contentType: "application/protobuf", err: nil},
 		{apikey: "", dataset: "dataset", contentType: "", err: ErrMissingAPIKeyHeader},
 		{apikey: "apikey", dataset: "dataset", contentType: "", err: ErrInvalidContentType},
-		{apikey: "apikey", dataset: "dataset", contentType: "application/json", err: ErrInvalidContentType},
 		{apikey: "apikey", dataset: "dataset", contentType: "application/javascript", err: ErrInvalidContentType},
 		{apikey: "apikey", dataset: "dataset", contentType: "application/xml", err: ErrInvalidContentType},
 		{apikey: "apikey", dataset: "dataset", contentType: "application/octet-stream", err: ErrInvalidContentType},
 		{apikey: "apikey", dataset: "dataset", contentType: "text-plain", err: ErrInvalidContentType},
 		{apikey: "apikey", dataset: "dataset", contentType: "application/protobuf", err: nil},
 		{apikey: "apikey", dataset: "dataset", contentType: "application/x-protobuf", err: nil},
+		{apikey: "apikey", dataset: "dataset", contentType: "application/json", err: nil},
 	}
 
 	for _, tc := range testCases {

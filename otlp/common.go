@@ -16,6 +16,7 @@ import (
 	resource "github.com/honeycombio/husky/proto/otlp/resource/v1"
 	"github.com/klauspost/compress/zstd"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 )
@@ -82,10 +83,12 @@ func (ri *RequestInfo) ValidateTracesHeaders() error {
 	if ri.hasLegacyKey() && len(ri.Dataset) == 0 {
 		return ErrMissingDatasetHeader
 	}
-	if ri.ContentType != "application/protobuf" && ri.ContentType != "application/x-protobuf" {
+	switch ri.ContentType {
+	case "application/protobuf", "application/x-protobuf", "application/json":
+		return nil
+	default:
 		return ErrInvalidContentType
 	}
-	return nil
 }
 
 // ValidateMetricsHeaders validates required headers/metadata for a metric OTLP request
@@ -110,10 +113,12 @@ func (ri *RequestInfo) ValidateLogsHeaders() error {
 	if ri.hasLegacyKey() && len(ri.Dataset) == 0 {
 		return ErrMissingDatasetHeader
 	}
-	if ri.ContentType != "application/protobuf" && ri.ContentType != "application/x-protobuf" {
+	switch ri.ContentType {
+	case "application/protobuf", "application/x-protobuf", "application/json":
+		return nil
+	default:
 		return ErrInvalidContentType
 	}
-	return nil
 }
 
 // GetRequestInfoFromGrpcMetadata parses relevant gRPC metadata from an incoming request context
@@ -241,7 +246,7 @@ func getValue(value *common.AnyValue) interface{} {
 	return nil
 }
 
-func parseOtlpRequestBody(body io.ReadCloser, contentEncoding string, request protoreflect.ProtoMessage) error {
+func parseOtlpRequestBody(body io.ReadCloser, contentType string, contentEncoding string, request protoreflect.ProtoMessage) error {
 	defer body.Close()
 	bodyBytes, err := ioutil.ReadAll(body)
 	if err != nil {
@@ -274,7 +279,14 @@ func parseOtlpRequestBody(body io.ReadCloser, contentEncoding string, request pr
 		return err
 	}
 
-	err = proto.Unmarshal(bytes, request)
+	switch contentType {
+	case "application/protobuf", "application/x-protobuf":
+		err = proto.Unmarshal(bytes, request)
+	case "application/json":
+		err = protojson.Unmarshal(bytes, request)
+	default:
+		return ErrInvalidContentType
+	}
 	if err != nil {
 		return err
 	}

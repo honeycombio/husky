@@ -17,7 +17,7 @@ func TranslateLogsRequestFromReader(body io.ReadCloser, ri RequestInfo) (*Transl
 		return nil, err
 	}
 	request := &collectorLogs.ExportLogsServiceRequest{}
-	if err := parseOtlpRequestBody(body, ri.ContentEncoding, request); err != nil {
+	if err := parseOtlpRequestBody(body, ri.ContentType, ri.ContentEncoding, request); err != nil {
 		return nil, ErrFailedParseBody
 	}
 	return TranslateLogsRequest(request, ri)
