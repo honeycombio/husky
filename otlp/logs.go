@@ -2,6 +2,7 @@ package otlp
 
 import (
 	"encoding/hex"
+	"fmt"
 	"io"
 	"time"
 
@@ -62,6 +63,11 @@ func TranslateLogsRequest(request *collectorLogs.ExportLogsServiceRequest, ri Re
 					}
 				}
 
+				timeStamp := time.Unix(0, int64(log.TimeUnixNano)).UTC()
+
+				// Synthesize a name based on the timestamp since OTLP logs don't have a name
+				attrs["name"] = fmt.Sprintf("Log at %s", timeStamp)
+
 				// copy resource & scope attributes then log attributes
 				for k, v := range resourceAttrs {
 					attrs[k] = v
@@ -75,7 +81,7 @@ func TranslateLogsRequest(request *collectorLogs.ExportLogsServiceRequest, ri Re
 
 				// Now we need to wrap the eventAttrs in an event so we can specify the timestamp
 				// which is the StartTime as a time.Time object
-				timestamp := time.Unix(0, int64(log.TimeUnixNano)).UTC()
+				timestamp := timeStamp
 				events = append(events, Event{
 					Attributes: attrs,
 					Timestamp:  timestamp,
