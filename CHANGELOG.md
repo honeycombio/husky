@@ -1,5 +1,15 @@
 # Husky Changelog
 
+## 0.15.0 2022-08-24
+
+### Enhancements
+
+- Add support for translating otlp/json trace and log requests (#112) | [@MikeGoldsmith](https://github.com/MikeGoldsmith)
+
+### Fixed
+
+- Stop scope attributes from crossing scopes (#113) | [@MikeGoldsmith](https://github.com/MikeGoldsmith)
+
 ## 0.14.0 2022-08-16
 
 ### Enhancements
