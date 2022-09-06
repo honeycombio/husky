@@ -33,7 +33,34 @@ const (
 	defaultServiceName       = "unknown_service"
 )
 
-var legacyApiKeyPattern = regexp.MustCompile("^[0-9a-f]{32}$")
+var (
+	legacyApiKeyPattern = regexp.MustCompile("^[0-9a-f]{32}$")
+	// Incoming OpenTelemetry HTTP Content-Types (e.g. "application/protobuf") we support
+	supportedContentTypes = []string{
+		"application/protobuf",
+		"application/x-protobuf",
+		"application/json",
+	}
+	// A map populated by init() from supportedContentTypes for quick checking that a type is supported.
+	//
+	// Ex:
+	//     if checkSupportedContentType[request.contentType] {
+	//        // we support this type, proceed
+	//     } else {
+	//        // unsupported media type, probably return an error
+	//     }
+	//
+	// Ex:
+	//     switch
+	checkSupportedContentType map[string]bool
+)
+
+func init() {
+	checkSupportedContentType = make(map[string]bool)
+	for _, contentType := range supportedContentTypes {
+		checkSupportedContentType[contentType] = true
+	}
+}
 
 // TranslateOTLPRequestResult represents an OTLP request translated into Honeycomb-friendly structure
 // RequestSize is total byte size of the entire OTLP request
@@ -83,10 +110,9 @@ func (ri *RequestInfo) ValidateTracesHeaders() error {
 	if ri.hasLegacyKey() && len(ri.Dataset) == 0 {
 		return ErrMissingDatasetHeader
 	}
-	switch ri.ContentType {
-	case "application/protobuf", "application/x-protobuf", "application/json":
+	if checkSupportedContentType[ri.ContentType] {
 		return nil
-	default:
+	} else {
 		return ErrInvalidContentType
 	}
 }
@@ -99,10 +125,11 @@ func (ri *RequestInfo) ValidateMetricsHeaders() error {
 	if ri.hasLegacyKey() && len(ri.Dataset) == 0 {
 		return ErrMissingDatasetHeader
 	}
-	if ri.ContentType != "application/protobuf" && ri.ContentType != "application/x-protobuf" {
+	if checkSupportedContentType[ri.ContentType] {
+		return nil
+	} else {
 		return ErrInvalidContentType
 	}
-	return nil
 }
 
 // ValidateLogsHeaders validates required headers/metadata for a logs OTLP request
@@ -113,10 +140,9 @@ func (ri *RequestInfo) ValidateLogsHeaders() error {
 	if ri.hasLegacyKey() && len(ri.Dataset) == 0 {
 		return ErrMissingDatasetHeader
 	}
-	switch ri.ContentType {
-	case "application/protobuf", "application/x-protobuf", "application/json":
+	if checkSupportedContentType[ri.ContentType] {
 		return nil
-	default:
+	} else {
 		return ErrInvalidContentType
 	}
 }
