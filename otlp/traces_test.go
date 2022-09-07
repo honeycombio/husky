@@ -636,79 +636,7 @@ func TestGetSampleRateConversions(t *testing.T) {
 	}
 }
 
-func TestMissingServiceNameAttributeUsesDefault(t *testing.T) {
-	req := &collectortrace.ExportTraceServiceRequest{
-		ResourceSpans: []*trace.ResourceSpans{{
-			Resource: &resource.Resource{
-				Attributes: []*common.KeyValue{{
-					Key: "my-attribute",
-					Value: &common.AnyValue{
-						Value: &common.AnyValue_StringValue{StringValue: "hello"},
-					},
-				}},
-			},
-			ScopeSpans: []*trace.ScopeSpans{{
-				Spans: []*trace.Span{{
-					TraceId: test.RandomBytes(16),
-					SpanId:  test.RandomBytes(8),
-					Name:    "test_span_a",
-				}},
-			}},
-		}},
-	}
-
-	bodyBytes, err := proto.Marshal(req)
-	assert.Nil(t, err)
-
-	buf := new(bytes.Buffer)
-	buf.Write(bodyBytes)
-
-	body := io.NopCloser(strings.NewReader(buf.String()))
-	ri := RequestInfo{
-		ApiKey:      "abc123DEF456ghi789jklm",
-		Dataset:     "legacy-dataset",
-		ContentType: "application/protobuf",
-	}
-
-	result, err := TranslateTraceRequestFromReader(body, ri)
-	assert.Nil(t, err)
-	batch := result.Batches[0]
-	assert.Equal(t, "unknown_service", batch.Dataset)
-}
-
-func TestMissingServiceNameResourceUsesDefault(t *testing.T) {
-	req := &collectortrace.ExportTraceServiceRequest{
-		ResourceSpans: []*trace.ResourceSpans{{
-			ScopeSpans: []*trace.ScopeSpans{{
-				Spans: []*trace.Span{{
-					TraceId: test.RandomBytes(16),
-					SpanId:  test.RandomBytes(8),
-					Name:    "test_span_a",
-				}},
-			}},
-		}},
-	}
-
-	bodyBytes, err := proto.Marshal(req)
-	assert.Nil(t, err)
-
-	buf := new(bytes.Buffer)
-	buf.Write(bodyBytes)
-
-	body := io.NopCloser(strings.NewReader(buf.String()))
-	ri := RequestInfo{
-		ApiKey:      "abc123DEF456ghi789jklm",
-		Dataset:     "legacy-dataset",
-		ContentType: "application/protobuf",
-	}
-
-	result, err := TranslateTraceRequestFromReader(body, ri)
-	assert.Nil(t, err)
-	batch := result.Batches[0]
-	assert.Equal(t, "unknown_service", batch.Dataset)
-}
-
-func TestEmptyOrInvalidServiceNameAttributeUsesDefault(t *testing.T) {
+func TestDefaultServiceNameApplied(t *testing.T) {
 	testCases := []struct {
 		name     string
 		resource *resource.Resource
@@ -716,6 +644,17 @@ func TestEmptyOrInvalidServiceNameAttributeUsesDefault(t *testing.T) {
 		{
 			name:     "nil resource",
 			resource: nil,
+		},
+		{
+			name: "missing in resource",
+			resource: &resource.Resource{
+				Attributes: []*common.KeyValue{{
+					Key: "my-attribute",
+					Value: &common.AnyValue{
+						Value: &common.AnyValue_StringValue{StringValue: "hello"},
+					},
+				}},
+			},
 		},
 		{
 			name: "empty string",
@@ -778,20 +717,13 @@ func TestEmptyOrInvalidServiceNameAttributeUsesDefault(t *testing.T) {
 				}},
 			}
 
-			bodyBytes, err := proto.Marshal(req)
-			assert.Nil(t, err)
-
-			buf := new(bytes.Buffer)
-			buf.Write(bodyBytes)
-
-			body := io.NopCloser(strings.NewReader(buf.String()))
 			ri := RequestInfo{
 				ApiKey:      "abc123DEF456ghi789jklm",
 				Dataset:     "legacy-dataset",
 				ContentType: "application/protobuf",
 			}
 
-			result, err := TranslateTraceRequestFromReader(body, ri)
+			result, err := TranslateTraceRequest(req, ri)
 			assert.Nil(t, err)
 			batch := result.Batches[0]
 			assert.NotNil(t, batch.Dataset)
@@ -925,20 +857,13 @@ func TestServiceNameIsTrimmedForDataset(t *testing.T) {
 				}},
 			}
 
-			bodyBytes, err := proto.Marshal(req)
-			assert.Nil(t, err)
-
-			buf := new(bytes.Buffer)
-			buf.Write(bodyBytes)
-
-			body := io.NopCloser(strings.NewReader(buf.String()))
 			ri := RequestInfo{
 				ApiKey:      "abc123DEF456ghi789jklm",
 				Dataset:     "legacy-dataset",
 				ContentType: "application/protobuf",
 			}
 
-			result, err := TranslateTraceRequestFromReader(body, ri)
+			result, err := TranslateTraceRequest(req, ri)
 			assert.Nil(t, err)
 
 			assert.Equal(t, 1, len(result.Batches))
