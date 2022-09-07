@@ -43,6 +43,11 @@ var (
 	}
 )
 
+// List of HTTP Content Types supported for OTLP ingest.
+func GetSupportedContentTypes() []string {
+	return supportedContentTypes
+}
+
 // Check whether we support a given HTTP Content Type for OTLP.
 func IsContentTypeSupported(contentType string) bool {
 	for _, supportedType := range supportedContentTypes {
