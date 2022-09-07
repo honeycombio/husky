@@ -41,25 +41,16 @@ var (
 		"application/x-protobuf",
 		"application/json",
 	}
-	// A map populated by init() from supportedContentTypes for quick checking that a type is supported.
-	//
-	// Ex:
-	//     if checkSupportedContentType[request.contentType] {
-	//        // we support this type, proceed
-	//     } else {
-	//        // unsupported media type, probably return an error
-	//     }
-	//
-	// Ex:
-	//     switch
-	checkSupportedContentType map[string]bool
 )
 
-func init() {
-	checkSupportedContentType = make(map[string]bool)
-	for _, contentType := range supportedContentTypes {
-		checkSupportedContentType[contentType] = true
+// Check whether we support a given HTTP Content Type for OTLP.
+func IsContentTypeSupported(contentType string) bool {
+	for _, supportedType := range supportedContentTypes {
+		if contentType == supportedType {
+			return true
+		}
 	}
+	return false
 }
 
 // TranslateOTLPRequestResult represents an OTLP request translated into Honeycomb-friendly structure
@@ -110,7 +101,7 @@ func (ri *RequestInfo) ValidateTracesHeaders() error {
 	if ri.hasLegacyKey() && len(ri.Dataset) == 0 {
 		return ErrMissingDatasetHeader
 	}
-	if checkSupportedContentType[ri.ContentType] {
+	if IsContentTypeSupported(ri.ContentType) {
 		return nil
 	} else {
 		return ErrInvalidContentType
@@ -125,7 +116,7 @@ func (ri *RequestInfo) ValidateMetricsHeaders() error {
 	if ri.hasLegacyKey() && len(ri.Dataset) == 0 {
 		return ErrMissingDatasetHeader
 	}
-	if checkSupportedContentType[ri.ContentType] {
+	if IsContentTypeSupported(ri.ContentType) {
 		return nil
 	} else {
 		return ErrInvalidContentType
@@ -140,7 +131,7 @@ func (ri *RequestInfo) ValidateLogsHeaders() error {
 	if ri.hasLegacyKey() && len(ri.Dataset) == 0 {
 		return ErrMissingDatasetHeader
 	}
-	if checkSupportedContentType[ri.ContentType] {
+	if IsContentTypeSupported(ri.ContentType) {
 		return nil
 	} else {
 		return ErrInvalidContentType
