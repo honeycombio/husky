@@ -111,7 +111,7 @@ func TestTranslateGrpcTraceRequest(t *testing.T) {
 		expectedDataset string
 	}{
 		{
-			Name: "Legacy",
+			Name: "Classic",
 			ri: RequestInfo{
 				ApiKey:      "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
 				Dataset:     "legacy-dataset",
@@ -120,7 +120,7 @@ func TestTranslateGrpcTraceRequest(t *testing.T) {
 			expectedDataset: "legacy-dataset",
 		},
 		{
-			Name: "NonLegacy",
+			Name: "E&S",
 			ri: RequestInfo{
 				ApiKey:      "abc123DEF456ghi789jklm",
 				Dataset:     "legacy-dataset",
@@ -391,7 +391,7 @@ func TestTranslateHttpTraceRequest(t *testing.T) {
 		expectedDataset string
 	}{
 		{
-			Name: "Legacy",
+			Name: "Classic",
 			ri: RequestInfo{
 				ApiKey:  "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
 				Dataset: "legacy-dataset",
@@ -399,7 +399,7 @@ func TestTranslateHttpTraceRequest(t *testing.T) {
 			expectedDataset: "legacy-dataset",
 		},
 		{
-			Name: "NonLegacy",
+			Name: "E&S",
 			ri: RequestInfo{
 				ApiKey:  "abc123DEF456ghi789jklm",
 				Dataset: "legacy-dataset",
