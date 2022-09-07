@@ -2,7 +2,6 @@ package otlp
 
 import (
 	"bytes"
-	"compress/gzip"
 	"encoding/hex"
 	"io"
 	"math"
@@ -16,14 +15,12 @@ import (
 	resource "github.com/honeycombio/husky/proto/otlp/resource/v1"
 	trace "github.com/honeycombio/husky/proto/otlp/trace/v1"
 	"github.com/honeycombio/husky/test"
-	"github.com/klauspost/compress/zstd"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 )
 
-func TestTranslateLegacyGrpcTraceRequest(t *testing.T) {
+func TestTranslateGrpcTraceRequest(t *testing.T) {
 	traceID := test.RandomBytes(16)
 	spanID := test.RandomBytes(8)
 	startTimestamp := time.Now()
@@ -32,11 +29,7 @@ func TestTranslateLegacyGrpcTraceRequest(t *testing.T) {
 	linkedTraceID := test.RandomBytes(16)
 	linkedSpanID := test.RandomBytes(8)
 
-	ri := RequestInfo{
-		ApiKey:      "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
-		Dataset:     "legacy-dataset",
-		ContentType: "application/protobuf",
-	}
+	testServiceName := "my-service"
 
 	req := &collectortrace.ExportTraceServiceRequest{
 		ResourceSpans: []*trace.ResourceSpans{{
@@ -49,7 +42,7 @@ func TestTranslateLegacyGrpcTraceRequest(t *testing.T) {
 				}, {
 					Key: "service.name",
 					Value: &common.AnyValue{
-						Value: &common.AnyValue_StringValue{StringValue: "my-service"},
+						Value: &common.AnyValue_StringValue{StringValue: testServiceName},
 					},
 				}},
 			},
@@ -112,196 +105,84 @@ func TestTranslateLegacyGrpcTraceRequest(t *testing.T) {
 		}},
 	}
 
-	result, err := TranslateTraceRequest(req, ri)
-	assert.Nil(t, err)
-	assert.Equal(t, proto.Size(req), result.RequestSize)
-	assert.Equal(t, 1, len(result.Batches))
-	batch := result.Batches[0]
-	assert.Equal(t, "legacy-dataset", batch.Dataset)
-	assert.Equal(t, proto.Size(req.ResourceSpans[0]), batch.SizeBytes)
-	events := batch.Events
-	assert.Equal(t, 3, len(events))
-
-	// span
-	ev := events[0]
-	assert.Equal(t, startTimestamp.Nanosecond(), ev.Timestamp.Nanosecond())
-	assert.Equal(t, int32(100), ev.SampleRate)
-	assert.Equal(t, BytesToTraceID(traceID), ev.Attributes["trace.trace_id"])
-	assert.Equal(t, hex.EncodeToString(spanID), ev.Attributes["trace.span_id"])
-	assert.Equal(t, "trace", ev.Attributes["meta.signal_type"])
-	assert.Equal(t, "client", ev.Attributes["type"])
-	assert.Equal(t, "client", ev.Attributes["span.kind"])
-	assert.Equal(t, "test_span", ev.Attributes["name"])
-	assert.Equal(t, "my-service", ev.Attributes["service.name"])
-	assert.Equal(t, float64(endTimestamp.Nanosecond()-startTimestamp.Nanosecond())/float64(time.Millisecond), ev.Attributes["duration_ms"])
-	assert.Equal(t, int(trace.Status_STATUS_CODE_OK), ev.Attributes["status_code"])
-	assert.Equal(t, "span_attr_val", ev.Attributes["span_attr"])
-	assert.Equal(t, "resource_attr_val", ev.Attributes["resource_attr"])
-	assert.Equal(t, 1, ev.Attributes["span.num_links"])
-	assert.Equal(t, 1, ev.Attributes["span.num_events"])
-	assert.Equal(t, "library-name", ev.Attributes["library.name"])
-	assert.Equal(t, "library-version", ev.Attributes["library.version"])
-	assert.Equal(t, "scope_attr_val", ev.Attributes["scope_attr"])
-
-	// event
-	ev = events[1]
-	assert.Equal(t, BytesToTraceID(traceID), ev.Attributes["trace.trace_id"])
-	assert.Equal(t, int32(0), ev.SampleRate)
-	assert.Equal(t, hex.EncodeToString(spanID), ev.Attributes["trace.parent_id"])
-	assert.Equal(t, "trace", ev.Attributes["meta.signal_type"])
-	assert.Equal(t, "span_event", ev.Attributes["name"])
-	assert.Equal(t, "test_span", ev.Attributes["parent_name"])
-	assert.Equal(t, "span_event", ev.Attributes["meta.annotation_type"])
-	assert.Equal(t, "span_event_attr_val", ev.Attributes["span_event_attr"])
-	assert.Equal(t, "resource_attr_val", ev.Attributes["resource_attr"])
-	assert.Equal(t, "library-name", ev.Attributes["library.name"])
-	assert.Equal(t, "library-version", ev.Attributes["library.version"])
-	assert.Equal(t, "scope_attr_val", ev.Attributes["scope_attr"])
-
-	// link
-	ev = events[2]
-	assert.Equal(t, startTimestamp.Nanosecond(), ev.Timestamp.Nanosecond())
-	assert.Equal(t, int32(0), ev.SampleRate)
-	assert.Equal(t, BytesToTraceID(traceID), ev.Attributes["trace.trace_id"])
-	assert.Equal(t, hex.EncodeToString(spanID), ev.Attributes["trace.parent_id"])
-	assert.Equal(t, BytesToTraceID(linkedTraceID), ev.Attributes["trace.link.trace_id"])
-	assert.Equal(t, hex.EncodeToString(linkedSpanID), ev.Attributes["trace.link.span_id"])
-	assert.Equal(t, "trace", ev.Attributes["meta.signal_type"])
-	assert.Equal(t, "test_span", ev.Attributes["parent_name"])
-	assert.Equal(t, "link", ev.Attributes["meta.annotation_type"])
-	assert.Equal(t, "span_link_attr_val", ev.Attributes["span_link_attr"])
-	assert.Equal(t, "resource_attr_val", ev.Attributes["resource_attr"])
-	assert.Equal(t, "library-name", ev.Attributes["library.name"])
-	assert.Equal(t, "library-version", ev.Attributes["library.version"])
-	assert.Equal(t, "scope_attr_val", ev.Attributes["scope_attr"])
-}
-
-func TestTranslateGrpcTraceRequest(t *testing.T) {
-	traceID := test.RandomBytes(16)
-	spanID := test.RandomBytes(8)
-	startTimestamp := time.Now()
-	endTimestamp := startTimestamp.Add(time.Millisecond * 5)
-
-	linkedTraceID := test.RandomBytes(16)
-	linkedSpanID := test.RandomBytes(8)
-
-	ri := RequestInfo{
-		ApiKey:      "abc123DEF456ghi789jklm",
-		Dataset:     "legacy-dataset",
-		ContentType: "application/protobuf",
-	}
-
-	req := &collectortrace.ExportTraceServiceRequest{
-		ResourceSpans: []*trace.ResourceSpans{{
-			Resource: &resource.Resource{
-				Attributes: []*common.KeyValue{{
-					Key: "resource_attr",
-					Value: &common.AnyValue{
-						Value: &common.AnyValue_StringValue{StringValue: "resource_attr_val"},
-					},
-				}, {
-					Key: "service.name",
-					Value: &common.AnyValue{
-						Value: &common.AnyValue_StringValue{StringValue: "my-service"},
-					},
-				}},
+	testCases := []struct {
+		Name            string
+		ri              RequestInfo
+		expectedDataset string
+	}{
+		{
+			Name: "Legacy",
+			ri: RequestInfo{
+				ApiKey:      "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+				Dataset:     "legacy-dataset",
+				ContentType: "application/protobuf",
 			},
-			ScopeSpans: []*trace.ScopeSpans{{
-				Spans: []*trace.Span{{
-					TraceId:           traceID,
-					SpanId:            spanID,
-					Name:              "test_span",
-					Kind:              trace.Span_SPAN_KIND_CLIENT,
-					Status:            &trace.Status{Code: trace.Status_STATUS_CODE_OK},
-					StartTimeUnixNano: uint64(startTimestamp.Nanosecond()),
-					EndTimeUnixNano:   uint64(endTimestamp.Nanosecond()),
-					Attributes: []*common.KeyValue{
-						{
-							Key: "span_attr",
-							Value: &common.AnyValue{
-								Value: &common.AnyValue_StringValue{StringValue: "span_attr_val"},
-							},
-						},
-						{
-							Key: "sampleRate",
-							Value: &common.AnyValue{
-								Value: &common.AnyValue_IntValue{IntValue: 100},
-							},
-						},
-					},
-					Events: []*trace.Span_Event{{
-						Name: "span_event",
-						Attributes: []*common.KeyValue{{
-							Key: "span_event_attr",
-							Value: &common.AnyValue{
-								Value: &common.AnyValue_StringValue{StringValue: "span_event_attr_val"},
-							},
-						}},
-					}},
-					Links: []*trace.Span_Link{{
-						TraceId: linkedTraceID,
-						SpanId:  linkedSpanID,
-						Attributes: []*common.KeyValue{{
-							Key: "span_link_attr",
-							Value: &common.AnyValue{
-								Value: &common.AnyValue_StringValue{StringValue: "span_link_attr_val"},
-							},
-						}},
-					}},
-				}},
-			}},
-		}},
+			expectedDataset: "legacy-dataset",
+		},
+		{
+			Name: "NonLegacy",
+			ri: RequestInfo{
+				ApiKey:      "abc123DEF456ghi789jklm",
+				Dataset:     "legacy-dataset",
+				ContentType: "application/protobuf",
+			},
+			expectedDataset: testServiceName,
+		},
 	}
+	for _, tC := range testCases {
+		t.Run(tC.Name, func(t *testing.T) {
 
-	result, err := TranslateTraceRequest(req, ri)
-	assert.Nil(t, err)
-	assert.Equal(t, proto.Size(req), result.RequestSize)
-	assert.Equal(t, 1, len(result.Batches))
-	batch := result.Batches[0]
-	assert.Equal(t, "my-service", batch.Dataset)
-	assert.Equal(t, proto.Size(req.ResourceSpans[0]), batch.SizeBytes)
-	events := batch.Events
-	assert.Equal(t, 3, len(events))
+			result, err := TranslateTraceRequest(req, tC.ri)
+			assert.Nil(t, err)
+			assert.Equal(t, proto.Size(req), result.RequestSize)
+			assert.Equal(t, 1, len(result.Batches))
+			batch := result.Batches[0]
+			assert.Equal(t, tC.expectedDataset, batch.Dataset)
+			assert.Equal(t, proto.Size(req.ResourceSpans[0]), batch.SizeBytes)
+			events := batch.Events
+			assert.Equal(t, 3, len(events))
 
-	// span
-	ev := events[0]
-	assert.Equal(t, startTimestamp.Nanosecond(), ev.Timestamp.Nanosecond())
-	assert.Equal(t, int32(100), ev.SampleRate)
-	assert.Equal(t, BytesToTraceID(traceID), ev.Attributes["trace.trace_id"])
-	assert.Equal(t, hex.EncodeToString(spanID), ev.Attributes["trace.span_id"])
-	assert.Equal(t, "client", ev.Attributes["type"])
-	assert.Equal(t, "client", ev.Attributes["span.kind"])
-	assert.Equal(t, "test_span", ev.Attributes["name"])
-	assert.Equal(t, float64(endTimestamp.Nanosecond()-startTimestamp.Nanosecond())/float64(time.Millisecond), ev.Attributes["duration_ms"])
-	assert.Equal(t, int(trace.Status_STATUS_CODE_OK), ev.Attributes["status_code"])
-	assert.Equal(t, "span_attr_val", ev.Attributes["span_attr"])
-	assert.Equal(t, "resource_attr_val", ev.Attributes["resource_attr"])
-	assert.Equal(t, 1, ev.Attributes["span.num_links"])
-	assert.Equal(t, 1, ev.Attributes["span.num_events"])
+			// span
+			ev := events[0]
+			assert.Equal(t, startTimestamp.Nanosecond(), ev.Timestamp.Nanosecond())
+			assert.Equal(t, int32(100), ev.SampleRate)
+			assert.Equal(t, BytesToTraceID(traceID), ev.Attributes["trace.trace_id"])
+			assert.Equal(t, hex.EncodeToString(spanID), ev.Attributes["trace.span_id"])
+			assert.Equal(t, "client", ev.Attributes["type"])
+			assert.Equal(t, "client", ev.Attributes["span.kind"])
+			assert.Equal(t, "test_span", ev.Attributes["name"])
+			assert.Equal(t, float64(endTimestamp.Nanosecond()-startTimestamp.Nanosecond())/float64(time.Millisecond), ev.Attributes["duration_ms"])
+			assert.Equal(t, int(trace.Status_STATUS_CODE_OK), ev.Attributes["status_code"])
+			assert.Equal(t, "span_attr_val", ev.Attributes["span_attr"])
+			assert.Equal(t, "resource_attr_val", ev.Attributes["resource_attr"])
+			assert.Equal(t, 1, ev.Attributes["span.num_links"])
+			assert.Equal(t, 1, ev.Attributes["span.num_events"])
 
-	// event
-	ev = events[1]
-	assert.Equal(t, BytesToTraceID(traceID), ev.Attributes["trace.trace_id"])
-	assert.Equal(t, int32(0), ev.SampleRate)
-	assert.Equal(t, hex.EncodeToString(spanID), ev.Attributes["trace.parent_id"])
-	assert.Equal(t, "span_event", ev.Attributes["name"])
-	assert.Equal(t, "test_span", ev.Attributes["parent_name"])
-	assert.Equal(t, "span_event", ev.Attributes["meta.annotation_type"])
-	assert.Equal(t, "span_event_attr_val", ev.Attributes["span_event_attr"])
-	assert.Equal(t, "resource_attr_val", ev.Attributes["resource_attr"])
+			// event
+			ev = events[1]
+			assert.Equal(t, BytesToTraceID(traceID), ev.Attributes["trace.trace_id"])
+			assert.Equal(t, int32(0), ev.SampleRate)
+			assert.Equal(t, hex.EncodeToString(spanID), ev.Attributes["trace.parent_id"])
+			assert.Equal(t, "span_event", ev.Attributes["name"])
+			assert.Equal(t, "test_span", ev.Attributes["parent_name"])
+			assert.Equal(t, "span_event", ev.Attributes["meta.annotation_type"])
+			assert.Equal(t, "span_event_attr_val", ev.Attributes["span_event_attr"])
+			assert.Equal(t, "resource_attr_val", ev.Attributes["resource_attr"])
 
-	// link
-	ev = events[2]
-	assert.Equal(t, startTimestamp.Nanosecond(), ev.Timestamp.Nanosecond())
-	assert.Equal(t, int32(0), ev.SampleRate)
-	assert.Equal(t, BytesToTraceID(traceID), ev.Attributes["trace.trace_id"])
-	assert.Equal(t, hex.EncodeToString(spanID), ev.Attributes["trace.parent_id"])
-	assert.Equal(t, BytesToTraceID(linkedTraceID), ev.Attributes["trace.link.trace_id"])
-	assert.Equal(t, hex.EncodeToString(linkedSpanID), ev.Attributes["trace.link.span_id"])
-	assert.Equal(t, "test_span", ev.Attributes["parent_name"])
-	assert.Equal(t, "link", ev.Attributes["meta.annotation_type"])
-	assert.Equal(t, "span_link_attr_val", ev.Attributes["span_link_attr"])
-	assert.Equal(t, "resource_attr_val", ev.Attributes["resource_attr"])
+			// link
+			ev = events[2]
+			assert.Equal(t, startTimestamp.Nanosecond(), ev.Timestamp.Nanosecond())
+			assert.Equal(t, int32(0), ev.SampleRate)
+			assert.Equal(t, BytesToTraceID(traceID), ev.Attributes["trace.trace_id"])
+			assert.Equal(t, hex.EncodeToString(spanID), ev.Attributes["trace.parent_id"])
+			assert.Equal(t, BytesToTraceID(linkedTraceID), ev.Attributes["trace.link.trace_id"])
+			assert.Equal(t, hex.EncodeToString(linkedSpanID), ev.Attributes["trace.link.span_id"])
+			assert.Equal(t, "test_span", ev.Attributes["parent_name"])
+			assert.Equal(t, "link", ev.Attributes["meta.annotation_type"])
+			assert.Equal(t, "span_link_attr_val", ev.Attributes["span_link_attr"])
+			assert.Equal(t, "resource_attr_val", ev.Attributes["resource_attr"])
+		})
+	}
 }
 
 func TestTranslateGrpcTraceRequestFromMultipleServices(t *testing.T) {
@@ -439,134 +320,6 @@ func TestTranslateGrpcTraceRequestFromMultipleLibraries(t *testing.T) {
 	assert.Nil(t, third_event.Attributes["library.version"], "A library span with no library version shouldn't have a version.")
 }
 
-func TestTranslateLegacyHttpTraceRequest(t *testing.T) {
-	traceID := test.RandomBytes(16)
-	spanID := test.RandomBytes(8)
-	startTimestamp := time.Now()
-	endTimestamp := startTimestamp.Add(time.Millisecond * 5)
-
-	linkedTraceID := test.RandomBytes(16)
-	linkedSpanID := test.RandomBytes(8)
-
-	req := &collectortrace.ExportTraceServiceRequest{
-		ResourceSpans: []*trace.ResourceSpans{{
-			Resource: &resource.Resource{
-				Attributes: []*common.KeyValue{{
-					Key: "resource_attr",
-					Value: &common.AnyValue{
-						Value: &common.AnyValue_StringValue{StringValue: "resource_attr_val"},
-					},
-				}, {
-					Key: "service.name",
-					Value: &common.AnyValue{
-						Value: &common.AnyValue_StringValue{StringValue: "my-service"},
-					},
-				}},
-			},
-			ScopeSpans: []*trace.ScopeSpans{{
-				Spans: []*trace.Span{{
-					TraceId:           traceID,
-					SpanId:            spanID,
-					Name:              "test_span",
-					Kind:              trace.Span_SPAN_KIND_CLIENT,
-					Status:            &trace.Status{Code: trace.Status_STATUS_CODE_OK},
-					StartTimeUnixNano: uint64(startTimestamp.Nanosecond()),
-					EndTimeUnixNano:   uint64(endTimestamp.Nanosecond()),
-					Attributes: []*common.KeyValue{{
-						Key: "span_attr",
-						Value: &common.AnyValue{
-							Value: &common.AnyValue_StringValue{StringValue: "span_attr_val"},
-						},
-					}},
-					Events: []*trace.Span_Event{{
-						Name: "span_event",
-						Attributes: []*common.KeyValue{{
-							Key: "span_event_attr",
-							Value: &common.AnyValue{
-								Value: &common.AnyValue_StringValue{StringValue: "span_event_attr_val"},
-							},
-						}},
-					}},
-					Links: []*trace.Span_Link{{
-						TraceId: linkedTraceID,
-						SpanId:  linkedSpanID,
-						Attributes: []*common.KeyValue{{
-							Key: "span_link_attr",
-							Value: &common.AnyValue{
-								Value: &common.AnyValue_StringValue{StringValue: "span_link_attr_val"},
-							},
-						}},
-					}},
-				}},
-			}},
-		}},
-	}
-
-	for _, testCaseContentType := range GetSupportedContentTypes() {
-		t.Run(testCaseNameForContentType(testCaseContentType), func(t *testing.T) {
-			for _, testCaseContentEncoding := range GetSupportedContentEncodings() {
-				t.Run(testCaseNameForEncoding(testCaseContentEncoding), func(t *testing.T) {
-
-					ri := RequestInfo{
-						ApiKey:          "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
-						Dataset:         "legacy-dataset",
-						ContentType:     testCaseContentType,
-						ContentEncoding: testCaseContentEncoding,
-					}
-
-					body, err := prepareOtlpRequestHttpBody(req, testCaseContentType, testCaseContentEncoding)
-					require.NoError(t, err, "Womp womp. Ought to have been able to turn the OTLP trace request into an HTTP body.")
-
-					result, err := TranslateTraceRequestFromReader(io.NopCloser(strings.NewReader(body)), ri)
-					assert.Nil(t, err)
-					assert.Equal(t, proto.Size(req), result.RequestSize)
-					assert.Equal(t, 1, len(result.Batches))
-					batch := result.Batches[0]
-					assert.Equal(t, "legacy-dataset", batch.Dataset)
-					assert.Equal(t, proto.Size(req.ResourceSpans[0]), batch.SizeBytes)
-					events := batch.Events
-					assert.Equal(t, 3, len(events))
-
-					// span
-					ev := events[0]
-					assert.Equal(t, startTimestamp.Nanosecond(), ev.Timestamp.Nanosecond())
-					assert.Equal(t, BytesToTraceID(traceID), ev.Attributes["trace.trace_id"])
-					assert.Equal(t, hex.EncodeToString(spanID), ev.Attributes["trace.span_id"])
-					assert.Equal(t, "client", ev.Attributes["type"])
-					assert.Equal(t, "client", ev.Attributes["span.kind"])
-					assert.Equal(t, "test_span", ev.Attributes["name"])
-					assert.Equal(t, "my-service", ev.Attributes["service.name"])
-					assert.Equal(t, float64(endTimestamp.Nanosecond()-startTimestamp.Nanosecond())/float64(time.Millisecond), ev.Attributes["duration_ms"])
-					assert.Equal(t, int(trace.Status_STATUS_CODE_OK), ev.Attributes["status_code"])
-					assert.Equal(t, "span_attr_val", ev.Attributes["span_attr"])
-					assert.Equal(t, "resource_attr_val", ev.Attributes["resource_attr"])
-
-					// event
-					ev = events[1]
-					assert.Equal(t, BytesToTraceID(traceID), ev.Attributes["trace.trace_id"])
-					assert.Equal(t, hex.EncodeToString(spanID), ev.Attributes["trace.parent_id"])
-					assert.Equal(t, "span_event", ev.Attributes["name"])
-					assert.Equal(t, "test_span", ev.Attributes["parent_name"])
-					assert.Equal(t, "span_event", ev.Attributes["meta.annotation_type"])
-					assert.Equal(t, "span_event_attr_val", ev.Attributes["span_event_attr"])
-					assert.Equal(t, "resource_attr_val", ev.Attributes["resource_attr"])
-
-					// link
-					ev = events[2]
-					assert.Equal(t, BytesToTraceID(traceID), ev.Attributes["trace.trace_id"])
-					assert.Equal(t, hex.EncodeToString(spanID), ev.Attributes["trace.parent_id"])
-					assert.Equal(t, BytesToTraceID(linkedTraceID), ev.Attributes["trace.link.trace_id"])
-					assert.Equal(t, hex.EncodeToString(linkedSpanID), ev.Attributes["trace.link.span_id"])
-					assert.Equal(t, "test_span", ev.Attributes["parent_name"])
-					assert.Equal(t, "link", ev.Attributes["meta.annotation_type"])
-					assert.Equal(t, "span_link_attr_val", ev.Attributes["span_link_attr"])
-					assert.Equal(t, "resource_attr_val", ev.Attributes["resource_attr"])
-				})
-			}
-		})
-	}
-}
-
 func TestTranslateHttpTraceRequest(t *testing.T) {
 	traceID := test.RandomBytes(16)
 	spanID := test.RandomBytes(8)
@@ -576,6 +329,8 @@ func TestTranslateHttpTraceRequest(t *testing.T) {
 	linkedTraceID := test.RandomBytes(16)
 	linkedSpanID := test.RandomBytes(8)
 
+	testServiceName := "my-service"
+
 	req := &collectortrace.ExportTraceServiceRequest{
 		ResourceSpans: []*trace.ResourceSpans{{
 			Resource: &resource.Resource{
@@ -587,7 +342,7 @@ func TestTranslateHttpTraceRequest(t *testing.T) {
 				}, {
 					Key: "service.name",
 					Value: &common.AnyValue{
-						Value: &common.AnyValue_StringValue{StringValue: "my-service"},
+						Value: &common.AnyValue_StringValue{StringValue: testServiceName},
 					},
 				}},
 			},
@@ -630,86 +385,91 @@ func TestTranslateHttpTraceRequest(t *testing.T) {
 		}},
 	}
 
-	for _, contentType := range []string{"application/protobuf", "application/json"} {
-		var bodyBytes []byte
-		var err error
-		if contentType == "application/protobuf" {
-			bodyBytes, err = proto.Marshal(req)
-		} else {
-			bodyBytes, err = protojson.Marshal(req)
-		}
-		assert.Nil(t, err)
+	testCases := []struct {
+		Name            string
+		ri              RequestInfo
+		expectedDataset string
+	}{
+		{
+			Name: "Legacy",
+			ri: RequestInfo{
+				ApiKey:  "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+				Dataset: "legacy-dataset",
+			},
+			expectedDataset: "legacy-dataset",
+		},
+		{
+			Name: "NonLegacy",
+			ri: RequestInfo{
+				ApiKey:  "abc123DEF456ghi789jklm",
+				Dataset: "legacy-dataset",
+			},
+			expectedDataset: testServiceName,
+		},
+	}
 
-		for _, encoding := range []string{"", "gzip", "zstd"} {
-			t.Run(encoding, func(t *testing.T) {
-				buf := new(bytes.Buffer)
-				switch encoding {
-				case "gzip":
-					w := gzip.NewWriter(buf)
-					w.Write(bodyBytes)
-					w.Close()
-				case "zstd":
-					w, _ := zstd.NewWriter(buf)
-					w.Write(bodyBytes)
-					w.Close()
-				default:
-					buf.Write(bodyBytes)
-				}
+	for _, tC := range testCases {
+		t.Run(tC.Name, func(t *testing.T) {
+			for _, testCaseContentType := range GetSupportedContentTypes() {
+				t.Run(testCaseNameForContentType(testCaseContentType), func(t *testing.T) {
+					for _, testCaseContentEncoding := range GetSupportedContentEncodings() {
+						t.Run(testCaseNameForEncoding(testCaseContentEncoding), func(t *testing.T) {
 
-				body := io.NopCloser(strings.NewReader(buf.String()))
-				ri := RequestInfo{
-					ApiKey:          "abc123DEF456ghi789jklm",
-					Dataset:         "legacy-dataset",
-					ContentType:     contentType,
-					ContentEncoding: encoding,
-				}
+							tC.ri.ContentType = testCaseContentType
+							tC.ri.ContentEncoding = testCaseContentEncoding
 
-				result, err := TranslateTraceRequestFromReader(body, ri)
-				assert.Nil(t, err)
-				assert.Equal(t, proto.Size(req), result.RequestSize)
-				assert.Equal(t, 1, len(result.Batches))
-				batch := result.Batches[0]
-				assert.Equal(t, "my-service", batch.Dataset)
-				assert.Equal(t, proto.Size(req.ResourceSpans[0]), batch.SizeBytes)
-				events := batch.Events
-				assert.Equal(t, 3, len(events))
+							body, err := prepareOtlpRequestHttpBody(req, testCaseContentType, testCaseContentEncoding)
+							require.NoError(t, err, "Womp womp. Ought to have been able to turn the OTLP trace request into an HTTP body.")
 
-				// span
-				ev := events[0]
-				assert.Equal(t, startTimestamp.Nanosecond(), ev.Timestamp.Nanosecond())
-				assert.Equal(t, BytesToTraceID(traceID), ev.Attributes["trace.trace_id"])
-				assert.Equal(t, hex.EncodeToString(spanID), ev.Attributes["trace.span_id"])
-				assert.Equal(t, "client", ev.Attributes["type"])
-				assert.Equal(t, "client", ev.Attributes["span.kind"])
-				assert.Equal(t, "test_span", ev.Attributes["name"])
-				assert.Equal(t, "my-service", ev.Attributes["service.name"])
-				assert.Equal(t, float64(endTimestamp.Nanosecond()-startTimestamp.Nanosecond())/float64(time.Millisecond), ev.Attributes["duration_ms"])
-				assert.Equal(t, int(trace.Status_STATUS_CODE_OK), ev.Attributes["status_code"])
-				assert.Equal(t, "span_attr_val", ev.Attributes["span_attr"])
-				assert.Equal(t, "resource_attr_val", ev.Attributes["resource_attr"])
+							result, err := TranslateTraceRequestFromReader(io.NopCloser(strings.NewReader(body)), tC.ri)
+							assert.Nil(t, err)
+							assert.Equal(t, proto.Size(req), result.RequestSize)
+							assert.Equal(t, 1, len(result.Batches))
+							batch := result.Batches[0]
+							assert.Equal(t, tC.expectedDataset, batch.Dataset)
+							assert.Equal(t, proto.Size(req.ResourceSpans[0]), batch.SizeBytes)
+							events := batch.Events
+							assert.Equal(t, 3, len(events))
 
-				// event
-				ev = events[1]
-				assert.Equal(t, BytesToTraceID(traceID), ev.Attributes["trace.trace_id"])
-				assert.Equal(t, hex.EncodeToString(spanID), ev.Attributes["trace.parent_id"])
-				assert.Equal(t, "span_event", ev.Attributes["name"])
-				assert.Equal(t, "test_span", ev.Attributes["parent_name"])
-				assert.Equal(t, "span_event", ev.Attributes["meta.annotation_type"])
-				assert.Equal(t, "span_event_attr_val", ev.Attributes["span_event_attr"])
-				assert.Equal(t, "resource_attr_val", ev.Attributes["resource_attr"])
+							// span
+							ev := events[0]
+							assert.Equal(t, startTimestamp.Nanosecond(), ev.Timestamp.Nanosecond())
+							assert.Equal(t, BytesToTraceID(traceID), ev.Attributes["trace.trace_id"])
+							assert.Equal(t, hex.EncodeToString(spanID), ev.Attributes["trace.span_id"])
+							assert.Equal(t, "client", ev.Attributes["type"])
+							assert.Equal(t, "client", ev.Attributes["span.kind"])
+							assert.Equal(t, "test_span", ev.Attributes["name"])
+							assert.Equal(t, "my-service", ev.Attributes["service.name"])
+							assert.Equal(t, float64(endTimestamp.Nanosecond()-startTimestamp.Nanosecond())/float64(time.Millisecond), ev.Attributes["duration_ms"])
+							assert.Equal(t, int(trace.Status_STATUS_CODE_OK), ev.Attributes["status_code"])
+							assert.Equal(t, "span_attr_val", ev.Attributes["span_attr"])
+							assert.Equal(t, "resource_attr_val", ev.Attributes["resource_attr"])
 
-				// link
-				ev = events[2]
-				assert.Equal(t, BytesToTraceID(traceID), ev.Attributes["trace.trace_id"])
-				assert.Equal(t, hex.EncodeToString(spanID), ev.Attributes["trace.parent_id"])
-				assert.Equal(t, BytesToTraceID(linkedTraceID), ev.Attributes["trace.link.trace_id"])
-				assert.Equal(t, hex.EncodeToString(linkedSpanID), ev.Attributes["trace.link.span_id"])
-				assert.Equal(t, "test_span", ev.Attributes["parent_name"])
-				assert.Equal(t, "link", ev.Attributes["meta.annotation_type"])
-				assert.Equal(t, "span_link_attr_val", ev.Attributes["span_link_attr"])
-				assert.Equal(t, "resource_attr_val", ev.Attributes["resource_attr"])
-			})
-		}
+							// event
+							ev = events[1]
+							assert.Equal(t, BytesToTraceID(traceID), ev.Attributes["trace.trace_id"])
+							assert.Equal(t, hex.EncodeToString(spanID), ev.Attributes["trace.parent_id"])
+							assert.Equal(t, "span_event", ev.Attributes["name"])
+							assert.Equal(t, "test_span", ev.Attributes["parent_name"])
+							assert.Equal(t, "span_event", ev.Attributes["meta.annotation_type"])
+							assert.Equal(t, "span_event_attr_val", ev.Attributes["span_event_attr"])
+							assert.Equal(t, "resource_attr_val", ev.Attributes["resource_attr"])
+
+							// link
+							ev = events[2]
+							assert.Equal(t, BytesToTraceID(traceID), ev.Attributes["trace.trace_id"])
+							assert.Equal(t, hex.EncodeToString(spanID), ev.Attributes["trace.parent_id"])
+							assert.Equal(t, BytesToTraceID(linkedTraceID), ev.Attributes["trace.link.trace_id"])
+							assert.Equal(t, hex.EncodeToString(linkedSpanID), ev.Attributes["trace.link.span_id"])
+							assert.Equal(t, "test_span", ev.Attributes["parent_name"])
+							assert.Equal(t, "link", ev.Attributes["meta.annotation_type"])
+							assert.Equal(t, "span_link_attr_val", ev.Attributes["span_link_attr"])
+							assert.Equal(t, "resource_attr_val", ev.Attributes["resource_attr"])
+						})
+					}
+				})
+			}
+		})
 	}
 }
 
@@ -1240,68 +1000,4 @@ func TestEvaluateSpanStatus(t *testing.T) {
 			assert.Equal(t, tC.expectedIsError, isError)
 		})
 	}
-}
-
-func TestJsonRequest(t *testing.T) {
-	traceId := test.RandomBytes(16)
-	spanId := test.RandomBytes(8)
-	request := collectortrace.ExportTraceServiceRequest{
-		ResourceSpans: []*trace.ResourceSpans{
-			{
-				Resource: &resource.Resource{
-					Attributes: []*common.KeyValue{
-						{
-							Key: "resource-attr",
-							Value: &common.AnyValue{
-								Value: &common.AnyValue_StringValue{StringValue: "resource-attr-val"},
-							},
-						},
-					},
-				},
-				ScopeSpans: []*trace.ScopeSpans{
-					{
-						Scope: &common.InstrumentationScope{
-							Name:    "scope-name",
-							Version: "scope-version",
-							Attributes: []*common.KeyValue{
-								{
-									Key: "scope-attr",
-									Value: &common.AnyValue{
-										Value: &common.AnyValue_StringValue{StringValue: "scope-attr-val"},
-									},
-								},
-							},
-						},
-						Spans: []*trace.Span{
-							{
-								TraceId: traceId,
-								SpanId:  spanId,
-								Name:    "span-name",
-							},
-						},
-					},
-				},
-			},
-		},
-	}
-
-	bodyBytes, err := protojson.Marshal(&request)
-	assert.Nil(t, err)
-
-	buf := new(bytes.Buffer)
-	buf.Write(bodyBytes)
-
-	body := io.NopCloser(strings.NewReader(buf.String()))
-	ri := RequestInfo{
-		ApiKey:      "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
-		Dataset:     "legacy-dataset",
-		ContentType: "application/json",
-	}
-
-	result, err := TranslateTraceRequestFromReader(body, ri)
-	assert.Nil(t, err)
-
-	assert.Equal(t, 1, len(result.Batches))
-	assert.Equal(t, "legacy-dataset", result.Batches[0].Dataset)
-	assert.Equal(t, 1, len(result.Batches[0].Events))
 }
