@@ -2,7 +2,6 @@ package otlp
 
 import (
 	"bytes"
-	"compress/gzip"
 	"encoding/hex"
 	"io"
 	"strings"
@@ -14,9 +13,8 @@ import (
 	logs "github.com/honeycombio/husky/proto/otlp/logs/v1"
 	resource "github.com/honeycombio/husky/proto/otlp/resource/v1"
 	"github.com/honeycombio/husky/test"
-	"github.com/klauspost/compress/zstd"
 	"github.com/stretchr/testify/assert"
-	"google.golang.org/protobuf/encoding/protojson"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -25,10 +23,7 @@ func TestTranslateLogsRequest(t *testing.T) {
 	spanID := test.RandomBytes(8)
 	startTimestamp := time.Now()
 
-	ri := RequestInfo{
-		ApiKey:      "a1a1a1a1a1a1a1a1a1a1a1",
-		ContentType: "application/protobuf",
-	}
+	testServiceName := "my-service"
 
 	req := &collectorlogs.ExportLogsServiceRequest{
 		ResourceLogs: []*logs.ResourceLogs{{
@@ -41,7 +36,7 @@ func TestTranslateLogsRequest(t *testing.T) {
 				}, {
 					Key: "service.name",
 					Value: &common.AnyValue{
-						Value: &common.AnyValue_StringValue{StringValue: "my-service"},
+						Value: &common.AnyValue_StringValue{StringValue: testServiceName},
 					},
 				}},
 			},
@@ -77,101 +72,57 @@ func TestTranslateLogsRequest(t *testing.T) {
 		}},
 	}
 
-	result, err := TranslateLogsRequest(req, ri)
-	assert.Nil(t, err)
-	assert.Equal(t, proto.Size(req), result.RequestSize)
-	assert.Equal(t, 1, len(result.Batches))
-	batch := result.Batches[0]
-	assert.Equal(t, "my-service", batch.Dataset)
-	assert.Equal(t, proto.Size(req.ResourceLogs[0]), batch.SizeBytes)
-	events := batch.Events
-	assert.Equal(t, 1, len(events))
-
-	ev := events[0]
-	assert.Equal(t, startTimestamp.Nanosecond(), ev.Timestamp.Nanosecond())
-	assert.Equal(t, BytesToTraceID(traceID), ev.Attributes["trace.trace_id"])
-	assert.Equal(t, hex.EncodeToString(spanID), ev.Attributes["trace.parent_id"])
-	assert.Equal(t, "log", ev.Attributes["meta.signal_type"])
-	assert.Equal(t, "span_event", ev.Attributes["meta.annotation_type"])
-	assert.Equal(t, uint32(0), ev.Attributes["flags"])
-	assert.Equal(t, "test_severity_text", ev.Attributes["severity_text"])
-	assert.Equal(t, "debug", ev.Attributes["severity"])
-	assert.Equal(t, "my-service", ev.Attributes["service.name"])
-	assert.Equal(t, "span_attr_val", ev.Attributes["span_attr"])
-	assert.Equal(t, "resource_attr_val", ev.Attributes["resource_attr"])
-	assert.Equal(t, "library-name", ev.Attributes["library.name"])
-	assert.Equal(t, "library-version", ev.Attributes["library.version"])
-	assert.Equal(t, "scope_attr_val", ev.Attributes["scope_attr"])
-}
-
-func TestTranslateClassicLogsRequest(t *testing.T) {
-	traceID := test.RandomBytes(16)
-	spanID := test.RandomBytes(8)
-	startTimestamp := time.Now()
-
-	ri := RequestInfo{
-		ApiKey:      "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
-		Dataset:     "legacy-dataset",
-		ContentType: "application/protobuf",
-	}
-
-	req := &collectorlogs.ExportLogsServiceRequest{
-		ResourceLogs: []*logs.ResourceLogs{{
-			Resource: &resource.Resource{
-				Attributes: []*common.KeyValue{{
-					Key: "resource_attr",
-					Value: &common.AnyValue{
-						Value: &common.AnyValue_StringValue{StringValue: "resource_attr_val"},
-					},
-				}, {
-					Key: "service.name",
-					Value: &common.AnyValue{
-						Value: &common.AnyValue_StringValue{StringValue: "my-service"},
-					},
-				}},
+	testCases := []struct {
+		Name            string
+		ri              RequestInfo
+		expectedDataset string
+	}{
+		{
+			Name: "Legacy",
+			ri: RequestInfo{
+				ApiKey:      "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+				Dataset:     "legacy-dataset",
+				ContentType: "application/protobuf",
 			},
-			ScopeLogs: []*logs.ScopeLogs{{
-				LogRecords: []*logs.LogRecord{{
-					TraceId:        traceID,
-					SpanId:         spanID,
-					TimeUnixNano:   uint64(startTimestamp.Nanosecond()),
-					SeverityText:   "test_severity_text",
-					SeverityNumber: logs.SeverityNumber_SEVERITY_NUMBER_DEBUG,
-					Attributes: []*common.KeyValue{
-						{
-							Key: "span_attr",
-							Value: &common.AnyValue{
-								Value: &common.AnyValue_StringValue{StringValue: "span_attr_val"},
-							},
-						},
-					},
-				}},
-			}},
-		}},
+			expectedDataset: "legacy-dataset",
+		},
+		{
+			Name: "NonLegacy",
+			ri: RequestInfo{
+				ApiKey:      "abc123DEF456ghi789jklm",
+				Dataset:     "legacy-dataset",
+				ContentType: "application/protobuf",
+			},
+			expectedDataset: testServiceName,
+		},
 	}
+	for _, tC := range testCases {
+		t.Run(tC.Name, func(t *testing.T) {
 
-	result, err := TranslateLogsRequest(req, ri)
-	assert.Nil(t, err)
-	assert.Equal(t, proto.Size(req), result.RequestSize)
-	assert.Equal(t, 1, len(result.Batches))
-	batch := result.Batches[0]
-	assert.Equal(t, "legacy-dataset", batch.Dataset)
-	assert.Equal(t, proto.Size(req.ResourceLogs[0]), batch.SizeBytes)
-	events := batch.Events
-	assert.Equal(t, 1, len(events))
+			result, err := TranslateLogsRequest(req, tC.ri)
+			assert.Nil(t, err)
+			assert.Equal(t, proto.Size(req), result.RequestSize)
+			assert.Equal(t, 1, len(result.Batches))
+			batch := result.Batches[0]
+			assert.Equal(t, tC.expectedDataset, batch.Dataset)
+			assert.Equal(t, proto.Size(req.ResourceLogs[0]), batch.SizeBytes)
+			events := batch.Events
+			assert.Equal(t, 1, len(events))
 
-	ev := events[0]
-	assert.Equal(t, startTimestamp.Nanosecond(), ev.Timestamp.Nanosecond())
-	assert.Equal(t, BytesToTraceID(traceID), ev.Attributes["trace.trace_id"])
-	assert.Equal(t, hex.EncodeToString(spanID), ev.Attributes["trace.parent_id"])
-	assert.Equal(t, "log", ev.Attributes["meta.signal_type"])
-	assert.Equal(t, "span_event", ev.Attributes["meta.annotation_type"])
-	assert.Equal(t, uint32(0), ev.Attributes["flags"])
-	assert.Equal(t, "test_severity_text", ev.Attributes["severity_text"])
-	assert.Equal(t, "debug", ev.Attributes["severity"])
-	assert.Equal(t, "my-service", ev.Attributes["service.name"])
-	assert.Equal(t, "span_attr_val", ev.Attributes["span_attr"])
-	assert.Equal(t, "resource_attr_val", ev.Attributes["resource_attr"])
+			ev := events[0]
+			assert.Equal(t, startTimestamp.Nanosecond(), ev.Timestamp.Nanosecond())
+			assert.Equal(t, BytesToTraceID(traceID), ev.Attributes["trace.trace_id"])
+			assert.Equal(t, hex.EncodeToString(spanID), ev.Attributes["trace.parent_id"])
+			assert.Equal(t, "log", ev.Attributes["meta.signal_type"])
+			assert.Equal(t, "span_event", ev.Attributes["meta.annotation_type"])
+			assert.Equal(t, uint32(0), ev.Attributes["flags"])
+			assert.Equal(t, "test_severity_text", ev.Attributes["severity_text"])
+			assert.Equal(t, "debug", ev.Attributes["severity"])
+			assert.Equal(t, "my-service", ev.Attributes["service.name"])
+			assert.Equal(t, "span_attr_val", ev.Attributes["span_attr"])
+			assert.Equal(t, "resource_attr_val", ev.Attributes["resource_attr"])
+		})
+	}
 }
 
 func TestTranslateHttpLogsRequest(t *testing.T) {
@@ -179,6 +130,8 @@ func TestTranslateHttpLogsRequest(t *testing.T) {
 	spanID := test.RandomBytes(8)
 	startTimestamp := time.Now()
 
+	testServiceName := "my-service"
+
 	req := &collectorlogs.ExportLogsServiceRequest{
 		ResourceLogs: []*logs.ResourceLogs{{
 			Resource: &resource.Resource{
@@ -190,7 +143,7 @@ func TestTranslateHttpLogsRequest(t *testing.T) {
 				}, {
 					Key: "service.name",
 					Value: &common.AnyValue{
-						Value: &common.AnyValue_StringValue{StringValue: "my-service"},
+						Value: &common.AnyValue_StringValue{StringValue: testServiceName},
 					},
 				}},
 			},
@@ -226,164 +179,72 @@ func TestTranslateHttpLogsRequest(t *testing.T) {
 		}},
 	}
 
-	for _, contentType := range []string{"application/protobuf", "application/json"} {
-		var bodyBytes []byte
-		var err error
-		if contentType == "application/protobuf" {
-			bodyBytes, err = proto.Marshal(req)
-		} else {
-			bodyBytes, err = protojson.Marshal(req)
-		}
-		assert.Nil(t, err)
-
-		for _, encoding := range []string{"", "gzip", "zstd"} {
-			buf := new(bytes.Buffer)
-			switch encoding {
-			case "gzip":
-				w := gzip.NewWriter(buf)
-				w.Write(bodyBytes)
-				w.Close()
-			case "zstd":
-				w, _ := zstd.NewWriter(buf)
-				w.Write(bodyBytes)
-				w.Close()
-			default:
-				buf.Write(bodyBytes)
-			}
-
-			body := io.NopCloser(strings.NewReader(buf.String()))
-			ri := RequestInfo{
-				ApiKey:          "a1a1a1a1a1a1a1a1a1a1a1",
-				ContentType:     contentType,
-				ContentEncoding: encoding,
-			}
-
-			result, err := TranslateLogsRequestFromReader(body, ri)
-			assert.Nil(t, err)
-			assert.Equal(t, proto.Size(req), result.RequestSize)
-			assert.Equal(t, 1, len(result.Batches))
-			batch := result.Batches[0]
-			assert.Equal(t, "my-service", batch.Dataset)
-			assert.Equal(t, proto.Size(req.ResourceLogs[0]), batch.SizeBytes)
-			events := batch.Events
-			assert.Equal(t, 1, len(events))
-
-			ev := events[0]
-			assert.Equal(t, startTimestamp.Nanosecond(), ev.Timestamp.Nanosecond())
-			assert.Equal(t, BytesToTraceID(traceID), ev.Attributes["trace.trace_id"])
-			assert.Equal(t, hex.EncodeToString(spanID), ev.Attributes["trace.parent_id"])
-			assert.Equal(t, "log", ev.Attributes["meta.signal_type"])
-			assert.Equal(t, "span_event", ev.Attributes["meta.annotation_type"])
-			assert.Equal(t, uint32(0), ev.Attributes["flags"])
-			assert.Equal(t, "test_severity_text", ev.Attributes["severity_text"])
-			assert.Equal(t, "debug", ev.Attributes["severity"])
-			assert.Equal(t, "my-service", ev.Attributes["service.name"])
-			assert.Equal(t, "span_attr_val", ev.Attributes["span_attr"])
-			assert.Equal(t, "resource_attr_val", ev.Attributes["resource_attr"])
-			assert.Equal(t, "instr_scope_name", ev.Attributes["library.name"])
-			assert.Equal(t, "instr_scope_version", ev.Attributes["library.version"])
-			assert.Equal(t, "scope_attr_val", ev.Attributes["scope_attr"])
-		}
+	testCases := []struct {
+		Name            string
+		ri              RequestInfo
+		expectedDataset string
+	}{
+		{
+			Name: "Legacy",
+			ri: RequestInfo{
+				ApiKey:  "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+				Dataset: "legacy-dataset",
+			},
+			expectedDataset: "legacy-dataset",
+		},
+		{
+			Name: "NonLegacy",
+			ri: RequestInfo{
+				ApiKey:  "abc123DEF456ghi789jklm",
+				Dataset: "legacy-dataset",
+			},
+			expectedDataset: testServiceName,
+		},
 	}
-}
 
-func TestTranslateClassicHttpLogsRequest(t *testing.T) {
-	traceID := test.RandomBytes(16)
-	spanID := test.RandomBytes(8)
-	startTimestamp := time.Now()
+	for _, tC := range testCases {
+		t.Run(tC.Name, func(t *testing.T) {
+			for _, testCaseContentType := range GetSupportedContentTypes() {
+				t.Run(testCaseNameForContentType(testCaseContentType), func(t *testing.T) {
+					for _, testCaseContentEncoding := range GetSupportedContentEncodings() {
+						t.Run(testCaseNameForEncoding(testCaseContentEncoding), func(t *testing.T) {
 
-	for _, contentType := range []string{"application/protobuf", "application/json"} {
+							tC.ri.ContentType = testCaseContentType
+							tC.ri.ContentEncoding = testCaseContentEncoding
 
-		req := &collectorlogs.ExportLogsServiceRequest{
-			ResourceLogs: []*logs.ResourceLogs{{
-				Resource: &resource.Resource{
-					Attributes: []*common.KeyValue{{
-						Key: "resource_attr",
-						Value: &common.AnyValue{
-							Value: &common.AnyValue_StringValue{StringValue: "resource_attr_val"},
-						},
-					}, {
-						Key: "service.name",
-						Value: &common.AnyValue{
-							Value: &common.AnyValue_StringValue{StringValue: "my-service"},
-						},
-					}},
-				},
-				ScopeLogs: []*logs.ScopeLogs{{
-					LogRecords: []*logs.LogRecord{{
-						TraceId:        traceID,
-						SpanId:         spanID,
-						TimeUnixNano:   uint64(startTimestamp.Nanosecond()),
-						SeverityText:   "test_severity_text",
-						SeverityNumber: logs.SeverityNumber_SEVERITY_NUMBER_DEBUG,
-						Attributes: []*common.KeyValue{
-							{
-								Key: "span_attr",
-								Value: &common.AnyValue{
-									Value: &common.AnyValue_StringValue{StringValue: "span_attr_val"},
-								},
-							},
-						},
-					}},
-				}},
-			}},
-		}
+							body, err := prepareOtlpRequestHttpBody(req, testCaseContentType, testCaseContentEncoding)
+							require.NoError(t, err, "Womp womp. Ought to have been able to turn the OTLP log request into an HTTP body.")
 
-		var bodyBytes []byte
-		var err error
-		if contentType == "application/protobuf" {
-			bodyBytes, err = proto.Marshal(req)
-		} else {
-			bodyBytes, err = protojson.Marshal(req)
-		}
-		assert.Nil(t, err)
+							result, err := TranslateLogsRequestFromReader(io.NopCloser(strings.NewReader(body)), tC.ri)
+							require.NoError(t, err)
+							assert.Equal(t, proto.Size(req), result.RequestSize)
+							assert.Equal(t, 1, len(result.Batches))
+							batch := result.Batches[0]
+							assert.Equal(t, tC.expectedDataset, batch.Dataset)
+							assert.Equal(t, proto.Size(req.ResourceLogs[0]), batch.SizeBytes)
+							events := batch.Events
+							assert.Equal(t, 1, len(events))
 
-		for _, encoding := range []string{"", "gzip", "zstd"} {
-			buf := new(bytes.Buffer)
-			switch encoding {
-			case "gzip":
-				w := gzip.NewWriter(buf)
-				w.Write(bodyBytes)
-				w.Close()
-			case "zstd":
-				w, _ := zstd.NewWriter(buf)
-				w.Write(bodyBytes)
-				w.Close()
-			default:
-				buf.Write(bodyBytes)
+							ev := events[0]
+							assert.Equal(t, startTimestamp.Nanosecond(), ev.Timestamp.Nanosecond())
+							assert.Equal(t, BytesToTraceID(traceID), ev.Attributes["trace.trace_id"])
+							assert.Equal(t, hex.EncodeToString(spanID), ev.Attributes["trace.parent_id"])
+							assert.Equal(t, "log", ev.Attributes["meta.signal_type"])
+							assert.Equal(t, "span_event", ev.Attributes["meta.annotation_type"])
+							assert.Equal(t, uint32(0), ev.Attributes["flags"])
+							assert.Equal(t, "test_severity_text", ev.Attributes["severity_text"])
+							assert.Equal(t, "debug", ev.Attributes["severity"])
+							assert.Equal(t, "my-service", ev.Attributes["service.name"])
+							assert.Equal(t, "span_attr_val", ev.Attributes["span_attr"])
+							assert.Equal(t, "resource_attr_val", ev.Attributes["resource_attr"])
+							assert.Equal(t, "instr_scope_name", ev.Attributes["library.name"])
+							assert.Equal(t, "instr_scope_version", ev.Attributes["library.version"])
+							assert.Equal(t, "scope_attr_val", ev.Attributes["scope_attr"])
+						})
+					}
+				})
 			}
-
-			body := io.NopCloser(strings.NewReader(buf.String()))
-			ri := RequestInfo{
-				ApiKey:          "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
-				Dataset:         "legacy-dataset",
-				ContentType:     contentType,
-				ContentEncoding: encoding,
-			}
-
-			result, err := TranslateLogsRequestFromReader(body, ri)
-			assert.Nil(t, err)
-			assert.Equal(t, proto.Size(req), result.RequestSize)
-			assert.Equal(t, 1, len(result.Batches))
-			batch := result.Batches[0]
-			assert.Equal(t, "legacy-dataset", batch.Dataset)
-			assert.Equal(t, proto.Size(req.ResourceLogs[0]), batch.SizeBytes)
-			events := batch.Events
-			assert.Equal(t, 1, len(events))
-
-			ev := events[0]
-			assert.Equal(t, startTimestamp.Nanosecond(), ev.Timestamp.Nanosecond())
-			assert.Equal(t, BytesToTraceID(traceID), ev.Attributes["trace.trace_id"])
-			assert.Equal(t, hex.EncodeToString(spanID), ev.Attributes["trace.parent_id"])
-			assert.Equal(t, "log", ev.Attributes["meta.signal_type"])
-			assert.Equal(t, "span_event", ev.Attributes["meta.annotation_type"])
-			assert.Equal(t, uint32(0), ev.Attributes["flags"])
-			assert.Equal(t, "test_severity_text", ev.Attributes["severity_text"])
-			assert.Equal(t, "debug", ev.Attributes["severity"])
-			assert.Equal(t, "my-service", ev.Attributes["service.name"])
-			assert.Equal(t, "span_attr_val", ev.Attributes["span_attr"])
-			assert.Equal(t, "resource_attr_val", ev.Attributes["resource_attr"])
-		}
+		})
 	}
 }
 
@@ -530,7 +391,7 @@ func TestLogsRequestWithInvalidContentTypeReturnsError(t *testing.T) {
 }
 
 func TestLogsRequestWithInvalidBodyReturnsError(t *testing.T) {
-	bodyBytes := test.RandomBytes(10)
+	bodyBytes := []byte{0x00, 0x01, 0x02, 0x03, 0x04}
 	body := io.NopCloser(bytes.NewReader(bodyBytes))
 	ri := RequestInfo{
 		ApiKey:      "apikey",
