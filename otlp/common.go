@@ -41,6 +41,8 @@ var (
 		"application/x-protobuf",
 		"application/json",
 	}
+	// Incoming Content-Encodings we support. "" included as a stand in for "not given, assume uncompressed"
+	supportedContentEncodings = []string{"", "gzip", "zstd"}
 )
 
 // List of HTTP Content Types supported for OTLP ingest.
@@ -56,6 +58,11 @@ func IsContentTypeSupported(contentType string) bool {
 		}
 	}
 	return false
+}
+
+// List of HTTP Content Encodings supported for OTLP ingest.
+func GetSupportedContentEncodings() []string {
+	return supportedContentEncodings
 }
 
 // TranslateOTLPRequestResult represents an OTLP request translated into Honeycomb-friendly structure
