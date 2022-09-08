@@ -113,11 +113,10 @@ func (ri *RequestInfo) ValidateTracesHeaders() error {
 	if ri.hasLegacyKey() && len(ri.Dataset) == 0 {
 		return ErrMissingDatasetHeader
 	}
-	if IsContentTypeSupported(ri.ContentType) {
-		return nil
-	} else {
+	if !IsContentTypeSupported(ri.ContentType) {
 		return ErrInvalidContentType
 	}
+	return nil // no error, headers passed all the validations
 }
 
 // ValidateMetricsHeaders validates required headers/metadata for a metric OTLP request
@@ -128,11 +127,10 @@ func (ri *RequestInfo) ValidateMetricsHeaders() error {
 	if ri.hasLegacyKey() && len(ri.Dataset) == 0 {
 		return ErrMissingDatasetHeader
 	}
-	if IsContentTypeSupported(ri.ContentType) {
-		return nil
-	} else {
+	if !IsContentTypeSupported(ri.ContentType) {
 		return ErrInvalidContentType
 	}
+	return nil // no error, headers passed all the validations
 }
 
 // ValidateLogsHeaders validates required headers/metadata for a logs OTLP request
@@ -143,11 +141,10 @@ func (ri *RequestInfo) ValidateLogsHeaders() error {
 	if ri.hasLegacyKey() && len(ri.Dataset) == 0 {
 		return ErrMissingDatasetHeader
 	}
-	if IsContentTypeSupported(ri.ContentType) {
-		return nil
-	} else {
+	if !IsContentTypeSupported(ri.ContentType) {
 		return ErrInvalidContentType
 	}
+	return nil
 }
 
 // GetRequestInfoFromGrpcMetadata parses relevant gRPC metadata from an incoming request context
