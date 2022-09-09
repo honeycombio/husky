@@ -33,7 +33,37 @@ const (
 	defaultServiceName       = "unknown_service"
 )
 
-var legacyApiKeyPattern = regexp.MustCompile("^[0-9a-f]{32}$")
+var (
+	legacyApiKeyPattern = regexp.MustCompile("^[0-9a-f]{32}$")
+	// Incoming OpenTelemetry HTTP Content-Types (e.g. "application/protobuf") we support
+	supportedContentTypes = []string{
+		"application/protobuf",
+		"application/x-protobuf",
+		"application/json",
+	}
+	// Incoming Content-Encodings we support. "" included as a stand in for "not given, assume uncompressed"
+	supportedContentEncodings = []string{"", "gzip", "zstd"}
+)
+
+// List of HTTP Content Types supported for OTLP ingest.
+func GetSupportedContentTypes() []string {
+	return supportedContentTypes
+}
+
+// Check whether we support a given HTTP Content Type for OTLP.
+func IsContentTypeSupported(contentType string) bool {
+	for _, supportedType := range supportedContentTypes {
+		if contentType == supportedType {
+			return true
+		}
+	}
+	return false
+}
+
+// List of HTTP Content Encodings supported for OTLP ingest.
+func GetSupportedContentEncodings() []string {
+	return supportedContentEncodings
+}
 
 // TranslateOTLPRequestResult represents an OTLP request translated into Honeycomb-friendly structure
 // RequestSize is total byte size of the entire OTLP request
@@ -75,50 +105,45 @@ func (ri RequestInfo) hasLegacyKey() bool {
 	return legacyApiKeyPattern.MatchString(ri.ApiKey)
 }
 
-// ValidateTracesHeaders validates required headers/metadata for a trace OTLP request
+// ValidateTracesHeaders checks for required headers/metadata for all OTLP requests
+// and specific to Traces.
 func (ri *RequestInfo) ValidateTracesHeaders() error {
-	if len(ri.ApiKey) == 0 {
-		return ErrMissingAPIKeyHeader
-	}
-	if ri.hasLegacyKey() && len(ri.Dataset) == 0 {
-		return ErrMissingDatasetHeader
-	}
-	switch ri.ContentType {
-	case "application/protobuf", "application/x-protobuf", "application/json":
-		return nil
-	default:
-		return ErrInvalidContentType
-	}
+	// validations specific to traces
+	// - none for now
+	// validations common for all OTLP requests
+	return validateHeaders(ri)
 }
 
-// ValidateMetricsHeaders validates required headers/metadata for a metric OTLP request
+// ValidateMetricsHeaders checks for required headers/metadata for all OTLP requests
+// and specific to Metrics.
 func (ri *RequestInfo) ValidateMetricsHeaders() error {
-	if len(ri.ApiKey) == 0 {
-		return ErrMissingAPIKeyHeader
-	}
-	if ri.hasLegacyKey() && len(ri.Dataset) == 0 {
-		return ErrMissingDatasetHeader
-	}
-	if ri.ContentType != "application/protobuf" && ri.ContentType != "application/x-protobuf" {
-		return ErrInvalidContentType
-	}
-	return nil
+	// validations specific to metrics
+	// - none for now
+	// validations common for all OTLP requests
+	return validateHeaders(ri)
 }
 
-// ValidateLogsHeaders validates required headers/metadata for a logs OTLP request
+// ValidateLogsHeaders checks for required headers/metadata for all OTLP requests
+// and specific to Logs.
 func (ri *RequestInfo) ValidateLogsHeaders() error {
+	// validations specific to logs
+	// - none for now
+	// validations common for all OTLP requests
+	return validateHeaders(ri)
+}
+
+// Header validation that is common across OTLP signal requests.
+func validateHeaders(ri *RequestInfo) error {
 	if len(ri.ApiKey) == 0 {
 		return ErrMissingAPIKeyHeader
 	}
 	if ri.hasLegacyKey() && len(ri.Dataset) == 0 {
 		return ErrMissingDatasetHeader
 	}
-	switch ri.ContentType {
-	case "application/protobuf", "application/x-protobuf", "application/json":
-		return nil
-	default:
+	if !IsContentTypeSupported(ri.ContentType) {
 		return ErrInvalidContentType
 	}
+	return nil // no error, headers passed all the validations
 }
 
 // GetRequestInfoFromGrpcMetadata parses relevant gRPC metadata from an incoming request context

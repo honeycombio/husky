@@ -164,11 +164,11 @@ func TestValidateMetricsHeaders(t *testing.T) {
 		{name: "new API key and missing dataset", apikey: "abc123DEF456ghi789jklm", dataset: "", contentType: "application/protobuf", err: nil},
 		{name: "missing API key", apikey: "", dataset: "dataset", contentType: "", err: ErrMissingAPIKeyHeader},
 		{name: "missing content-type", apikey: "apikey", dataset: "dataset", contentType: "", err: ErrInvalidContentType},
-		{name: "application/json content-type", apikey: "apikey", dataset: "dataset", contentType: "application/json", err: ErrInvalidContentType},
 		{name: "application/javascript content-type", apikey: "apikey", dataset: "dataset", contentType: "application/javascript", err: ErrInvalidContentType},
 		{name: "application/xml content-type", apikey: "apikey", dataset: "dataset", contentType: "application/xml", err: ErrInvalidContentType},
 		{name: "application/octet-stream content-type", apikey: "apikey", dataset: "dataset", contentType: "application/octet-stream", err: ErrInvalidContentType},
 		{name: "text-plain content type", apikey: "apikey", dataset: "dataset", contentType: "text-plain", err: ErrInvalidContentType},
+		{name: "application/json content-type", apikey: "apikey", dataset: "dataset", contentType: "application/json", err: nil},
 		{name: "application/protobuf content-type", apikey: "apikey", dataset: "dataset", contentType: "application/protobuf", err: nil},
 		{name: "application/x-protobuf content-type", apikey: "apikey", dataset: "dataset", contentType: "application/x-protobuf", err: nil},
 	}
