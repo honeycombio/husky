@@ -124,7 +124,7 @@ func (ri *RequestInfo) ValidateMetricsHeaders() error {
 	if len(ri.ApiKey) == 0 {
 		return ErrMissingAPIKeyHeader
 	}
-	if ri.hasLegacyKey() && len(ri.Dataset) == 0 {
+	if len(ri.Dataset) == 0 {
 		return ErrMissingDatasetHeader
 	}
 	if !IsContentTypeSupported(ri.ContentType) {
