@@ -157,145 +157,91 @@ func TestTranslateHttpLogsRequest(t *testing.T) {
 	}
 }
 
-func TestLogs_GRPC_DetermineDestinationDataset(t *testing.T) {
+func TestLogs_DetermineDestinationDataset(t *testing.T) {
 	traceID := test.RandomBytes(16)
 	spanID := test.RandomBytes(8)
 	startTimestamp := time.Now()
 
-	environmentTypes := []struct {
-		Name   string
-		ApiKey string
-	}{
-		{
-			Name:   "Classic",
-			ApiKey: "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
-		},
-		{
-			Name:   "E&S",
-			ApiKey: "abc123DEF456ghi789jklm",
-		},
-	}
-
-	for _, env := range environmentTypes {
-		t.Run(env.Name, func(t *testing.T) {
-			testCases := []struct {
-				desc            string
-				datasetHeader   string
-				req             *collectorlogs.ExportLogsServiceRequest
-				expectedDataset string
+	for _, protocol := range []string{"GRPC", "HTTP"} {
+		t.Run(protocol, func(t *testing.T) {
+			environmentTypes := []struct {
+				Name   string
+				ApiKey string
 			}{
 				{
-					desc:            "no service.name, no dataset header",
-					datasetHeader:   "",
-					req:             buildExportLogsServiceRequest(traceID, spanID, startTimestamp, ""),
-					expectedDataset: "unknown_log_source",
-				}, {
-					desc:            "service.name is unknown_service, no dataset header",
-					datasetHeader:   "",
-					req:             buildExportLogsServiceRequest(traceID, spanID, startTimestamp, "unknown_service"),
-					expectedDataset: "unknown_log_source",
+					Name:   "Classic",
+					ApiKey: "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
 				},
 				{
-					desc:            "service.name, no dataset header",
-					datasetHeader:   "",
-					req:             buildExportLogsServiceRequest(traceID, spanID, startTimestamp, "awesome_service"),
-					expectedDataset: "awesome_service",
-				},
-				{
-					desc:            "dataset header, no service.name",
-					datasetHeader:   "a_dataset_set_for_the_data",
-					req:             buildExportLogsServiceRequest(traceID, spanID, startTimestamp, ""),
-					expectedDataset: "a_dataset_set_for_the_data",
+					Name:   "E&S",
+					ApiKey: "abc123DEF456ghi789jklm",
 				},
 			}
-			for _, tC := range testCases {
-				t.Run(tC.desc, func(t *testing.T) {
 
-					ri := RequestInfo{
-						ApiKey:      env.ApiKey,
-						Dataset:     tC.datasetHeader,
-						ContentType: "application/protobuf",
+			for _, env := range environmentTypes {
+				t.Run(env.Name, func(t *testing.T) {
+					testCases := []struct {
+						desc            string
+						datasetHeader   string
+						testServiceName string
+						expectedDataset string
+					}{
+						{
+							desc:            "no service.name, no dataset header",
+							datasetHeader:   "",
+							testServiceName: "",
+							expectedDataset: "unknown_log_source",
+						}, {
+							desc:            "service.name is unknown_service, no dataset header",
+							datasetHeader:   "",
+							testServiceName: "unknown_service",
+							expectedDataset: "unknown_log_source",
+						},
+						{
+							desc:            "service.name, no dataset header",
+							datasetHeader:   "",
+							testServiceName: "awesome_service",
+							expectedDataset: "awesome_service",
+						},
+						{
+							desc:            "dataset header, no service.name",
+							datasetHeader:   "a_dataset_set_for_the_data",
+							testServiceName: "",
+							expectedDataset: "a_dataset_set_for_the_data",
+						},
 					}
+					for _, tC := range testCases {
+						t.Run(tC.desc, func(t *testing.T) {
 
-					result, err := TranslateLogsRequest(tC.req, ri)
-					require.NoError(t, err)
+							ri := RequestInfo{
+								ApiKey:      env.ApiKey,
+								Dataset:     tC.datasetHeader,
+								ContentType: "application/protobuf",
+							}
 
-					batch := result.Batches[0]
-					assert.Equal(t, tC.expectedDataset, batch.Dataset)
-				})
-			}
-		})
-	}
-}
+							req := buildExportLogsServiceRequest(traceID, spanID, startTimestamp, tC.testServiceName)
 
-func TestLogs_HTTP_DetermineDestinationDataset(t *testing.T) {
-	traceID := test.RandomBytes(16)
-	spanID := test.RandomBytes(8)
-	startTimestamp := time.Now()
+							var result *TranslateOTLPRequestResult
+							var err error
 
-	environmentTypes := []struct {
-		Name   string
-		ApiKey string
-	}{
-		{
-			Name:   "Classic",
-			ApiKey: "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
-		},
-		{
-			Name:   "E&S",
-			ApiKey: "abc123DEF456ghi789jklm",
-		},
-	}
+							switch protocol {
+							case "GRPC":
+								result, err = TranslateLogsRequest(req, ri)
+								require.NoError(t, err, "Wasn't able to translate that OTLP logs request.")
+							case "HTTP":
+								body, err := prepareOtlpRequestHttpBody(req, ri.ContentType, "")
+								require.NoError(t, err, "Womp womp. Ought to have been able to turn the OTLP log request into an HTTP body.")
 
-	for _, env := range environmentTypes {
-		t.Run(env.Name, func(t *testing.T) {
-			testCases := []struct {
-				desc            string
-				datasetHeader   string
-				req             *collectorlogs.ExportLogsServiceRequest
-				expectedDataset string
-			}{
-				{
-					desc:            "no service.name, no dataset header",
-					datasetHeader:   "",
-					req:             buildExportLogsServiceRequest(traceID, spanID, startTimestamp, ""),
-					expectedDataset: "unknown_log_source",
-				}, {
-					desc:            "service.name is unknown_service, no dataset header",
-					datasetHeader:   "",
-					req:             buildExportLogsServiceRequest(traceID, spanID, startTimestamp, "unknown_service"),
-					expectedDataset: "unknown_log_source",
-				},
-				{
-					desc:            "service.name, no dataset header",
-					datasetHeader:   "",
-					req:             buildExportLogsServiceRequest(traceID, spanID, startTimestamp, "awesome_service"),
-					expectedDataset: "awesome_service",
-				},
-				{
-					desc:            "dataset header, no service.name",
-					datasetHeader:   "a_dataset_set_for_the_data",
-					req:             buildExportLogsServiceRequest(traceID, spanID, startTimestamp, ""),
-					expectedDataset: "a_dataset_set_for_the_data",
-				},
-			}
-			for _, tC := range testCases {
-				t.Run(tC.desc, func(t *testing.T) {
+								result, err = TranslateLogsRequestFromReader(io.NopCloser(strings.NewReader(body)), ri)
+								require.NoError(t, err, "Wasn't able to translate that OTLP logs request.")
+							default:
+								t.Errorf("lolwut - What kind of protocol is %v?", protocol)
+							}
 
-					ri := RequestInfo{
-						ApiKey:      env.ApiKey,
-						Dataset:     tC.datasetHeader,
-						ContentType: "application/protobuf",
+							batch := result.Batches[0]
+							assert.Equal(t, tC.expectedDataset, batch.Dataset)
+						})
 					}
-
-					body, err := prepareOtlpRequestHttpBody(tC.req, ri.ContentType, "")
-					require.NoError(t, err, "Womp womp. Ought to have been able to turn the OTLP log request into an HTTP body.")
-
-					result, err := TranslateLogsRequestFromReader(io.NopCloser(strings.NewReader(body)), ri)
-					require.NoError(t, err)
-
-					batch := result.Batches[0]
-					assert.Equal(t, tC.expectedDataset, batch.Dataset)
 				})
 			}
 		})
