@@ -317,6 +317,14 @@ func TestTranslateHttpLogsRequestWithDatasetButNoServiceName(t *testing.T) {
 }
 
 func TestTranslateHttpLogsRequestWithoutServiceAndWithoutDataset(t *testing.T) {
+	traceID := test.RandomBytes(16)
+	spanID := test.RandomBytes(8)
+	startTimestamp := time.Now()
+
+	testServiceName := "unknown_service"
+
+	req := buildExportLogsServiceRequest(traceID, spanID, startTimestamp, testServiceName)
+
 	testCases := []struct {
 		Name            string
 		ri              RequestInfo
@@ -346,7 +354,38 @@ func TestTranslateHttpLogsRequestWithoutServiceAndWithoutDataset(t *testing.T) {
 				t.Run(testCaseNameForContentType(testCaseContentType), func(t *testing.T) {
 					for _, testCaseContentEncoding := range GetSupportedContentEncodings() {
 						t.Run(testCaseNameForEncoding(testCaseContentEncoding), func(t *testing.T) {
-							require.Error(t, ErrMissingDatasetHeader)
+
+							tC.ri.ContentType = testCaseContentType
+							tC.ri.ContentEncoding = testCaseContentEncoding
+
+							body, err := prepareOtlpRequestHttpBody(req, testCaseContentType, testCaseContentEncoding)
+							require.NoError(t, err, "Womp womp. Ought to have been able to turn the OTLP log request into an HTTP body.")
+
+							result, err := TranslateLogsRequestFromReader(io.NopCloser(strings.NewReader(body)), tC.ri)
+							require.NoError(t, err)
+							assert.Equal(t, proto.Size(req), result.RequestSize)
+							assert.Equal(t, 1, len(result.Batches))
+							batch := result.Batches[0]
+							assert.Equal(t, tC.expectedDataset, batch.Dataset)
+							assert.Equal(t, proto.Size(req.ResourceLogs[0]), batch.SizeBytes)
+							events := batch.Events
+							assert.Equal(t, 1, len(events))
+
+							ev := events[0]
+							assert.Equal(t, startTimestamp.Nanosecond(), ev.Timestamp.Nanosecond())
+							assert.Equal(t, BytesToTraceID(traceID), ev.Attributes["trace.trace_id"])
+							assert.Equal(t, hex.EncodeToString(spanID), ev.Attributes["trace.parent_id"])
+							assert.Equal(t, "log", ev.Attributes["meta.signal_type"])
+							assert.Equal(t, "span_event", ev.Attributes["meta.annotation_type"])
+							assert.Equal(t, uint32(0), ev.Attributes["flags"])
+							assert.Equal(t, "test_severity_text", ev.Attributes["severity_text"])
+							assert.Equal(t, "debug", ev.Attributes["severity"])
+							assert.Equal(t, "unknown_service", ev.Attributes["service.name"])
+							assert.Equal(t, "span_attr_val", ev.Attributes["span_attr"])
+							assert.Equal(t, "resource_attr_val", ev.Attributes["resource_attr"])
+							assert.Equal(t, "instr_scope_name", ev.Attributes["library.name"])
+							assert.Equal(t, "instr_scope_version", ev.Attributes["library.version"])
+							assert.Equal(t, "scope_attr_val", ev.Attributes["scope_attr"])
 						})
 					}
 				})
