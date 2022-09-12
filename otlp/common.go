@@ -31,6 +31,7 @@ const (
 	contentEncodingHeader    = "content-encoding"
 	gRPCAcceptEncodingHeader = "grpc-accept-encoding"
 	defaultServiceName       = "unknown_service"
+	unknownLogSource         = "unknown_log_source"
 )
 
 var (
@@ -243,7 +244,8 @@ func getLogsDataset(ri RequestInfo, attrs map[string]interface{}) string {
 			strings.TrimSpace(serviceName) == "" ||
 			strings.HasPrefix(serviceName, "unknown_service") {
 			if strings.TrimSpace(ri.Dataset) == "" {
-				dataset = "unknown_logs_source"
+				// In practice, this won't actually get hit, because we error on missing dataset header
+				dataset = unknownLogSource
 			} else {
 				dataset = ri.Dataset
 			}
