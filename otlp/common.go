@@ -239,7 +239,6 @@ func getLogsDataset(ri RequestInfo, attrs map[string]interface{}) string {
 	serviceName, ok := attrs["service.name"].(string)
 	if !ok || strings.TrimSpace(serviceName) == "" || strings.HasPrefix(serviceName, "unknown_service") {
 		if strings.TrimSpace(ri.Dataset) == "" {
-			// In practice, this won't actually get hit, because we error on missing dataset header
 			dataset = unknownLogSource
 		} else {
 			dataset = ri.Dataset

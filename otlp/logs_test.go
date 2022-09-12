@@ -336,7 +336,7 @@ func TestTranslateHttpLogsRequestWithoutServiceAndWithoutDataset(t *testing.T) {
 				ApiKey:  "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
 				Dataset: "",
 			},
-			expectedDataset: unknownLogSource, // we'll get an error before this...
+			expectedDataset: unknownLogSource,
 		},
 		{
 			Name: "E&S",
@@ -344,7 +344,7 @@ func TestTranslateHttpLogsRequestWithoutServiceAndWithoutDataset(t *testing.T) {
 				ApiKey:  "abc123DEF456ghi789jklm",
 				Dataset: "",
 			},
-			expectedDataset: unknownLogSource, // we'll get an error before this...
+			expectedDataset: unknownLogSource,
 		},
 	}
 
