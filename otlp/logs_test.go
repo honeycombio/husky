@@ -25,52 +25,7 @@ func TestTranslateLogsRequest(t *testing.T) {
 
 	testServiceName := "my-service"
 
-	req := &collectorlogs.ExportLogsServiceRequest{
-		ResourceLogs: []*logs.ResourceLogs{{
-			Resource: &resource.Resource{
-				Attributes: []*common.KeyValue{{
-					Key: "resource_attr",
-					Value: &common.AnyValue{
-						Value: &common.AnyValue_StringValue{StringValue: "resource_attr_val"},
-					},
-				}, {
-					Key: "service.name",
-					Value: &common.AnyValue{
-						Value: &common.AnyValue_StringValue{StringValue: testServiceName},
-					},
-				}},
-			},
-			ScopeLogs: []*logs.ScopeLogs{{
-				Scope: &common.InstrumentationScope{
-					Name:    "library-name",
-					Version: "library-version",
-					Attributes: []*common.KeyValue{
-						{
-							Key: "scope_attr",
-							Value: &common.AnyValue{
-								Value: &common.AnyValue_StringValue{StringValue: "scope_attr_val"},
-							},
-						},
-					},
-				},
-				LogRecords: []*logs.LogRecord{{
-					TraceId:        traceID,
-					SpanId:         spanID,
-					TimeUnixNano:   uint64(startTimestamp.Nanosecond()),
-					SeverityText:   "test_severity_text",
-					SeverityNumber: logs.SeverityNumber_SEVERITY_NUMBER_DEBUG,
-					Attributes: []*common.KeyValue{
-						{
-							Key: "span_attr",
-							Value: &common.AnyValue{
-								Value: &common.AnyValue_StringValue{StringValue: "span_attr_val"},
-							},
-						},
-					},
-				}},
-			}},
-		}},
-	}
+	req := buildExportLogsServiceRequest(traceID, spanID, startTimestamp, testServiceName)
 
 	testCases := []struct {
 		Name            string
@@ -132,52 +87,7 @@ func TestTranslateHttpLogsRequest(t *testing.T) {
 
 	testServiceName := "my-service"
 
-	req := &collectorlogs.ExportLogsServiceRequest{
-		ResourceLogs: []*logs.ResourceLogs{{
-			Resource: &resource.Resource{
-				Attributes: []*common.KeyValue{{
-					Key: "resource_attr",
-					Value: &common.AnyValue{
-						Value: &common.AnyValue_StringValue{StringValue: "resource_attr_val"},
-					},
-				}, {
-					Key: "service.name",
-					Value: &common.AnyValue{
-						Value: &common.AnyValue_StringValue{StringValue: testServiceName},
-					},
-				}},
-			},
-			ScopeLogs: []*logs.ScopeLogs{{
-				Scope: &common.InstrumentationScope{
-					Name:    "instr_scope_name",
-					Version: "instr_scope_version",
-					Attributes: []*common.KeyValue{
-						{
-							Key: "scope_attr",
-							Value: &common.AnyValue{
-								Value: &common.AnyValue_StringValue{StringValue: "scope_attr_val"},
-							},
-						},
-					},
-				},
-				LogRecords: []*logs.LogRecord{{
-					TraceId:        traceID,
-					SpanId:         spanID,
-					TimeUnixNano:   uint64(startTimestamp.Nanosecond()),
-					SeverityText:   "test_severity_text",
-					SeverityNumber: logs.SeverityNumber_SEVERITY_NUMBER_DEBUG,
-					Attributes: []*common.KeyValue{
-						{
-							Key: "span_attr",
-							Value: &common.AnyValue{
-								Value: &common.AnyValue_StringValue{StringValue: "span_attr_val"},
-							},
-						},
-					},
-				}},
-			}},
-		}},
-	}
+	req := buildExportLogsServiceRequest(traceID, spanID, startTimestamp, testServiceName)
 
 	testCases := []struct {
 		Name            string
@@ -256,52 +166,7 @@ func TestTranslateHttpLogsRequestWithServiceNameAndDataset(t *testing.T) {
 	testServiceName := "my-service"
 	testSpecifiedDatasetName := "my-dataset-name"
 
-	req := &collectorlogs.ExportLogsServiceRequest{
-		ResourceLogs: []*logs.ResourceLogs{{
-			Resource: &resource.Resource{
-				Attributes: []*common.KeyValue{{
-					Key: "resource_attr",
-					Value: &common.AnyValue{
-						Value: &common.AnyValue_StringValue{StringValue: "resource_attr_val"},
-					},
-				}, {
-					Key: "service.name",
-					Value: &common.AnyValue{
-						Value: &common.AnyValue_StringValue{StringValue: testServiceName},
-					},
-				}},
-			},
-			ScopeLogs: []*logs.ScopeLogs{{
-				Scope: &common.InstrumentationScope{
-					Name:    "instr_scope_name",
-					Version: "instr_scope_version",
-					Attributes: []*common.KeyValue{
-						{
-							Key: "scope_attr",
-							Value: &common.AnyValue{
-								Value: &common.AnyValue_StringValue{StringValue: "scope_attr_val"},
-							},
-						},
-					},
-				},
-				LogRecords: []*logs.LogRecord{{
-					TraceId:        traceID,
-					SpanId:         spanID,
-					TimeUnixNano:   uint64(startTimestamp.Nanosecond()),
-					SeverityText:   "test_severity_text",
-					SeverityNumber: logs.SeverityNumber_SEVERITY_NUMBER_DEBUG,
-					Attributes: []*common.KeyValue{
-						{
-							Key: "span_attr",
-							Value: &common.AnyValue{
-								Value: &common.AnyValue_StringValue{StringValue: "span_attr_val"},
-							},
-						},
-					},
-				}},
-			}},
-		}},
-	}
+	req := buildExportLogsServiceRequest(traceID, spanID, startTimestamp, testServiceName)
 
 	testCases := []struct {
 		Name            string
@@ -380,52 +245,7 @@ func TestTranslateHttpLogsRequestWithDatasetButNoServiceName(t *testing.T) {
 	testServiceName := "unknown_service"
 	testSpecifiedDatasetName := "my-logs-source"
 
-	req := &collectorlogs.ExportLogsServiceRequest{
-		ResourceLogs: []*logs.ResourceLogs{{
-			Resource: &resource.Resource{
-				Attributes: []*common.KeyValue{{
-					Key: "resource_attr",
-					Value: &common.AnyValue{
-						Value: &common.AnyValue_StringValue{StringValue: "resource_attr_val"},
-					},
-				}, {
-					Key: "service.name",
-					Value: &common.AnyValue{
-						Value: &common.AnyValue_StringValue{StringValue: testServiceName},
-					},
-				}},
-			},
-			ScopeLogs: []*logs.ScopeLogs{{
-				Scope: &common.InstrumentationScope{
-					Name:    "instr_scope_name",
-					Version: "instr_scope_version",
-					Attributes: []*common.KeyValue{
-						{
-							Key: "scope_attr",
-							Value: &common.AnyValue{
-								Value: &common.AnyValue_StringValue{StringValue: "scope_attr_val"},
-							},
-						},
-					},
-				},
-				LogRecords: []*logs.LogRecord{{
-					TraceId:        traceID,
-					SpanId:         spanID,
-					TimeUnixNano:   uint64(startTimestamp.Nanosecond()),
-					SeverityText:   "test_severity_text",
-					SeverityNumber: logs.SeverityNumber_SEVERITY_NUMBER_DEBUG,
-					Attributes: []*common.KeyValue{
-						{
-							Key: "span_attr",
-							Value: &common.AnyValue{
-								Value: &common.AnyValue_StringValue{StringValue: "span_attr_val"},
-							},
-						},
-					},
-				}},
-			}},
-		}},
-	}
+	req := buildExportLogsServiceRequest(traceID, spanID, startTimestamp, testServiceName)
 
 	testCases := []struct {
 		Name            string
