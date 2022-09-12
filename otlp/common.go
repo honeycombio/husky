@@ -233,6 +233,27 @@ func getDataset(ri RequestInfo, attrs map[string]interface{}) string {
 	return dataset
 }
 
+func getLogsDataset(ri RequestInfo, attrs map[string]interface{}) string {
+	var dataset string
+	if ri.hasLegacyKey() {
+		dataset = ri.Dataset
+	} else {
+		serviceName, ok := attrs["service.name"].(string)
+		if !ok ||
+			strings.TrimSpace(serviceName) == "" ||
+			strings.HasPrefix(serviceName, "unknown_service") {
+			if strings.TrimSpace(ri.Dataset) == "" {
+				dataset = "unknown_logs_source"
+			} else {
+				dataset = ri.Dataset
+			}
+		} else {
+			dataset = strings.TrimSpace(serviceName)
+		}
+	}
+	return dataset
+}
+
 func getValue(value *common.AnyValue) interface{} {
 	switch value.Value.(type) {
 	case *common.AnyValue_StringValue:

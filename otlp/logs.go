@@ -33,7 +33,7 @@ func TranslateLogsRequest(request *collectorLogs.ExportLogsServiceRequest, ri Re
 	for _, resourceLog := range request.ResourceLogs {
 		var events []Event
 		resourceAttrs := getResourceAttributes(resourceLog.Resource)
-		dataset := getDataset(ri, resourceAttrs)
+		dataset := getLogsDataset(ri, resourceAttrs)
 
 		for _, scopeLog := range resourceLog.ScopeLogs {
 			scopeAttrs := getScopeAttributes(scopeLog.Scope)
