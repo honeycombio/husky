@@ -84,7 +84,7 @@ func TestTranslateLogsRequest(t *testing.T) {
 				Dataset:     "legacy-dataset",
 				ContentType: "application/protobuf",
 			},
-			expectedDataset: "legacy-dataset",
+			expectedDataset: testServiceName,
 		},
 		{
 			Name: "E&S",
@@ -118,7 +118,7 @@ func TestTranslateLogsRequest(t *testing.T) {
 			assert.Equal(t, uint32(0), ev.Attributes["flags"])
 			assert.Equal(t, "test_severity_text", ev.Attributes["severity_text"])
 			assert.Equal(t, "debug", ev.Attributes["severity"])
-			assert.Equal(t, "my-service", ev.Attributes["service.name"])
+			assert.Equal(t, testServiceName, ev.Attributes["service.name"])
 			assert.Equal(t, "span_attr_val", ev.Attributes["span_attr"])
 			assert.Equal(t, "resource_attr_val", ev.Attributes["resource_attr"])
 		})
@@ -190,7 +190,7 @@ func TestTranslateHttpLogsRequest(t *testing.T) {
 				ApiKey:  "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
 				Dataset: "legacy-dataset",
 			},
-			expectedDataset: "legacy-dataset",
+			expectedDataset: testServiceName,
 		},
 		{
 			Name: "E&S",
@@ -248,12 +248,13 @@ func TestTranslateHttpLogsRequest(t *testing.T) {
 	}
 }
 
-func TestTranslateNonServiceHttpLogsWithDatasetRequest(t *testing.T) {
+func TestTranslateHttpLogsRequestWithServiceNameAndDataset(t *testing.T) {
 	traceID := test.RandomBytes(16)
 	spanID := test.RandomBytes(8)
 	startTimestamp := time.Now()
 
-	testServiceName := "unknown_service"
+	testServiceName := "my-service"
+	testSpecifiedDatasetName := "my-dataset-name"
 
 	req := &collectorlogs.ExportLogsServiceRequest{
 		ResourceLogs: []*logs.ResourceLogs{{
@@ -311,17 +312,141 @@ func TestTranslateNonServiceHttpLogsWithDatasetRequest(t *testing.T) {
 			Name: "Classic",
 			ri: RequestInfo{
 				ApiKey:  "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
-				Dataset: "my-logs-source",
+				Dataset: testSpecifiedDatasetName,
 			},
-			expectedDataset: "my-logs-source",
+			expectedDataset: testServiceName,
 		},
 		{
 			Name: "E&S",
 			ri: RequestInfo{
 				ApiKey:  "abc123DEF456ghi789jklm",
-				Dataset: "my-logs-source",
+				Dataset: testSpecifiedDatasetName,
 			},
-			expectedDataset: "my-logs-source",
+			expectedDataset: testServiceName,
+		},
+	}
+
+	for _, tC := range testCases {
+		t.Run(tC.Name, func(t *testing.T) {
+			for _, testCaseContentType := range GetSupportedContentTypes() {
+				t.Run(testCaseNameForContentType(testCaseContentType), func(t *testing.T) {
+					for _, testCaseContentEncoding := range GetSupportedContentEncodings() {
+						t.Run(testCaseNameForEncoding(testCaseContentEncoding), func(t *testing.T) {
+
+							tC.ri.ContentType = testCaseContentType
+							tC.ri.ContentEncoding = testCaseContentEncoding
+
+							body, err := prepareOtlpRequestHttpBody(req, testCaseContentType, testCaseContentEncoding)
+							require.NoError(t, err, "Womp womp. Ought to have been able to turn the OTLP log request into an HTTP body.")
+
+							result, err := TranslateLogsRequestFromReader(io.NopCloser(strings.NewReader(body)), tC.ri)
+							require.NoError(t, err)
+							assert.Equal(t, proto.Size(req), result.RequestSize)
+							assert.Equal(t, 1, len(result.Batches))
+							batch := result.Batches[0]
+							assert.Equal(t, tC.expectedDataset, batch.Dataset)
+							assert.Equal(t, proto.Size(req.ResourceLogs[0]), batch.SizeBytes)
+							events := batch.Events
+							assert.Equal(t, 1, len(events))
+
+							ev := events[0]
+							assert.Equal(t, startTimestamp.Nanosecond(), ev.Timestamp.Nanosecond())
+							assert.Equal(t, BytesToTraceID(traceID), ev.Attributes["trace.trace_id"])
+							assert.Equal(t, hex.EncodeToString(spanID), ev.Attributes["trace.parent_id"])
+							assert.Equal(t, "log", ev.Attributes["meta.signal_type"])
+							assert.Equal(t, "span_event", ev.Attributes["meta.annotation_type"])
+							assert.Equal(t, uint32(0), ev.Attributes["flags"])
+							assert.Equal(t, "test_severity_text", ev.Attributes["severity_text"])
+							assert.Equal(t, "debug", ev.Attributes["severity"])
+							assert.Equal(t, testServiceName, ev.Attributes["service.name"])
+							assert.Equal(t, "span_attr_val", ev.Attributes["span_attr"])
+							assert.Equal(t, "resource_attr_val", ev.Attributes["resource_attr"])
+							assert.Equal(t, "instr_scope_name", ev.Attributes["library.name"])
+							assert.Equal(t, "instr_scope_version", ev.Attributes["library.version"])
+							assert.Equal(t, "scope_attr_val", ev.Attributes["scope_attr"])
+						})
+					}
+				})
+			}
+		})
+	}
+}
+
+func TestTranslateHttpLogsRequestWithDatasetButNoServiceName(t *testing.T) {
+	traceID := test.RandomBytes(16)
+	spanID := test.RandomBytes(8)
+	startTimestamp := time.Now()
+
+	testServiceName := "unknown_service"
+	testSpecifiedDatasetName := "my-logs-source"
+
+	req := &collectorlogs.ExportLogsServiceRequest{
+		ResourceLogs: []*logs.ResourceLogs{{
+			Resource: &resource.Resource{
+				Attributes: []*common.KeyValue{{
+					Key: "resource_attr",
+					Value: &common.AnyValue{
+						Value: &common.AnyValue_StringValue{StringValue: "resource_attr_val"},
+					},
+				}, {
+					Key: "service.name",
+					Value: &common.AnyValue{
+						Value: &common.AnyValue_StringValue{StringValue: testServiceName},
+					},
+				}},
+			},
+			ScopeLogs: []*logs.ScopeLogs{{
+				Scope: &common.InstrumentationScope{
+					Name:    "instr_scope_name",
+					Version: "instr_scope_version",
+					Attributes: []*common.KeyValue{
+						{
+							Key: "scope_attr",
+							Value: &common.AnyValue{
+								Value: &common.AnyValue_StringValue{StringValue: "scope_attr_val"},
+							},
+						},
+					},
+				},
+				LogRecords: []*logs.LogRecord{{
+					TraceId:        traceID,
+					SpanId:         spanID,
+					TimeUnixNano:   uint64(startTimestamp.Nanosecond()),
+					SeverityText:   "test_severity_text",
+					SeverityNumber: logs.SeverityNumber_SEVERITY_NUMBER_DEBUG,
+					Attributes: []*common.KeyValue{
+						{
+							Key: "span_attr",
+							Value: &common.AnyValue{
+								Value: &common.AnyValue_StringValue{StringValue: "span_attr_val"},
+							},
+						},
+					},
+				}},
+			}},
+		}},
+	}
+
+	testCases := []struct {
+		Name            string
+		ri              RequestInfo
+		expectedDataset string
+	}{
+		{
+			Name: "Classic",
+			ri: RequestInfo{
+				ApiKey:  "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+				Dataset: testSpecifiedDatasetName,
+			},
+			expectedDataset: testSpecifiedDatasetName,
+		},
+		{
+			Name: "E&S",
+			ri: RequestInfo{
+				ApiKey:  "abc123DEF456ghi789jklm",
+				Dataset: testSpecifiedDatasetName,
+			},
+			expectedDataset: testSpecifiedDatasetName,
 		},
 	}
 
