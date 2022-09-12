@@ -125,29 +125,38 @@ func TestAddAttributesToMap(t *testing.T) {
 
 func TestValidateTracesHeaders(t *testing.T) {
 	testCases := []struct {
+		name        string
 		apikey      string
 		dataset     string
 		contentType string
 		err         error
 	}{
-		{apikey: "", dataset: "", contentType: "", err: ErrMissingAPIKeyHeader},
-		{apikey: "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1", dataset: "", contentType: "", err: ErrMissingDatasetHeader},
-		{apikey: "abc123DEF456ghi789jklm", dataset: "", contentType: "application/protobuf", err: nil},
-		{apikey: "", dataset: "dataset", contentType: "", err: ErrMissingAPIKeyHeader},
-		{apikey: "apikey", dataset: "dataset", contentType: "", err: ErrInvalidContentType},
-		{apikey: "apikey", dataset: "dataset", contentType: "application/javascript", err: ErrInvalidContentType},
-		{apikey: "apikey", dataset: "dataset", contentType: "application/xml", err: ErrInvalidContentType},
-		{apikey: "apikey", dataset: "dataset", contentType: "application/octet-stream", err: ErrInvalidContentType},
-		{apikey: "apikey", dataset: "dataset", contentType: "text-plain", err: ErrInvalidContentType},
-		{apikey: "apikey", dataset: "dataset", contentType: "application/protobuf", err: nil},
-		{apikey: "apikey", dataset: "dataset", contentType: "application/x-protobuf", err: nil},
-		{apikey: "apikey", dataset: "dataset", contentType: "application/json", err: nil},
+		{name: "no key, no dataset", apikey: "", dataset: "", contentType: "", err: ErrMissingAPIKeyHeader},
+		{name: "no key, dataset present", apikey: "", dataset: "dataset", contentType: "", err: ErrMissingAPIKeyHeader},
+		{name: "classic/no dataset", apikey: "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1", dataset: "", contentType: "", err: ErrMissingDatasetHeader},
+		{name: "classic/dataset present", apikey: "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1", dataset: "dataset", contentType: "application/protobuf", err: nil},
+		{name: "E&S/no dataset", apikey: "abc123DEF456ghi789jklm", dataset: "", contentType: "application/protobuf", err: nil},
+		{name: "E&S/dataset present", apikey: "abc123DEF456ghi789jklm", dataset: "dataset", contentType: "application/protobuf", err: nil},
+		{name: "content-type/(missing)", apikey: "apikey", dataset: "dataset", contentType: "", err: ErrInvalidContentType},
+		{name: "content-type/javascript", apikey: "apikey", dataset: "dataset", contentType: "application/javascript", err: ErrInvalidContentType},
+		{name: "content-type/xml", apikey: "apikey", dataset: "dataset", contentType: "application/xml", err: ErrInvalidContentType},
+		{name: "content-type/octet-stream", apikey: "apikey", dataset: "dataset", contentType: "application/octet-stream", err: ErrInvalidContentType},
+		{name: "content-type/text-plain", apikey: "apikey", dataset: "dataset", contentType: "text-plain", err: ErrInvalidContentType},
+		{name: "content-type/json", apikey: "apikey", dataset: "dataset", contentType: "application/json", err: nil},
+		{name: "content-type/protobuf", apikey: "apikey", dataset: "dataset", contentType: "application/protobuf", err: nil},
+		{name: "content-type/x-protobuf", apikey: "apikey", dataset: "dataset", contentType: "application/x-protobuf", err: nil},
 	}
 
 	for _, tc := range testCases {
-		ri := RequestInfo{ApiKey: tc.apikey, ContentType: tc.contentType, Dataset: tc.dataset}
-		err := ri.ValidateTracesHeaders()
-		assert.Equal(t, tc.err, err)
+		t.Run(tc.name, func(t *testing.T) {
+			ri := RequestInfo{ApiKey: tc.apikey, ContentType: tc.contentType, Dataset: tc.dataset}
+			err := ri.ValidateTracesHeaders()
+			if tc.err != nil {
+				assert.EqualError(t, tc.err, err.Error())
+			} else {
+				assert.NoError(t, err)
+			}
+		})
 	}
 }
 
@@ -159,25 +168,70 @@ func TestValidateMetricsHeaders(t *testing.T) {
 		contentType string
 		err         error
 	}{
-		{name: "missing API key and missing dataset", apikey: "", dataset: "", contentType: "", err: ErrMissingAPIKeyHeader},
-		{name: "legacy API key and missing dataset", apikey: "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1", dataset: "", contentType: "", err: ErrMissingDatasetHeader},
-		{name: "new API key and missing dataset", apikey: "abc123DEF456ghi789jklm", dataset: "", contentType: "application/protobuf", err: nil},
-		{name: "missing API key", apikey: "", dataset: "dataset", contentType: "", err: ErrMissingAPIKeyHeader},
-		{name: "missing content-type", apikey: "apikey", dataset: "dataset", contentType: "", err: ErrInvalidContentType},
-		{name: "application/javascript content-type", apikey: "apikey", dataset: "dataset", contentType: "application/javascript", err: ErrInvalidContentType},
-		{name: "application/xml content-type", apikey: "apikey", dataset: "dataset", contentType: "application/xml", err: ErrInvalidContentType},
-		{name: "application/octet-stream content-type", apikey: "apikey", dataset: "dataset", contentType: "application/octet-stream", err: ErrInvalidContentType},
-		{name: "text-plain content type", apikey: "apikey", dataset: "dataset", contentType: "text-plain", err: ErrInvalidContentType},
-		{name: "application/json content-type", apikey: "apikey", dataset: "dataset", contentType: "application/json", err: nil},
-		{name: "application/protobuf content-type", apikey: "apikey", dataset: "dataset", contentType: "application/protobuf", err: nil},
-		{name: "application/x-protobuf content-type", apikey: "apikey", dataset: "dataset", contentType: "application/x-protobuf", err: nil},
+		{name: "no key, no dataset", apikey: "", dataset: "", contentType: "", err: ErrMissingAPIKeyHeader},
+		{name: "no key, dataset present", apikey: "", dataset: "dataset", contentType: "", err: ErrMissingAPIKeyHeader},
+		{name: "classic/no dataset", apikey: "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1", dataset: "", contentType: "", err: ErrMissingDatasetHeader},
+		{name: "classic/dataset present", apikey: "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1", dataset: "dataset", contentType: "application/protobuf", err: nil},
+		{name: "E&S/no dataset", apikey: "abc123DEF456ghi789jklm", dataset: "", contentType: "application/protobuf", err: ErrMissingDatasetHeader},
+		{name: "E&S/dataset present", apikey: "abc123DEF456ghi789jklm", dataset: "dataset", contentType: "application/protobuf", err: nil},
+		{name: "content-type/(missing)", apikey: "apikey", dataset: "dataset", contentType: "", err: ErrInvalidContentType},
+		{name: "content-type/javascript", apikey: "apikey", dataset: "dataset", contentType: "application/javascript", err: ErrInvalidContentType},
+		{name: "content-type/xml", apikey: "apikey", dataset: "dataset", contentType: "application/xml", err: ErrInvalidContentType},
+		{name: "content-type/octet-stream", apikey: "apikey", dataset: "dataset", contentType: "application/octet-stream", err: ErrInvalidContentType},
+		{name: "content-type/text-plain", apikey: "apikey", dataset: "dataset", contentType: "text-plain", err: ErrInvalidContentType},
+		{name: "content-type/json", apikey: "apikey", dataset: "dataset", contentType: "application/json", err: nil},
+		{name: "content-type/protobuf", apikey: "apikey", dataset: "dataset", contentType: "application/protobuf", err: nil},
+		{name: "content-type/x-protobuf", apikey: "apikey", dataset: "dataset", contentType: "application/x-protobuf", err: nil},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			ri := RequestInfo{ApiKey: tc.apikey, ContentType: tc.contentType, Dataset: tc.dataset}
 			err := ri.ValidateMetricsHeaders()
-			assert.Equal(t, tc.err, err)
+			if tc.err != nil {
+				assert.EqualError(t, err, tc.err.Error())
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestValidateLogsHeaders(t *testing.T) {
+	testCases := []struct {
+		name        string
+		apikey      string
+		dataset     string
+		contentType string
+		err         error
+	}{
+		{name: "no key, no dataset", apikey: "", dataset: "", contentType: "", err: ErrMissingAPIKeyHeader},
+		{name: "no key, dataset present", apikey: "", dataset: "dataset", contentType: "", err: ErrMissingAPIKeyHeader},
+		// logs will use dataset header if present, but log ingest will also use service.name in the data
+		// and we will have a sensible default if neither are present, so a missing dataset header is not an error here
+		{name: "classic/no dataset", apikey: "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1", dataset: "", contentType: "application/protobuf", err: nil},
+		{name: "classic/dataset present", apikey: "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1", dataset: "dataset", contentType: "application/protobuf", err: nil},
+		{name: "E&S/no dataset", apikey: "abc123DEF456ghi789jklm", dataset: "", contentType: "application/protobuf", err: nil},
+		{name: "E&S/dataset present", apikey: "abc123DEF456ghi789jklm", dataset: "dataset", contentType: "application/protobuf", err: nil},
+		{name: "content-type/(missing)", apikey: "apikey", dataset: "dataset", contentType: "", err: ErrInvalidContentType},
+		{name: "content-type/javascript", apikey: "apikey", dataset: "dataset", contentType: "application/javascript", err: ErrInvalidContentType},
+		{name: "content-type/xml", apikey: "apikey", dataset: "dataset", contentType: "application/xml", err: ErrInvalidContentType},
+		{name: "content-type/octet-stream", apikey: "apikey", dataset: "dataset", contentType: "application/octet-stream", err: ErrInvalidContentType},
+		{name: "content-type/text-plain", apikey: "apikey", dataset: "dataset", contentType: "text-plain", err: ErrInvalidContentType},
+		{name: "content-type/json", apikey: "apikey", dataset: "dataset", contentType: "application/json", err: nil},
+		{name: "content-type/protobuf", apikey: "apikey", dataset: "dataset", contentType: "application/protobuf", err: nil},
+		{name: "content-type/x-protobuf", apikey: "apikey", dataset: "dataset", contentType: "application/x-protobuf", err: nil},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			ri := RequestInfo{ApiKey: tc.apikey, ContentType: tc.contentType, Dataset: tc.dataset}
+			err := ri.ValidateLogsHeaders()
+			if tc.err != nil {
+				assert.EqualError(t, err, tc.err.Error())
+			} else {
+				assert.NoError(t, err)
+			}
 		})
 	}
 }

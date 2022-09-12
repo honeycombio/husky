@@ -105,35 +105,8 @@ func (ri RequestInfo) hasLegacyKey() bool {
 	return legacyApiKeyPattern.MatchString(ri.ApiKey)
 }
 
-// ValidateTracesHeaders checks for required headers/metadata for all OTLP requests
-// and specific to Traces.
+// ValidateTracesHeaders validates required headers/metadata for a trace OTLP request
 func (ri *RequestInfo) ValidateTracesHeaders() error {
-	// validations specific to traces
-	// - none for now
-	// validations common for all OTLP requests
-	return validateHeaders(ri)
-}
-
-// ValidateMetricsHeaders checks for required headers/metadata for all OTLP requests
-// and specific to Metrics.
-func (ri *RequestInfo) ValidateMetricsHeaders() error {
-	// validations specific to metrics
-	// - none for now
-	// validations common for all OTLP requests
-	return validateHeaders(ri)
-}
-
-// ValidateLogsHeaders checks for required headers/metadata for all OTLP requests
-// and specific to Logs.
-func (ri *RequestInfo) ValidateLogsHeaders() error {
-	// validations specific to logs
-	// - none for now
-	// validations common for all OTLP requests
-	return validateHeaders(ri)
-}
-
-// Header validation that is common across OTLP signal requests.
-func validateHeaders(ri *RequestInfo) error {
 	if len(ri.ApiKey) == 0 {
 		return ErrMissingAPIKeyHeader
 	}
@@ -144,6 +117,31 @@ func validateHeaders(ri *RequestInfo) error {
 		return ErrInvalidContentType
 	}
 	return nil // no error, headers passed all the validations
+}
+
+// ValidateMetricsHeaders validates required headers/metadata for a metric OTLP request
+func (ri *RequestInfo) ValidateMetricsHeaders() error {
+	if len(ri.ApiKey) == 0 {
+		return ErrMissingAPIKeyHeader
+	}
+	if len(ri.Dataset) == 0 {
+		return ErrMissingDatasetHeader
+	}
+	if !IsContentTypeSupported(ri.ContentType) {
+		return ErrInvalidContentType
+	}
+	return nil // no error, headers passed all the validations
+}
+
+// ValidateLogsHeaders validates required headers/metadata for a logs OTLP request
+func (ri *RequestInfo) ValidateLogsHeaders() error {
+	if len(ri.ApiKey) == 0 {
+		return ErrMissingAPIKeyHeader
+	}
+	if !IsContentTypeSupported(ri.ContentType) {
+		return ErrInvalidContentType
+	}
+	return nil
 }
 
 // GetRequestInfoFromGrpcMetadata parses relevant gRPC metadata from an incoming request context
