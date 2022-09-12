@@ -496,7 +496,7 @@ func TestTranslateHttpLogsRequestWithDatasetButNoServiceName(t *testing.T) {
 	}
 }
 
-func TestTranslateNonServiceHttpLogsWithoutDatasetRequest(t *testing.T) {
+func TestTranslateHttpLogsRequestWithoutServiceAndWithoutDataset(t *testing.T) {
 	testCases := []struct {
 		Name            string
 		ri              RequestInfo
