@@ -175,16 +175,18 @@ func TestLogtWithServiceNameAndDataset(t *testing.T) {
 		{
 			Name: "Classic",
 			ri: RequestInfo{
-				ApiKey:  "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
-				Dataset: testSpecifiedDatasetName,
+				ApiKey:      "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+				Dataset:     testSpecifiedDatasetName,
+				ContentType: "application/protobuf",
 			},
 			expectedDataset: testServiceName,
 		},
 		{
 			Name: "E&S",
 			ri: RequestInfo{
-				ApiKey:  "abc123DEF456ghi789jklm",
-				Dataset: testSpecifiedDatasetName,
+				ApiKey:      "abc123DEF456ghi789jklm",
+				Dataset:     testSpecifiedDatasetName,
+				ContentType: "application/protobuf",
 			},
 			expectedDataset: testServiceName,
 		},
@@ -192,25 +194,18 @@ func TestLogtWithServiceNameAndDataset(t *testing.T) {
 
 	for _, tC := range testCases {
 		t.Run(tC.Name, func(t *testing.T) {
-			for _, testCaseContentType := range GetSupportedContentTypes() {
-				t.Run(testCaseNameForContentType(testCaseContentType), func(t *testing.T) {
-					for _, testCaseContentEncoding := range GetSupportedContentEncodings() {
-						t.Run(testCaseNameForEncoding(testCaseContentEncoding), func(t *testing.T) {
+			result, err := TranslateLogsRequest(req, tC.ri)
+			assert.Nil(t, err)
+			assert.Equal(t, proto.Size(req), result.RequestSize)
+			assert.Equal(t, 1, len(result.Batches))
+			batch := result.Batches[0]
+			assert.Equal(t, tC.expectedDataset, batch.Dataset)
+			assert.Equal(t, proto.Size(req.ResourceLogs[0]), batch.SizeBytes)
+			events := batch.Events
+			assert.Equal(t, 1, len(events))
 
-							tC.ri.ContentType = testCaseContentType
-							tC.ri.ContentEncoding = testCaseContentEncoding
-
-							body, err := prepareOtlpRequestHttpBody(req, testCaseContentType, testCaseContentEncoding)
-							require.NoError(t, err, "Womp womp. Ought to have been able to turn the OTLP log request into an HTTP body.")
-
-							result, err := TranslateLogsRequestFromReader(io.NopCloser(strings.NewReader(body)), tC.ri)
-							require.NoError(t, err)
-							batch := result.Batches[0]
-							assert.Equal(t, tC.expectedDataset, batch.Dataset)
-						})
-					}
-				})
-			}
+			ev := events[0]
+			assert.Equal(t, testServiceName, ev.Attributes["service.name"])
 		})
 	}
 }
@@ -233,16 +228,18 @@ func TestTranslateHttpLogsRequestWithDatasetButNoServiceName(t *testing.T) {
 		{
 			Name: "Classic",
 			ri: RequestInfo{
-				ApiKey:  "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
-				Dataset: testSpecifiedDatasetName,
+				ApiKey:      "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+				Dataset:     testSpecifiedDatasetName,
+				ContentType: "application/protobuf",
 			},
 			expectedDataset: testSpecifiedDatasetName,
 		},
 		{
 			Name: "E&S",
 			ri: RequestInfo{
-				ApiKey:  "abc123DEF456ghi789jklm",
-				Dataset: testSpecifiedDatasetName,
+				ApiKey:      "abc123DEF456ghi789jklm",
+				Dataset:     testSpecifiedDatasetName,
+				ContentType: "application/protobuf",
 			},
 			expectedDataset: testSpecifiedDatasetName,
 		},
@@ -250,30 +247,18 @@ func TestTranslateHttpLogsRequestWithDatasetButNoServiceName(t *testing.T) {
 
 	for _, tC := range testCases {
 		t.Run(tC.Name, func(t *testing.T) {
-			for _, testCaseContentType := range GetSupportedContentTypes() {
-				t.Run(testCaseNameForContentType(testCaseContentType), func(t *testing.T) {
-					for _, testCaseContentEncoding := range GetSupportedContentEncodings() {
-						t.Run(testCaseNameForEncoding(testCaseContentEncoding), func(t *testing.T) {
+			result, err := TranslateLogsRequest(req, tC.ri)
+			assert.Nil(t, err)
+			assert.Equal(t, proto.Size(req), result.RequestSize)
+			assert.Equal(t, 1, len(result.Batches))
+			batch := result.Batches[0]
+			assert.Equal(t, tC.expectedDataset, batch.Dataset)
+			assert.Equal(t, proto.Size(req.ResourceLogs[0]), batch.SizeBytes)
+			events := batch.Events
+			assert.Equal(t, 1, len(events))
 
-							tC.ri.ContentType = testCaseContentType
-							tC.ri.ContentEncoding = testCaseContentEncoding
-
-							body, err := prepareOtlpRequestHttpBody(req, testCaseContentType, testCaseContentEncoding)
-							require.NoError(t, err, "Womp womp. Ought to have been able to turn the OTLP log request into an HTTP body.")
-
-							result, err := TranslateLogsRequestFromReader(io.NopCloser(strings.NewReader(body)), tC.ri)
-							require.NoError(t, err)
-
-							batch := result.Batches[0]
-							assert.Equal(t, tC.expectedDataset, batch.Dataset)
-
-							events := batch.Events
-							ev := events[0]
-							assert.Equal(t, "unknown_service", ev.Attributes["service.name"])
-						})
-					}
-				})
-			}
+			ev := events[0]
+			assert.Equal(t, testServiceName, ev.Attributes["service.name"])
 		})
 	}
 }
@@ -295,16 +280,18 @@ func TestTranslateHttpLogsRequestWithoutServiceAndWithoutDataset(t *testing.T) {
 		{
 			Name: "Classic",
 			ri: RequestInfo{
-				ApiKey:  "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
-				Dataset: "",
+				ApiKey:      "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+				Dataset:     "",
+				ContentType: "application/protobuf",
 			},
 			expectedDataset: unknownLogSource,
 		},
 		{
 			Name: "E&S",
 			ri: RequestInfo{
-				ApiKey:  "abc123DEF456ghi789jklm",
-				Dataset: "",
+				ApiKey:      "abc123DEF456ghi789jklm",
+				Dataset:     "",
+				ContentType: "application/protobuf",
 			},
 			expectedDataset: unknownLogSource,
 		},
@@ -312,30 +299,18 @@ func TestTranslateHttpLogsRequestWithoutServiceAndWithoutDataset(t *testing.T) {
 
 	for _, tC := range testCases {
 		t.Run(tC.Name, func(t *testing.T) {
-			for _, testCaseContentType := range GetSupportedContentTypes() {
-				t.Run(testCaseNameForContentType(testCaseContentType), func(t *testing.T) {
-					for _, testCaseContentEncoding := range GetSupportedContentEncodings() {
-						t.Run(testCaseNameForEncoding(testCaseContentEncoding), func(t *testing.T) {
+			result, err := TranslateLogsRequest(req, tC.ri)
+			assert.Nil(t, err)
+			assert.Equal(t, proto.Size(req), result.RequestSize)
+			assert.Equal(t, 1, len(result.Batches))
+			batch := result.Batches[0]
+			assert.Equal(t, tC.expectedDataset, batch.Dataset)
+			assert.Equal(t, proto.Size(req.ResourceLogs[0]), batch.SizeBytes)
+			events := batch.Events
+			assert.Equal(t, 1, len(events))
 
-							tC.ri.ContentType = testCaseContentType
-							tC.ri.ContentEncoding = testCaseContentEncoding
-
-							body, err := prepareOtlpRequestHttpBody(req, testCaseContentType, testCaseContentEncoding)
-							require.NoError(t, err, "Womp womp. Ought to have been able to turn the OTLP log request into an HTTP body.")
-
-							result, err := TranslateLogsRequestFromReader(io.NopCloser(strings.NewReader(body)), tC.ri)
-							require.NoError(t, err)
-
-							batch := result.Batches[0]
-							assert.Equal(t, tC.expectedDataset, batch.Dataset)
-
-							events := batch.Events
-							ev := events[0]
-							assert.Equal(t, "unknown_service", ev.Attributes["service.name"])
-						})
-					}
-				})
-			}
+			ev := events[0]
+			assert.Equal(t, testServiceName, ev.Attributes["service.name"])
 		})
 	}
 }
