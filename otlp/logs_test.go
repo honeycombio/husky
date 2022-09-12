@@ -192,22 +192,7 @@ func TestLogtWithServiceNameAndDataset(t *testing.T) {
 		},
 	}
 
-	for _, tC := range testCases {
-		t.Run(tC.Name, func(t *testing.T) {
-			result, err := TranslateLogsRequest(req, tC.ri)
-			assert.Nil(t, err)
-			assert.Equal(t, proto.Size(req), result.RequestSize)
-			assert.Equal(t, 1, len(result.Batches))
-			batch := result.Batches[0]
-			assert.Equal(t, tC.expectedDataset, batch.Dataset)
-			assert.Equal(t, proto.Size(req.ResourceLogs[0]), batch.SizeBytes)
-			events := batch.Events
-			assert.Equal(t, 1, len(events))
-
-			ev := events[0]
-			assert.Equal(t, testServiceName, ev.Attributes["service.name"])
-		})
-	}
+	validateCommonLogThings(testCases, t, req, testServiceName)
 }
 
 func TestTranslateHttpLogsRequestWithDatasetButNoServiceName(t *testing.T) {
@@ -245,22 +230,7 @@ func TestTranslateHttpLogsRequestWithDatasetButNoServiceName(t *testing.T) {
 		},
 	}
 
-	for _, tC := range testCases {
-		t.Run(tC.Name, func(t *testing.T) {
-			result, err := TranslateLogsRequest(req, tC.ri)
-			assert.Nil(t, err)
-			assert.Equal(t, proto.Size(req), result.RequestSize)
-			assert.Equal(t, 1, len(result.Batches))
-			batch := result.Batches[0]
-			assert.Equal(t, tC.expectedDataset, batch.Dataset)
-			assert.Equal(t, proto.Size(req.ResourceLogs[0]), batch.SizeBytes)
-			events := batch.Events
-			assert.Equal(t, 1, len(events))
-
-			ev := events[0]
-			assert.Equal(t, testServiceName, ev.Attributes["service.name"])
-		})
-	}
+	validateCommonLogThings(testCases, t, req, testServiceName)
 }
 
 func TestTranslateHttpLogsRequestWithoutServiceAndWithoutDataset(t *testing.T) {
@@ -297,6 +267,14 @@ func TestTranslateHttpLogsRequestWithoutServiceAndWithoutDataset(t *testing.T) {
 		},
 	}
 
+	validateCommonLogThings(testCases, t, req, testServiceName)
+}
+
+func validateCommonLogThings(testCases []struct {
+	Name            string
+	ri              RequestInfo
+	expectedDataset string
+}, t *testing.T, req *collectorlogs.ExportLogsServiceRequest, testServiceName string) {
 	for _, tC := range testCases {
 		t.Run(tC.Name, func(t *testing.T) {
 			result, err := TranslateLogsRequest(req, tC.ri)
