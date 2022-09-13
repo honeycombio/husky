@@ -187,26 +187,38 @@ func TestLogs_DetermineDestinationDataset(t *testing.T) {
 						expectedDataset string
 					}{
 						{
-							desc:            "no service.name, no dataset header",
+							desc:            "when no service.name or dataset header are present, use our fallback",
 							datasetHeader:   "",
 							testServiceName: "",
 							expectedDataset: "unknown_log_source",
 						}, {
-							desc:            "service.name is unknown_service, no dataset header",
+							desc:            "when service.name is OTel SDK default and no dataset header is present, use our fallback",
 							datasetHeader:   "",
-							testServiceName: "unknown_service",
+							testServiceName: "unknown_service:some_process_name",
 							expectedDataset: "unknown_log_source",
 						},
 						{
-							desc:            "service.name, no dataset header",
+							desc:            "when service.name is set to something non-default and there is no dataset header, use the service.name",
 							datasetHeader:   "",
 							testServiceName: "awesome_service",
 							expectedDataset: "awesome_service",
 						},
 						{
-							desc:            "dataset header, no service.name",
+							desc:            "when dataset header is set and there is no service.name, use the dataset header",
 							datasetHeader:   "a_dataset_set_for_the_data",
 							testServiceName: "",
+							expectedDataset: "a_dataset_set_for_the_data",
+						},
+						{
+							desc:            "when both dataset and service.name are set, use the service.name",
+							datasetHeader:   "a_dataset_set_for_the_data",
+							testServiceName: "awesome_service",
+							expectedDataset: "awesome_service",
+						},
+						{
+							desc:            "when dataset header is set and the service.name is OTel SDK default, use the dataset header",
+							datasetHeader:   "a_dataset_set_for_the_data",
+							testServiceName: "unknown_service:some_process_name",
 							expectedDataset: "a_dataset_set_for_the_data",
 						},
 					}
