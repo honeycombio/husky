@@ -25,52 +25,7 @@ func TestTranslateLogsRequest(t *testing.T) {
 
 	testServiceName := "my-service"
 
-	req := &collectorlogs.ExportLogsServiceRequest{
-		ResourceLogs: []*logs.ResourceLogs{{
-			Resource: &resource.Resource{
-				Attributes: []*common.KeyValue{{
-					Key: "resource_attr",
-					Value: &common.AnyValue{
-						Value: &common.AnyValue_StringValue{StringValue: "resource_attr_val"},
-					},
-				}, {
-					Key: "service.name",
-					Value: &common.AnyValue{
-						Value: &common.AnyValue_StringValue{StringValue: testServiceName},
-					},
-				}},
-			},
-			ScopeLogs: []*logs.ScopeLogs{{
-				Scope: &common.InstrumentationScope{
-					Name:    "library-name",
-					Version: "library-version",
-					Attributes: []*common.KeyValue{
-						{
-							Key: "scope_attr",
-							Value: &common.AnyValue{
-								Value: &common.AnyValue_StringValue{StringValue: "scope_attr_val"},
-							},
-						},
-					},
-				},
-				LogRecords: []*logs.LogRecord{{
-					TraceId:        traceID,
-					SpanId:         spanID,
-					TimeUnixNano:   uint64(startTimestamp.Nanosecond()),
-					SeverityText:   "test_severity_text",
-					SeverityNumber: logs.SeverityNumber_SEVERITY_NUMBER_DEBUG,
-					Attributes: []*common.KeyValue{
-						{
-							Key: "span_attr",
-							Value: &common.AnyValue{
-								Value: &common.AnyValue_StringValue{StringValue: "span_attr_val"},
-							},
-						},
-					},
-				}},
-			}},
-		}},
-	}
+	req := buildExportLogsServiceRequest(traceID, spanID, startTimestamp, testServiceName)
 
 	testCases := []struct {
 		Name            string
@@ -84,7 +39,7 @@ func TestTranslateLogsRequest(t *testing.T) {
 				Dataset:     "legacy-dataset",
 				ContentType: "application/protobuf",
 			},
-			expectedDataset: "legacy-dataset",
+			expectedDataset: testServiceName,
 		},
 		{
 			Name: "E&S",
@@ -98,7 +53,6 @@ func TestTranslateLogsRequest(t *testing.T) {
 	}
 	for _, tC := range testCases {
 		t.Run(tC.Name, func(t *testing.T) {
-
 			result, err := TranslateLogsRequest(req, tC.ri)
 			assert.Nil(t, err)
 			assert.Equal(t, proto.Size(req), result.RequestSize)
@@ -118,7 +72,7 @@ func TestTranslateLogsRequest(t *testing.T) {
 			assert.Equal(t, uint32(0), ev.Attributes["flags"])
 			assert.Equal(t, "test_severity_text", ev.Attributes["severity_text"])
 			assert.Equal(t, "debug", ev.Attributes["severity"])
-			assert.Equal(t, "my-service", ev.Attributes["service.name"])
+			assert.Equal(t, testServiceName, ev.Attributes["service.name"])
 			assert.Equal(t, "span_attr_val", ev.Attributes["span_attr"])
 			assert.Equal(t, "resource_attr_val", ev.Attributes["resource_attr"])
 		})
@@ -132,52 +86,7 @@ func TestTranslateHttpLogsRequest(t *testing.T) {
 
 	testServiceName := "my-service"
 
-	req := &collectorlogs.ExportLogsServiceRequest{
-		ResourceLogs: []*logs.ResourceLogs{{
-			Resource: &resource.Resource{
-				Attributes: []*common.KeyValue{{
-					Key: "resource_attr",
-					Value: &common.AnyValue{
-						Value: &common.AnyValue_StringValue{StringValue: "resource_attr_val"},
-					},
-				}, {
-					Key: "service.name",
-					Value: &common.AnyValue{
-						Value: &common.AnyValue_StringValue{StringValue: testServiceName},
-					},
-				}},
-			},
-			ScopeLogs: []*logs.ScopeLogs{{
-				Scope: &common.InstrumentationScope{
-					Name:    "instr_scope_name",
-					Version: "instr_scope_version",
-					Attributes: []*common.KeyValue{
-						{
-							Key: "scope_attr",
-							Value: &common.AnyValue{
-								Value: &common.AnyValue_StringValue{StringValue: "scope_attr_val"},
-							},
-						},
-					},
-				},
-				LogRecords: []*logs.LogRecord{{
-					TraceId:        traceID,
-					SpanId:         spanID,
-					TimeUnixNano:   uint64(startTimestamp.Nanosecond()),
-					SeverityText:   "test_severity_text",
-					SeverityNumber: logs.SeverityNumber_SEVERITY_NUMBER_DEBUG,
-					Attributes: []*common.KeyValue{
-						{
-							Key: "span_attr",
-							Value: &common.AnyValue{
-								Value: &common.AnyValue_StringValue{StringValue: "span_attr_val"},
-							},
-						},
-					},
-				}},
-			}},
-		}},
-	}
+	req := buildExportLogsServiceRequest(traceID, spanID, startTimestamp, testServiceName)
 
 	testCases := []struct {
 		Name            string
@@ -190,7 +99,7 @@ func TestTranslateHttpLogsRequest(t *testing.T) {
 				ApiKey:  "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
 				Dataset: "legacy-dataset",
 			},
-			expectedDataset: "legacy-dataset",
+			expectedDataset: testServiceName,
 		},
 		{
 			Name: "E&S",
@@ -240,6 +149,109 @@ func TestTranslateHttpLogsRequest(t *testing.T) {
 							assert.Equal(t, "instr_scope_name", ev.Attributes["library.name"])
 							assert.Equal(t, "instr_scope_version", ev.Attributes["library.version"])
 							assert.Equal(t, "scope_attr_val", ev.Attributes["scope_attr"])
+						})
+					}
+				})
+			}
+		})
+	}
+}
+
+func TestLogs_DetermineDestinationDataset(t *testing.T) {
+	traceID := test.RandomBytes(16)
+	spanID := test.RandomBytes(8)
+	startTimestamp := time.Now()
+
+	for _, protocol := range []string{"GRPC", "HTTP"} {
+		t.Run(protocol, func(t *testing.T) {
+			environmentTypes := []struct {
+				Name   string
+				ApiKey string
+			}{
+				{
+					Name:   "Classic",
+					ApiKey: "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+				},
+				{
+					Name:   "E&S",
+					ApiKey: "abc123DEF456ghi789jklm",
+				},
+			}
+
+			for _, env := range environmentTypes {
+				t.Run(env.Name, func(t *testing.T) {
+					testCases := []struct {
+						desc            string
+						datasetHeader   string
+						testServiceName string
+						expectedDataset string
+					}{
+						{
+							desc:            "when no service.name or dataset header are present, use our fallback",
+							datasetHeader:   "",
+							testServiceName: "",
+							expectedDataset: "unknown_log_source",
+						}, {
+							desc:            "when service.name is OTel SDK default and no dataset header is present, use our fallback",
+							datasetHeader:   "",
+							testServiceName: "unknown_service:some_process_name",
+							expectedDataset: "unknown_log_source",
+						},
+						{
+							desc:            "when service.name is set to something non-default and there is no dataset header, use the service.name",
+							datasetHeader:   "",
+							testServiceName: "awesome_service",
+							expectedDataset: "awesome_service",
+						},
+						{
+							desc:            "when dataset header is set and there is no service.name, use the dataset header",
+							datasetHeader:   "a_dataset_set_for_the_data",
+							testServiceName: "",
+							expectedDataset: "a_dataset_set_for_the_data",
+						},
+						{
+							desc:            "when both dataset and service.name are set, use the service.name",
+							datasetHeader:   "a_dataset_set_for_the_data",
+							testServiceName: "awesome_service",
+							expectedDataset: "awesome_service",
+						},
+						{
+							desc:            "when dataset header is set and the service.name is OTel SDK default, use the dataset header",
+							datasetHeader:   "a_dataset_set_for_the_data",
+							testServiceName: "unknown_service:some_process_name",
+							expectedDataset: "a_dataset_set_for_the_data",
+						},
+					}
+					for _, tC := range testCases {
+						t.Run(tC.desc, func(t *testing.T) {
+
+							ri := RequestInfo{
+								ApiKey:      env.ApiKey,
+								Dataset:     tC.datasetHeader,
+								ContentType: "application/protobuf",
+							}
+
+							req := buildExportLogsServiceRequest(traceID, spanID, startTimestamp, tC.testServiceName)
+
+							var result *TranslateOTLPRequestResult
+							var err error
+
+							switch protocol {
+							case "GRPC":
+								result, err = TranslateLogsRequest(req, ri)
+								require.NoError(t, err, "Wasn't able to translate that OTLP logs request.")
+							case "HTTP":
+								body, err := prepareOtlpRequestHttpBody(req, ri.ContentType, "")
+								require.NoError(t, err, "Womp womp. Ought to have been able to turn the OTLP log request into an HTTP body.")
+
+								result, err = TranslateLogsRequestFromReader(io.NopCloser(strings.NewReader(body)), ri)
+								require.NoError(t, err, "Wasn't able to translate that OTLP logs request.")
+							default:
+								t.Errorf("lolwut - What kind of protocol is %v?", protocol)
+							}
+
+							batch := result.Batches[0]
+							assert.Equal(t, tC.expectedDataset, batch.Dataset)
 						})
 					}
 				})
@@ -452,4 +464,56 @@ func TestLogsWithoutTraceIdDoesNotGetAnnotationType(t *testing.T) {
 	assert.Nil(t, ev.Attributes["trace.trace_id"])
 	assert.Nil(t, ev.Attributes["trace.span_id"])
 	assert.Nil(t, ev.Attributes["meta.annotation_type"])
+}
+
+// Build an OTel Logs request. Provide a valid OTel traceID and spanID, a time for the log entry, and a service name.
+func buildExportLogsServiceRequest(traceID []byte, spanID []byte, startTimestamp time.Time, testServiceName string) *collectorlogs.ExportLogsServiceRequest {
+	req := &collectorlogs.ExportLogsServiceRequest{
+		ResourceLogs: []*logs.ResourceLogs{{
+			Resource: &resource.Resource{
+				Attributes: []*common.KeyValue{{
+					Key: "resource_attr",
+					Value: &common.AnyValue{
+						Value: &common.AnyValue_StringValue{StringValue: "resource_attr_val"},
+					},
+				}, {
+					Key: "service.name",
+					Value: &common.AnyValue{
+						Value: &common.AnyValue_StringValue{StringValue: testServiceName},
+					},
+				}},
+			},
+			ScopeLogs: []*logs.ScopeLogs{{
+				Scope: &common.InstrumentationScope{
+					Name:    "instr_scope_name",
+					Version: "instr_scope_version",
+					Attributes: []*common.KeyValue{
+						{
+							Key: "scope_attr",
+							Value: &common.AnyValue{
+								Value: &common.AnyValue_StringValue{StringValue: "scope_attr_val"},
+							},
+						},
+					},
+				},
+				LogRecords: []*logs.LogRecord{{
+					TraceId:        traceID,
+					SpanId:         spanID,
+					TimeUnixNano:   uint64(startTimestamp.Nanosecond()),
+					SeverityText:   "test_severity_text",
+					SeverityNumber: logs.SeverityNumber_SEVERITY_NUMBER_DEBUG,
+					Attributes: []*common.KeyValue{
+						{
+							Key: "span_attr",
+							Value: &common.AnyValue{
+								Value: &common.AnyValue_StringValue{StringValue: "span_attr_val"},
+							},
+						},
+					},
+				}},
+			}},
+		}},
+	}
+
+	return req
 }

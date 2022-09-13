@@ -31,6 +31,7 @@ const (
 	contentEncodingHeader    = "content-encoding"
 	gRPCAcceptEncodingHeader = "grpc-accept-encoding"
 	defaultServiceName       = "unknown_service"
+	unknownLogSource         = "unknown_log_source"
 )
 
 var (
@@ -229,6 +230,21 @@ func getDataset(ri RequestInfo, attrs map[string]interface{}) string {
 		} else {
 			dataset = strings.TrimSpace(serviceName)
 		}
+	}
+	return dataset
+}
+
+func getLogsDataset(ri RequestInfo, attrs map[string]interface{}) string {
+	var dataset string
+	serviceName, ok := attrs["service.name"].(string)
+	if !ok || strings.TrimSpace(serviceName) == "" || strings.HasPrefix(serviceName, "unknown_service") {
+		if strings.TrimSpace(ri.Dataset) == "" {
+			dataset = unknownLogSource
+		} else {
+			dataset = ri.Dataset
+		}
+	} else {
+		dataset = strings.TrimSpace(serviceName)
 	}
 	return dataset
 }
