@@ -465,3 +465,55 @@ func TestLogsWithoutTraceIdDoesNotGetAnnotationType(t *testing.T) {
 	assert.Nil(t, ev.Attributes["trace.span_id"])
 	assert.Nil(t, ev.Attributes["meta.annotation_type"])
 }
+
+// Build an OTel Logs request. Provide a valid OTel traceID and spanID, a time for the log entry, and a service name.
+func buildExportLogsServiceRequest(traceID []byte, spanID []byte, startTimestamp time.Time, testServiceName string) *collectorlogs.ExportLogsServiceRequest {
+	req := &collectorlogs.ExportLogsServiceRequest{
+		ResourceLogs: []*logs.ResourceLogs{{
+			Resource: &resource.Resource{
+				Attributes: []*common.KeyValue{{
+					Key: "resource_attr",
+					Value: &common.AnyValue{
+						Value: &common.AnyValue_StringValue{StringValue: "resource_attr_val"},
+					},
+				}, {
+					Key: "service.name",
+					Value: &common.AnyValue{
+						Value: &common.AnyValue_StringValue{StringValue: testServiceName},
+					},
+				}},
+			},
+			ScopeLogs: []*logs.ScopeLogs{{
+				Scope: &common.InstrumentationScope{
+					Name:    "instr_scope_name",
+					Version: "instr_scope_version",
+					Attributes: []*common.KeyValue{
+						{
+							Key: "scope_attr",
+							Value: &common.AnyValue{
+								Value: &common.AnyValue_StringValue{StringValue: "scope_attr_val"},
+							},
+						},
+					},
+				},
+				LogRecords: []*logs.LogRecord{{
+					TraceId:        traceID,
+					SpanId:         spanID,
+					TimeUnixNano:   uint64(startTimestamp.Nanosecond()),
+					SeverityText:   "test_severity_text",
+					SeverityNumber: logs.SeverityNumber_SEVERITY_NUMBER_DEBUG,
+					Attributes: []*common.KeyValue{
+						{
+							Key: "span_attr",
+							Value: &common.AnyValue{
+								Value: &common.AnyValue_StringValue{StringValue: "span_attr_val"},
+							},
+						},
+					},
+				}},
+			}},
+		}},
+	}
+
+	return req
+}
