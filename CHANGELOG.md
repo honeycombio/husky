@@ -1,5 +1,12 @@
 # Husky Changelog
 
+## 0.16.0 2022-09-13
+
+### Enhancements
+
+- Allow OTLP/http-json for metrics (#121) | [@robbkidd](https://github.com/robbkidd)
+- Dataset targeting rules for OTel Logs (#126) | [@robbkidd](https://github.com/robbkidd)
+
 ## 0.15.0 2022-08-24
 
 ### Enhancements
