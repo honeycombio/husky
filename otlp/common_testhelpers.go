@@ -91,6 +91,7 @@ func testCaseNameForEncoding(encoding string) string {
 	}
 }
 
+// Build an OTel Logs request. Provide a valid OTel traceID and spanID, a time for the log entry, and a service name.
 func buildExportLogsServiceRequest(traceID []byte, spanID []byte, startTimestamp time.Time, testServiceName string) *collectorlogs.ExportLogsServiceRequest {
 	req := &collectorlogs.ExportLogsServiceRequest{
 		ResourceLogs: []*logs.ResourceLogs{{
