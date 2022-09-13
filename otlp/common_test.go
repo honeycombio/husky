@@ -170,9 +170,11 @@ func TestValidateMetricsHeaders(t *testing.T) {
 	}{
 		{name: "no key, no dataset", apikey: "", dataset: "", contentType: "", err: ErrMissingAPIKeyHeader},
 		{name: "no key, dataset present", apikey: "", dataset: "dataset", contentType: "", err: ErrMissingAPIKeyHeader},
+		// classic environments need to tell us which dataset to put metrics in
 		{name: "classic/no dataset", apikey: "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1", dataset: "", contentType: "", err: ErrMissingDatasetHeader},
 		{name: "classic/dataset present", apikey: "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1", dataset: "dataset", contentType: "application/protobuf", err: nil},
-		{name: "E&S/no dataset", apikey: "abc123DEF456ghi789jklm", dataset: "", contentType: "application/protobuf", err: ErrMissingDatasetHeader},
+		// dataset header not required for E&S, there's a fallback
+		{name: "E&S/no dataset", apikey: "abc123DEF456ghi789jklm", dataset: "", contentType: "application/protobuf", err: nil},
 		{name: "E&S/dataset present", apikey: "abc123DEF456ghi789jklm", dataset: "dataset", contentType: "application/protobuf", err: nil},
 		{name: "content-type/(missing)", apikey: "apikey", dataset: "dataset", contentType: "", err: ErrInvalidContentType},
 		{name: "content-type/javascript", apikey: "apikey", dataset: "dataset", contentType: "application/javascript", err: ErrInvalidContentType},
