@@ -926,3 +926,23 @@ func TestEvaluateSpanStatus(t *testing.T) {
 		})
 	}
 }
+
+func TestBadTraceRequest(t *testing.T) {
+	for _, contentType := range []string{"application/protobuf", "application/json"} {
+		for _, encoding := range []string{"", "gzip", "zstd"} {
+			t.Run(encoding, func(t *testing.T) {
+				body := io.NopCloser(strings.NewReader("lol"))
+				ri := RequestInfo{
+					ApiKey:          "abc123DEF456ghi789jklm",
+					Dataset:         "legacy-dataset",
+					ContentType:     contentType,
+					ContentEncoding: encoding,
+				}
+
+				_, err := TranslateTraceRequestFromReader(body, ri)
+				assert.NotNil(t, err)
+				assert.Equal(t, ErrFailedParseBody, err)
+			})
+		}
+	}
+}

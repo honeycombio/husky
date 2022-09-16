@@ -297,17 +297,17 @@ func parseOtlpRequestBody(body io.ReadCloser, contentType string, contentEncodin
 	switch contentEncoding {
 	case "gzip":
 		gzipReader, err := gzip.NewReader(bodyReader)
-		defer gzipReader.Close()
 		if err != nil {
 			return err
 		}
+		defer gzipReader.Close()
 		reader = gzipReader
 	case "zstd":
 		zstdReader, err := zstd.NewReader(bodyReader)
-		defer zstdReader.Close()
 		if err != nil {
 			return err
 		}
+		defer zstdReader.Close()
 		reader = zstdReader
 	default:
 		reader = bodyReader
