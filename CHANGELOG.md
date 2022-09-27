@@ -1,5 +1,16 @@
 # Husky Changelog
 
+## 0.16.1 2022-09-27
+
+### Fixed
+
+- Avoid nil pointer (#129) | [@vreynolds](https://github.com/vreynolds)
+
+### Maintenance
+
+- Bump google.golang.org/grpc from 1.48.0 to 1.49.0 (#120)
+- Bump github.com/grpc-ecosystem/grpc-gateway/v2 from 2.11.1 to 2.11.3 (#119)
+
 ## 0.16.0 2022-09-13
 
 ### Enhancements
