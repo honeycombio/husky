@@ -161,7 +161,7 @@ func TestTranslateGrpcTraceRequest(t *testing.T) {
 			// event
 			ev = events[1]
 			assert.Equal(t, BytesToTraceID(traceID), ev.Attributes["trace.trace_id"])
-			assert.Equal(t, int32(0), ev.SampleRate)
+			assert.Equal(t, int32(100), ev.SampleRate)
 			assert.Equal(t, hex.EncodeToString(spanID), ev.Attributes["trace.parent_id"])
 			assert.Equal(t, "span_event", ev.Attributes["name"])
 			assert.Equal(t, "test_span", ev.Attributes["parent_name"])
@@ -172,7 +172,7 @@ func TestTranslateGrpcTraceRequest(t *testing.T) {
 			// link
 			ev = events[2]
 			assert.Equal(t, startTimestamp.Nanosecond(), ev.Timestamp.Nanosecond())
-			assert.Equal(t, int32(0), ev.SampleRate)
+			assert.Equal(t, int32(100), ev.SampleRate)
 			assert.Equal(t, BytesToTraceID(traceID), ev.Attributes["trace.trace_id"])
 			assert.Equal(t, hex.EncodeToString(spanID), ev.Attributes["trace.parent_id"])
 			assert.Equal(t, BytesToTraceID(linkedTraceID), ev.Attributes["trace.link.trace_id"])

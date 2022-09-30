@@ -86,13 +86,16 @@ func TranslateTraceRequest(request *collectorTrace.ExportTraceServiceRequest, ri
 					addAttributesToMap(eventAttrs, span.Attributes)
 				}
 
+				// get sample rate after resource and scope attributes have been added
+				sampleRate := getSampleRate(eventAttrs)
+
 				// Now we need to wrap the eventAttrs in an event so we can specify the timestamp
 				// which is the StartTime as a time.Time object
 				timestamp := time.Unix(0, int64(span.StartTimeUnixNano)).UTC()
 				events = append(events, Event{
 					Attributes: eventAttrs,
 					Timestamp:  timestamp,
-					SampleRate: getSampleRate(eventAttrs),
+					SampleRate: sampleRate,
 				})
 
 				for _, sevent := range span.Events {
@@ -119,6 +122,7 @@ func TranslateTraceRequest(request *collectorTrace.ExportTraceServiceRequest, ri
 					events = append(events, Event{
 						Attributes: attrs,
 						Timestamp:  timestamp,
+						SampleRate: sampleRate,
 					})
 				}
 
@@ -146,6 +150,7 @@ func TranslateTraceRequest(request *collectorTrace.ExportTraceServiceRequest, ri
 					events = append(events, Event{
 						Attributes: attrs,
 						Timestamp:  timestamp, // use timestamp from parent span
+						SampleRate: sampleRate,
 					})
 				}
 			}
