@@ -1,5 +1,17 @@
 # Husky Changelog
 
+## 0.17.0 2022-10-12
+
+### Enhancements
+
+- Add span sample rate to links and events (#133) | [@MikeGoldsmith](https://github.com/MikeGoldsmith)
+
+### Maintenance
+
+- Add new project workflow (#135) | [@vreynolds](https://github.com/vreynolds)
+- Update some dependencies for protobuf and ioutil (#136) | [@kentquirk](https://github.com/kentquirk)
+- Bump github.com/klauspost/compress from 1.15.9 to 1.15.11 (#134)
+
 ## 0.16.1 2022-09-27
 
 ### Fixed
