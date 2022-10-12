@@ -6,9 +6,9 @@ import (
 	"errors"
 	"strings"
 
-	"github.com/golang/protobuf/proto"
 	"github.com/klauspost/compress/zstd"
 	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/runtime/protoiface"
 )

@@ -6,7 +6,6 @@ import (
 	"context"
 	"encoding/json"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"regexp"
 	"strings"
@@ -287,7 +286,7 @@ func getValue(value *common.AnyValue) interface{} {
 
 func parseOtlpRequestBody(body io.ReadCloser, contentType string, contentEncoding string, request protoreflect.ProtoMessage) error {
 	defer body.Close()
-	bodyBytes, err := ioutil.ReadAll(body)
+	bodyBytes, err := io.ReadAll(body)
 	if err != nil {
 		return err
 	}
@@ -313,7 +312,7 @@ func parseOtlpRequestBody(body io.ReadCloser, contentType string, contentEncodin
 		reader = bodyReader
 	}
 
-	bytes, err := ioutil.ReadAll(reader)
+	bytes, err := io.ReadAll(reader)
 	if err != nil {
 		return err
 	}
