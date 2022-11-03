@@ -5,6 +5,7 @@ import (
 	"compress/gzip"
 	"context"
 	"encoding/json"
+	"google.golang.org/protobuf/reflect/protoreflect"
 	"io"
 	"io/ioutil"
 	"net/http"
@@ -18,7 +19,6 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
-	"google.golang.org/protobuf/reflect/protoreflect"
 )
 
 const (
@@ -249,6 +249,31 @@ func getLogsDataset(ri RequestInfo, attrs map[string]interface{}) string {
 	return dataset
 }
 
+type sizeLimitedWriter struct {
+	max    int
+	buffer []byte
+}
+
+func (w sizeLimitedWriter) Write(p []byte) (n int, err error) {
+	currentSize := len(w.buffer)
+	incomingSize := len(p)
+	// if we're going to violate the max here
+	// cap p to whatever is remaining
+	howMuchWeCanAccept := w.max - currentSize
+
+	if howMuchWeCanAccept == 0 {
+		// can't take anymore, bail out early
+		return incomingSize, nil
+	}
+
+	bytesToAccept := p[:howMuchWeCanAccept]
+	w.buffer = append(w.buffer, bytesToAccept...)
+
+	// always pretend we wrote everything because we're intentionally
+	// lying
+	return incomingSize, nil
+}
+
 func getValue(value *common.AnyValue) interface{} {
 	switch value.Value.(type) {
 	case *common.AnyValue_StringValue:
@@ -265,9 +290,12 @@ func getValue(value *common.AnyValue) interface{} {
 		for i := 0; i < len(items); i++ {
 			arr[i] = getValue(items[i])
 		}
-		bytes, err := json.Marshal(arr)
+		writer := sizeLimitedWriter{max: 64_000, buffer: make([]byte, 0)}
+		encoder := json.NewEncoder(writer)
+		err := encoder.Encode(arr)
+
 		if err == nil {
-			return string(bytes)
+			return string(writer.buffer)
 		}
 	case *common.AnyValue_KvlistValue:
 		items := value.GetKvlistValue().Values
@@ -277,9 +305,12 @@ func getValue(value *common.AnyValue) interface{} {
 				items[i].Key: getValue(items[i].Value),
 			}
 		}
-		bytes, err := json.Marshal(arr)
+		writer := sizeLimitedWriter{max: 64_000, buffer: make([]byte, 0)}
+		encoder := json.NewEncoder(writer)
+		err := encoder.Encode(arr)
+
 		if err == nil {
-			return string(bytes)
+			return string(writer.buffer)
 		}
 	}
 	return nil
