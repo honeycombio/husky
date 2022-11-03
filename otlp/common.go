@@ -248,6 +248,41 @@ func getLogsDataset(ri RequestInfo, attrs map[string]interface{}) string {
 	return dataset
 }
 
+// Returns a value that can be marshalled by JSON -- aggregate data structures
+// are returned as go-native aggregates, rather than marshalled strings (we expect
+// the caller to do the marshalling).
+func getMarshallableValue(value *common.AnyValue) interface{} {
+	switch value.Value.(type) {
+	case *common.AnyValue_StringValue:
+		return value.GetStringValue()
+	case *common.AnyValue_BoolValue:
+		return value.GetBoolValue()
+	case *common.AnyValue_DoubleValue:
+		return value.GetDoubleValue()
+	case *common.AnyValue_IntValue:
+		return value.GetIntValue()
+	case *common.AnyValue_BytesValue:
+		return value.GetBytesValue()
+	case *common.AnyValue_ArrayValue:
+		items := value.GetArrayValue().Values
+		arr := make([]interface{}, len(items))
+		for i := 0; i < len(items); i++ {
+			arr[i] = getMarshallableValue(items[i])
+		}
+		return arr
+	case *common.AnyValue_KvlistValue:
+		items := value.GetKvlistValue().Values
+		m := make(map[string]interface{}, len(items))
+		for i := 0; i < len(items); i++ {
+			m[items[i].GetKey()] = getMarshallableValue(items[i].Value)
+		}
+		return m
+	}
+	return nil
+}
+
+// This function returns a value that can be handled by Honeycomb -- it must be one of:
+// string, int, bool, float. All other values are converted to strings containing JSON
 func getValue(value *common.AnyValue) interface{} {
 	switch value.Value.(type) {
 	case *common.AnyValue_StringValue:
@@ -258,24 +293,10 @@ func getValue(value *common.AnyValue) interface{} {
 		return value.GetDoubleValue()
 	case *common.AnyValue_IntValue:
 		return value.GetIntValue()
-	case *common.AnyValue_ArrayValue:
-		items := value.GetArrayValue().Values
-		arr := make([]interface{}, len(items))
-		for i := 0; i < len(items); i++ {
-			arr[i] = getValue(items[i])
-		}
-		bytes, err := json.Marshal(arr)
-		if err == nil {
-			return string(bytes)
-		}
-	case *common.AnyValue_KvlistValue:
-		items := value.GetKvlistValue().Values
-		arr := make([]map[string]interface{}, len(items))
-		for i := 0; i < len(items); i++ {
-			arr[i] = map[string]interface{}{
-				items[i].Key: getValue(items[i].Value),
-			}
-		}
+	// these types should all be marshalled to a string after
+	// conversion to Honeycomb-safe values.
+	case *common.AnyValue_ArrayValue, *common.AnyValue_KvlistValue, *common.AnyValue_BytesValue:
+		arr := getMarshallableValue(value)
 		bytes, err := json.Marshal(arr)
 		if err == nil {
 			return string(bytes)
