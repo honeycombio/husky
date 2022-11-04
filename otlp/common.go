@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"math"
 	"net/http"
 	"regexp"
 	"strings"
@@ -34,11 +35,8 @@ const (
 )
 
 // fieldSizeMax is the maximum size of a field that will be accepted by honeycomb.
-// This is used to keep wildly bogus OTLP data from breaking things.
-// The reality is that Honeycomb doesn't actually limit field sizes, only event sizes, and that
-// limit is 100_000 bytes. Since at least one test of Honeycomb uses a 99_000-byte field, we
-// wanted a practical limit.
-const fieldSizeMax = 99_900
+// The limit is enforced in retriever (in private honeycomb code), in varstring.go.
+const fieldSizeMax = math.MaxUint16
 
 var (
 	legacyApiKeyPattern = regexp.MustCompile("^[0-9a-f]{32}$")
