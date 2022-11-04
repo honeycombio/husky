@@ -90,7 +90,7 @@ func TestAddAttributesToMap(t *testing.T) {
 		},
 		{
 			key:      "array-attr",
-			expected: "[\"one\",true,3]",
+			expected: "[\"one\",true,3]\n",
 			attribute: &common.KeyValue{
 				Key: "array-attr", Value: &common.AnyValue{Value: &common.AnyValue_ArrayValue{ArrayValue: &common.ArrayValue{
 					Values: []*common.AnyValue{
@@ -338,14 +338,14 @@ func Test_getValue(t *testing.T) {
 		{"int64", &common.AnyValue{Value: &common.AnyValue_IntValue{IntValue: 123}}, int64(123)},
 		{"bool", &common.AnyValue{Value: &common.AnyValue_BoolValue{BoolValue: true}}, true},
 		{"float64", &common.AnyValue{Value: &common.AnyValue_DoubleValue{DoubleValue: 123}}, float64(123)},
-		{"bytes as b64", &common.AnyValue{Value: &common.AnyValue_BytesValue{BytesValue: []byte{10, 20, 30}}}, `"ChQe"`},
+		{"bytes as b64", &common.AnyValue{Value: &common.AnyValue_BytesValue{BytesValue: []byte{10, 20, 30}}}, `"ChQe"` + "\n"},
 		{"array as mixed-type string", &common.AnyValue{Value: &common.AnyValue_ArrayValue{
 			ArrayValue: &common.ArrayValue{Values: []*common.AnyValue{
 				{Value: &common.AnyValue_IntValue{IntValue: 123}},
 				{Value: &common.AnyValue_DoubleValue{DoubleValue: 45.6}},
 				{Value: &common.AnyValue_StringValue{StringValue: "hi mom"}},
 			}},
-		}}, `[123,45.6,"hi mom"]`},
+		}}, `[123,45.6,"hi mom"]` + "\n"},
 		{"map as mixed-type string", &common.AnyValue{
 			Value: &common.AnyValue_KvlistValue{KvlistValue: &common.KeyValueList{
 				Values: []*common.KeyValue{
@@ -353,7 +353,7 @@ func Test_getValue(t *testing.T) {
 					{Key: "bar", Value: &common.AnyValue{Value: &common.AnyValue_DoubleValue{DoubleValue: 45.6}}},
 					{Key: "mom", Value: &common.AnyValue{Value: &common.AnyValue_StringValue{StringValue: "hi mom"}}},
 				},
-			}}}, `{"foo":123,"bar":45.6,"mom":"hi mom"}`},
+			}}}, `{"foo":123,"bar":45.6,"mom":"hi mom"}` + "\n"},
 		{"nested map as mixed-type string", &common.AnyValue{
 			Value: &common.AnyValue_KvlistValue{KvlistValue: &common.KeyValueList{
 				Values: []*common.KeyValue{
@@ -387,6 +387,42 @@ func Test_getValue(t *testing.T) {
 				if !reflect.DeepEqual(got, tt.want) {
 					t.Errorf("getValue() = %v (%T), want %v (%T)", got, got, tt.want, tt.want)
 				}
+			}
+		})
+	}
+}
+
+func Test_limitedWriter(t *testing.T) {
+	tests := []struct {
+		name  string
+		max   int
+		input []string
+		total int
+		want  string
+	}{
+		{"no limit", 100, []string{"abcde"}, 5, "abcde"},
+		{"one write", 5, []string{"abcdefghij"}, 10, "abcde"},
+		{"two writes", 12, []string{"abcdefghij", "abcdefghij"}, 20, "abcdefghijab"},
+		{"exact overrun", 10, []string{"abcdefghij", "abcdefghij"}, 20, "abcdefghij"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			l := newLimitedWriter(tt.max)
+			total := 0
+			for _, s := range tt.input {
+				n, err := l.Write([]byte(s))
+				if err != nil {
+					t.Errorf("limitedWriter.Write() error = %v", err)
+					return
+				}
+				total += n
+			}
+			if total != tt.total {
+				t.Errorf("limitedWriter.Write() total was %v, want %v", total, tt.total)
+			}
+			s := l.String()
+			if s != tt.want {
+				t.Errorf("limitedWriter.String() = '%v', want '%v'", s, tt.want)
 			}
 		})
 	}

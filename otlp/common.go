@@ -33,6 +33,13 @@ const (
 	unknownLogSource         = "unknown_log_source"
 )
 
+// fieldSizeMax is the maximum size of a field that will be accepted by honeycomb.
+// This is used to keep wildly bogus OTLP data from breaking things.
+// The reality is that Honeycomb doesn't actually limit field sizes, only event sizes, and that
+// limit is 100_000 bytes. Since at least one test of Honeycomb uses a 99_000-byte field, we
+// wanted a practical limit.
+const fieldSizeMax = 99_900
+
 var (
 	legacyApiKeyPattern = regexp.MustCompile("^[0-9a-f]{32}$")
 	// Incoming OpenTelemetry HTTP Content-Types (e.g. "application/protobuf") we support
@@ -248,9 +255,36 @@ func getLogsDataset(ri RequestInfo, attrs map[string]interface{}) string {
 	return dataset
 }
 
+// limitedWriter is a writer that will stop writing after reaching its max,
+// but continue to lie to the caller that it was successful.
+// It's a wrapper around strings.Builder for efficiency.
+type limitedWriter struct {
+	max int
+	w   strings.Builder
+}
+
+func newLimitedWriter(n int) *limitedWriter {
+	return &limitedWriter{max: n}
+}
+
+func (l *limitedWriter) Write(b []byte) (int, error) {
+	n := len(b)
+	if n+l.w.Len() > l.max {
+		b = b[:l.max-l.w.Len()]
+	}
+	_, err := l.w.Write(b)
+	// return the value that the user sent us
+	// so they think we wrote it all
+	return n, err
+}
+
+func (l *limitedWriter) String() string {
+	return l.w.String()
+}
+
 // Returns a value that can be marshalled by JSON -- aggregate data structures
-// are returned as go-native aggregates, rather than marshalled strings (we expect
-// the caller to do the marshalling).
+// are returned as native Go aggregates (maps and slices), rather than marshalled
+// strings (we expect the caller to do the marshalling).
 func getMarshallableValue(value *common.AnyValue) interface{} {
 	switch value.Value.(type) {
 	case *common.AnyValue_StringValue:
@@ -282,7 +316,7 @@ func getMarshallableValue(value *common.AnyValue) interface{} {
 }
 
 // This function returns a value that can be handled by Honeycomb -- it must be one of:
-// string, int, bool, float. All other values are converted to strings containing JSON
+// string, int, bool, float. All other values are converted to strings containing JSON.
 func getValue(value *common.AnyValue) interface{} {
 	switch value.Value.(type) {
 	case *common.AnyValue_StringValue:
@@ -293,13 +327,18 @@ func getValue(value *common.AnyValue) interface{} {
 		return value.GetDoubleValue()
 	case *common.AnyValue_IntValue:
 		return value.GetIntValue()
-	// these types should all be marshalled to a string after
-	// conversion to Honeycomb-safe values.
+	// These types are all be marshalled to a string after conversion to Honeycomb-safe values.
+	// We use our limitedWriter to ensure that the string can't be bigger than the allowable,
+	// and it also minimizes allocations.
+	// Note that an Encoder emits JSON with a trailing newline because it's intended for use
+	// in streaming. This is correct but sometimes surprising and the tests need to expect it.
 	case *common.AnyValue_ArrayValue, *common.AnyValue_KvlistValue, *common.AnyValue_BytesValue:
 		arr := getMarshallableValue(value)
-		bytes, err := json.Marshal(arr)
+		w := newLimitedWriter(fieldSizeMax)
+		enc := json.NewEncoder(w)
+		err := enc.Encode(arr)
 		if err == nil {
-			return string(bytes)
+			return w.String()
 		}
 	}
 	return nil
