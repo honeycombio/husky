@@ -372,7 +372,10 @@ func Test_getValue(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := getValue(tt.value)
+			got, truncated := getValue(tt.value)
+			if truncated != 0 {
+				t.Errorf("getValue() returned %v for truncatedBytes, should be 0", truncated)
+			}
 			if s, ok := got.(string); ok && strings.HasPrefix(s, "{") {
 				// it's a string wrapping an object, and might be out of order, so convert them both to objects
 				// and compare them as unmarshalled objects
@@ -394,16 +397,17 @@ func Test_getValue(t *testing.T) {
 
 func Test_limitedWriter(t *testing.T) {
 	tests := []struct {
-		name  string
-		max   int
-		input []string
-		total int
-		want  string
+		name      string
+		max       int
+		input     []string
+		total     int
+		want      string
+		wantTrunc int
 	}{
-		{"no limit", 100, []string{"abcde"}, 5, "abcde"},
-		{"one write", 5, []string{"abcdefghij"}, 10, "abcde"},
-		{"two writes", 12, []string{"abcdefghij", "abcdefghij"}, 20, "abcdefghijab"},
-		{"exact overrun", 10, []string{"abcdefghij", "abcdefghij"}, 20, "abcdefghij"},
+		{"no limit", 100, []string{"abcde"}, 5, "abcde", 0},
+		{"one write", 5, []string{"abcdefghij"}, 10, "abcde", 5},
+		{"two writes", 12, []string{"abcdefghij", "abcdefghij"}, 20, "abcdefghijab", 8},
+		{"exact overrun", 10, []string{"abcdefghij", "abcdefghij"}, 20, "abcdefghij", 10},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

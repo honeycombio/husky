@@ -193,8 +193,12 @@ func addAttributesToMap(attrs map[string]interface{}, attributes []*common.KeyVa
 		if attr.Key == "" || attr.Value == nil {
 			continue
 		}
-		if val := getValue(attr.Value); val != nil {
+		if val, truncatedBytes := getValue(attr.Value); val != nil {
 			attrs[attr.Key] = val
+			if truncatedBytes != 0 {
+				attrs["meta.truncated_bytes"] = val
+				attrs["meta.truncated_field"] = attr.Key
+			}
 		}
 	}
 }
@@ -257,8 +261,9 @@ func getLogsDataset(ri RequestInfo, attrs map[string]interface{}) string {
 // but continue to lie to the caller that it was successful.
 // It's a wrapper around strings.Builder for efficiency.
 type limitedWriter struct {
-	max int
-	w   strings.Builder
+	max            int
+	w              strings.Builder
+	truncatedBytes int
 }
 
 func newLimitedWriter(n int) *limitedWriter {
@@ -269,6 +274,7 @@ func (l *limitedWriter) Write(b []byte) (int, error) {
 	n := len(b)
 	if n+l.w.Len() > l.max {
 		b = b[:l.max-l.w.Len()]
+		l.truncatedBytes += n - len(b)
 	}
 	_, err := l.w.Write(b)
 	// return the value that the user sent us
@@ -315,16 +321,16 @@ func getMarshallableValue(value *common.AnyValue) interface{} {
 
 // This function returns a value that can be handled by Honeycomb -- it must be one of:
 // string, int, bool, float. All other values are converted to strings containing JSON.
-func getValue(value *common.AnyValue) interface{} {
+func getValue(value *common.AnyValue) (result interface{}, truncatedBytes int) {
 	switch value.Value.(type) {
 	case *common.AnyValue_StringValue:
-		return value.GetStringValue()
+		return value.GetStringValue(), 0
 	case *common.AnyValue_BoolValue:
-		return value.GetBoolValue()
+		return value.GetBoolValue(), 0
 	case *common.AnyValue_DoubleValue:
-		return value.GetDoubleValue()
+		return value.GetDoubleValue(), 0
 	case *common.AnyValue_IntValue:
-		return value.GetIntValue()
+		return value.GetIntValue(), 0
 	// These types are all be marshalled to a string after conversion to Honeycomb-safe values.
 	// We use our limitedWriter to ensure that the string can't be bigger than the allowable,
 	// and it also minimizes allocations.
@@ -336,10 +342,10 @@ func getValue(value *common.AnyValue) interface{} {
 		enc := json.NewEncoder(w)
 		err := enc.Encode(arr)
 		if err == nil {
-			return w.String()
+			return w.String(), w.truncatedBytes
 		}
 	}
-	return nil
+	return nil, 0
 }
 
 func parseOtlpRequestBody(body io.ReadCloser, contentType string, contentEncoding string, request protoreflect.ProtoMessage) error {
