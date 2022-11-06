@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
-	"encoding/json"
 	"io"
 	"math"
 	"net/http"
@@ -14,6 +13,7 @@ import (
 
 	common "github.com/honeycombio/husky/proto/otlp/common/v1"
 	resource "github.com/honeycombio/husky/proto/otlp/resource/v1"
+	jsoniter "github.com/json-iterator/go"
 	"github.com/klauspost/compress/zstd"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/encoding/protojson"
@@ -48,6 +48,9 @@ var (
 	}
 	// Incoming Content-Encodings we support. "" included as a stand in for "not given, assume uncompressed"
 	supportedContentEncodings = []string{"", "gzip", "zstd"}
+
+	// Use json-iterator for better performance
+	json = jsoniter.ConfigCompatibleWithStandardLibrary
 )
 
 // List of HTTP Content Types supported for OTLP ingest.
@@ -196,6 +199,10 @@ func addAttributesToMap(attrs map[string]interface{}, attributes []*common.KeyVa
 		if val, truncatedBytes := getValue(attr.Value); val != nil {
 			attrs[attr.Key] = val
 			if truncatedBytes != 0 {
+				// if we trim a field, add telemetry about it; because we trim at 64K and
+				// a whole span can't be more than 100K, this can't happen more than once
+				// for a single span. If we ever change those limits, this will need to
+				// become additive.
 				attrs["meta.truncated_bytes"] = val
 				attrs["meta.truncated_field"] = attr.Key
 			}

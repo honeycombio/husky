@@ -2,7 +2,6 @@ package otlp
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
 	"reflect"
 	"strings"
