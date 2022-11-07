@@ -3,6 +3,8 @@ package otlp
 import (
 	"context"
 	"net/http"
+	"reflect"
+	"strings"
 	"testing"
 
 	common "github.com/honeycombio/husky/proto/otlp/common/v1"
@@ -86,8 +88,8 @@ func TestAddAttributesToMap(t *testing.T) {
 			},
 		},
 		{
-			key:      "array-attr", // not supported
-			expected: "[\"one\",true,3]",
+			key:      "array-attr",
+			expected: "[\"one\",true,3]\n",
 			attribute: &common.KeyValue{
 				Key: "array-attr", Value: &common.AnyValue{Value: &common.AnyValue_ArrayValue{ArrayValue: &common.ArrayValue{
 					Values: []*common.AnyValue{
@@ -97,18 +99,9 @@ func TestAddAttributesToMap(t *testing.T) {
 					}}}},
 			},
 		},
-		{
-			key:      "kvlist-attr",
-			expected: "[{\"kv-attr-str\":\"kv-attr-str-value\"},{\"kv-attr-int\":1}]",
-			attribute: &common.KeyValue{
-				Key: "kvlist-attr", Value: &common.AnyValue{
-					Value: &common.AnyValue_KvlistValue{KvlistValue: &common.KeyValueList{
-						Values: []*common.KeyValue{
-							{Key: "kv-attr-str", Value: &common.AnyValue{Value: &common.AnyValue_StringValue{StringValue: "kv-attr-str-value"}}},
-							{Key: "kv-attr-int", Value: &common.AnyValue{Value: &common.AnyValue_IntValue{IntValue: 1}}},
-						},
-					}}}},
-		},
+		// Testing single-layer maps is valid but may fail due to map iteration order differences, and
+		// that functionality is more completely tested by Test_getValue(). The case of a nested map will fail
+		// badly in the way this test is structured, so we don't do maps at all here.
 		{
 			key:       "nil-value-attr",
 			expected:  nil,
@@ -331,6 +324,109 @@ func TestGetRequestInfoFromHttpHeadersIsCaseInsensitive(t *testing.T) {
 			assert.Equal(t, apiKeyValue, ri.ApiKey)
 			assert.Equal(t, datasetValue, ri.Dataset)
 			assert.Equal(t, proxyTokenValue, ri.ProxyToken)
+		})
+	}
+}
+
+func Test_getValue(t *testing.T) {
+	tests := []struct {
+		name  string
+		value *common.AnyValue
+		want  interface{}
+	}{
+		{"int64", &common.AnyValue{Value: &common.AnyValue_IntValue{IntValue: 123}}, int64(123)},
+		{"bool", &common.AnyValue{Value: &common.AnyValue_BoolValue{BoolValue: true}}, true},
+		{"float64", &common.AnyValue{Value: &common.AnyValue_DoubleValue{DoubleValue: 123}}, float64(123)},
+		{"bytes as b64", &common.AnyValue{Value: &common.AnyValue_BytesValue{BytesValue: []byte{10, 20, 30}}}, `"ChQe"` + "\n"},
+		{"array as mixed-type string", &common.AnyValue{Value: &common.AnyValue_ArrayValue{
+			ArrayValue: &common.ArrayValue{Values: []*common.AnyValue{
+				{Value: &common.AnyValue_IntValue{IntValue: 123}},
+				{Value: &common.AnyValue_DoubleValue{DoubleValue: 45.6}},
+				{Value: &common.AnyValue_StringValue{StringValue: "hi mom"}},
+			}},
+		}}, `[123,45.6,"hi mom"]` + "\n"},
+		{"map as mixed-type string", &common.AnyValue{
+			Value: &common.AnyValue_KvlistValue{KvlistValue: &common.KeyValueList{
+				Values: []*common.KeyValue{
+					{Key: "foo", Value: &common.AnyValue{Value: &common.AnyValue_IntValue{IntValue: 123}}},
+					{Key: "bar", Value: &common.AnyValue{Value: &common.AnyValue_DoubleValue{DoubleValue: 45.6}}},
+					{Key: "mom", Value: &common.AnyValue{Value: &common.AnyValue_StringValue{StringValue: "hi mom"}}},
+				},
+			}}}, `{"foo":123,"bar":45.6,"mom":"hi mom"}` + "\n"},
+		{"nested map as mixed-type string", &common.AnyValue{
+			Value: &common.AnyValue_KvlistValue{KvlistValue: &common.KeyValueList{
+				Values: []*common.KeyValue{
+					{Key: "foo", Value: &common.AnyValue{Value: &common.AnyValue_IntValue{IntValue: 123}}},
+					{Key: "bar", Value: &common.AnyValue{Value: &common.AnyValue_DoubleValue{DoubleValue: 45.6}}},
+					{Key: "nest", Value: &common.AnyValue{
+						Value: &common.AnyValue_KvlistValue{KvlistValue: &common.KeyValueList{
+							Values: []*common.KeyValue{
+								{Key: "foo", Value: &common.AnyValue{Value: &common.AnyValue_IntValue{IntValue: 123}}},
+								{Key: "bar", Value: &common.AnyValue{Value: &common.AnyValue_DoubleValue{DoubleValue: 45.6}}},
+								{Key: "mom", Value: &common.AnyValue{Value: &common.AnyValue_StringValue{StringValue: "hi mom"}}},
+							},
+						}}}},
+				},
+			}}}, `{"bar":45.6,"foo":123,"nest":{"bar":45.6,"foo":123,"mom":"hi mom"}}`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, truncated := getValue(tt.value)
+			if truncated != 0 {
+				t.Errorf("getValue() returned %v for truncatedBytes, should be 0", truncated)
+			}
+			if s, ok := got.(string); ok && strings.HasPrefix(s, "{") {
+				// it's a string wrapping an object, and might be out of order, so convert them both to objects
+				// and compare them as unmarshalled objects
+				var g, w map[string]any
+				json.Unmarshal([]byte(s), &g)
+				json.Unmarshal([]byte(tt.want.(string)), &w)
+				if !reflect.DeepEqual(g, w) {
+					t.Errorf("getValue() unmarshalled = %#v, want %#v", g, w)
+					t.Errorf("getValue() marshalled = %v (%T), want %v (%T)", got, got, tt.want, tt.want)
+				}
+			} else {
+				if !reflect.DeepEqual(got, tt.want) {
+					t.Errorf("getValue() = %v (%T), want %v (%T)", got, got, tt.want, tt.want)
+				}
+			}
+		})
+	}
+}
+
+func Test_limitedWriter(t *testing.T) {
+	tests := []struct {
+		name      string
+		max       int
+		input     []string
+		total     int
+		want      string
+		wantTrunc int
+	}{
+		{"no limit", 100, []string{"abcde"}, 5, "abcde", 0},
+		{"one write", 5, []string{"abcdefghij"}, 10, "abcde", 5},
+		{"two writes", 12, []string{"abcdefghij", "abcdefghij"}, 20, "abcdefghijab", 8},
+		{"exact overrun", 10, []string{"abcdefghij", "abcdefghij"}, 20, "abcdefghij", 10},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			l := newLimitedWriter(tt.max)
+			total := 0
+			for _, s := range tt.input {
+				n, err := l.Write([]byte(s))
+				if err != nil {
+					t.Errorf("limitedWriter.Write() error = %v", err)
+					return
+				}
+				total += n
+			}
+			if total != tt.total {
+				t.Errorf("limitedWriter.Write() total was %v, want %v", total, tt.total)
+			}
+			s := l.String()
+			if s != tt.want {
+				t.Errorf("limitedWriter.String() = '%v', want '%v'", s, tt.want)
+			}
 		})
 	}
 }
