@@ -4,8 +4,8 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
-	"encoding/json"
 	"io"
+	"math"
 	"net/http"
 	"regexp"
 	"strings"
@@ -13,6 +13,7 @@ import (
 
 	common "github.com/honeycombio/husky/proto/otlp/common/v1"
 	resource "github.com/honeycombio/husky/proto/otlp/resource/v1"
+	jsoniter "github.com/json-iterator/go"
 	"github.com/klauspost/compress/zstd"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/encoding/protojson"
@@ -33,6 +34,10 @@ const (
 	unknownLogSource         = "unknown_log_source"
 )
 
+// fieldSizeMax is the maximum size of a field that will be accepted by honeycomb.
+// The limit is enforced in retriever (in private honeycomb code), in varstring.go.
+const fieldSizeMax = math.MaxUint16
+
 var (
 	legacyApiKeyPattern = regexp.MustCompile("^[0-9a-f]{32}$")
 	// Incoming OpenTelemetry HTTP Content-Types (e.g. "application/protobuf") we support
@@ -43,6 +48,9 @@ var (
 	}
 	// Incoming Content-Encodings we support. "" included as a stand in for "not given, assume uncompressed"
 	supportedContentEncodings = []string{"", "gzip", "zstd"}
+
+	// Use json-iterator for better performance
+	json = jsoniter.ConfigCompatibleWithStandardLibrary
 )
 
 // List of HTTP Content Types supported for OTLP ingest.
@@ -188,8 +196,16 @@ func addAttributesToMap(attrs map[string]interface{}, attributes []*common.KeyVa
 		if attr.Key == "" || attr.Value == nil {
 			continue
 		}
-		if val := getValue(attr.Value); val != nil {
+		if val, truncatedBytes := getValue(attr.Value); val != nil {
 			attrs[attr.Key] = val
+			if truncatedBytes != 0 {
+				// if we trim a field, add telemetry about it; because we trim at 64K and
+				// a whole span can't be more than 100K, this can't happen more than once
+				// for a single span. If we ever change those limits, this will need to
+				// become additive.
+				attrs["meta.truncated_bytes"] = val
+				attrs["meta.truncated_field"] = attr.Key
+			}
 		}
 	}
 }
@@ -248,9 +264,38 @@ func getLogsDataset(ri RequestInfo, attrs map[string]interface{}) string {
 	return dataset
 }
 
+// limitedWriter is a writer that will stop writing after reaching its max,
+// but continue to lie to the caller that it was successful.
+// It's a wrapper around strings.Builder for efficiency.
+type limitedWriter struct {
+	max            int
+	w              strings.Builder
+	truncatedBytes int
+}
+
+func newLimitedWriter(n int) *limitedWriter {
+	return &limitedWriter{max: n}
+}
+
+func (l *limitedWriter) Write(b []byte) (int, error) {
+	n := len(b)
+	if n+l.w.Len() > l.max {
+		b = b[:l.max-l.w.Len()]
+		l.truncatedBytes += n - len(b)
+	}
+	_, err := l.w.Write(b)
+	// return the value that the user sent us
+	// so they think we wrote it all
+	return n, err
+}
+
+func (l *limitedWriter) String() string {
+	return l.w.String()
+}
+
 // Returns a value that can be marshalled by JSON -- aggregate data structures
-// are returned as go-native aggregates, rather than marshalled strings (we expect
-// the caller to do the marshalling).
+// are returned as native Go aggregates (maps and slices), rather than marshalled
+// strings (we expect the caller to do the marshalling).
 func getMarshallableValue(value *common.AnyValue) interface{} {
 	switch value.Value.(type) {
 	case *common.AnyValue_StringValue:
@@ -282,27 +327,32 @@ func getMarshallableValue(value *common.AnyValue) interface{} {
 }
 
 // This function returns a value that can be handled by Honeycomb -- it must be one of:
-// string, int, bool, float. All other values are converted to strings containing JSON
-func getValue(value *common.AnyValue) interface{} {
+// string, int, bool, float. All other values are converted to strings containing JSON.
+func getValue(value *common.AnyValue) (result interface{}, truncatedBytes int) {
 	switch value.Value.(type) {
 	case *common.AnyValue_StringValue:
-		return value.GetStringValue()
+		return value.GetStringValue(), 0
 	case *common.AnyValue_BoolValue:
-		return value.GetBoolValue()
+		return value.GetBoolValue(), 0
 	case *common.AnyValue_DoubleValue:
-		return value.GetDoubleValue()
+		return value.GetDoubleValue(), 0
 	case *common.AnyValue_IntValue:
-		return value.GetIntValue()
-	// these types should all be marshalled to a string after
-	// conversion to Honeycomb-safe values.
+		return value.GetIntValue(), 0
+	// These types are all be marshalled to a string after conversion to Honeycomb-safe values.
+	// We use our limitedWriter to ensure that the string can't be bigger than the allowable,
+	// and it also minimizes allocations.
+	// Note that an Encoder emits JSON with a trailing newline because it's intended for use
+	// in streaming. This is correct but sometimes surprising and the tests need to expect it.
 	case *common.AnyValue_ArrayValue, *common.AnyValue_KvlistValue, *common.AnyValue_BytesValue:
 		arr := getMarshallableValue(value)
-		bytes, err := json.Marshal(arr)
+		w := newLimitedWriter(fieldSizeMax)
+		enc := json.NewEncoder(w)
+		err := enc.Encode(arr)
 		if err == nil {
-			return string(bytes)
+			return w.String(), w.truncatedBytes
 		}
 	}
-	return nil
+	return nil, 0
 }
 
 func parseOtlpRequestBody(body io.ReadCloser, contentType string, contentEncoding string, request protoreflect.ProtoMessage) error {

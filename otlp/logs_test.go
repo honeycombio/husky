@@ -351,7 +351,7 @@ func TestCanExtractBody(t *testing.T) {
 				{Value: &common.AnyValue_BoolValue{BoolValue: true}},
 			},
 			}}},
-			expectedValue: "[\"one\",2,true]",
+			expectedValue: "[\"one\",2,true]\n",
 		},
 		{
 			name: "kvlist",
@@ -362,7 +362,7 @@ func TestCanExtractBody(t *testing.T) {
 					{Key: "key3", Value: &common.AnyValue{Value: &common.AnyValue_BoolValue{BoolValue: true}}},
 				},
 			}}},
-			expectedValue: "{\"key1\":\"value1\",\"key2\":2,\"key3\":true}",
+			expectedValue: "{\"key1\":\"value1\",\"key2\":2,\"key3\":true}\n",
 		},
 	}
 	ri := RequestInfo{

@@ -57,8 +57,13 @@ func TranslateLogsRequest(request *collectorLogs.ExportLogsServiceRequest, ri Re
 					attrs["severity_text"] = log.SeverityText
 				}
 				if log.Body != nil {
-					if val := getValue(log.Body); val != nil {
+					if val, truncatedBytes := getValue(log.Body); val != nil {
 						attrs["body"] = val
+						if truncatedBytes != 0 {
+							// if we trim the body, add telemetry about it
+							attrs["meta.truncated_bytes"] = truncatedBytes
+							attrs["meta.truncated_field"] = "body"
+						}
 					}
 				}
 
