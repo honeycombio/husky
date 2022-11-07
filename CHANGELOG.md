@@ -1,5 +1,16 @@
 # Husky Changelog
 
+## 0.18.0 2022-11-07
+
+### Fixed
+
+- Fix kvlist and byte arrays marshalling (#145) | [@kentquirk](https://github.com/kentquirk)
+
+### Maintenance
+
+- maint: delete workflows for old board (#139) | [@vreynolds](https://github.com/vreynolds)
+- maint: add release file (#138) | [@vreynolds](https://github.com/vreynolds)
+
 ## 0.17.0 2022-10-12
 
 ### Enhancements
