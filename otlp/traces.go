@@ -116,9 +116,14 @@ func TranslateTraceRequest(request *collectorTrace.ExportTraceServiceRequest, ri
 					for k, v := range scopeAttrs {
 						attrs[k] = v
 					}
+
 					if sevent.Attributes != nil {
 						addAttributesToMap(attrs, sevent.Attributes)
 					}
+					if isError {
+						attrs["error"] = true
+					}
+
 					events = append(events, Event{
 						Attributes: attrs,
 						Timestamp:  timestamp,
@@ -144,9 +149,14 @@ func TranslateTraceRequest(request *collectorTrace.ExportTraceServiceRequest, ri
 					for k, v := range scopeAttrs {
 						attrs[k] = v
 					}
+
 					if slink.Attributes != nil {
 						addAttributesToMap(attrs, slink.Attributes)
 					}
+					if isError {
+						attrs["error"] = true
+					}
+
 					events = append(events, Event{
 						Attributes: attrs,
 						Timestamp:  timestamp, // use timestamp from parent span
