@@ -5,7 +5,7 @@ go 1.18
 require (
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.11.3
 	github.com/json-iterator/go v1.1.12
-	github.com/klauspost/compress v1.15.11
+	github.com/klauspost/compress v1.15.13
 	github.com/stretchr/testify v1.8.0
 	google.golang.org/grpc v1.50.0
 	google.golang.org/protobuf v1.28.1
