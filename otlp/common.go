@@ -11,10 +11,10 @@ import (
 	"strings"
 	"time"
 
-	common "github.com/honeycombio/husky/proto/otlp/common/v1"
-	resource "github.com/honeycombio/husky/proto/otlp/resource/v1"
 	jsoniter "github.com/json-iterator/go"
 	"github.com/klauspost/compress/zstd"
+	common "github.com/maxedmands/opentelemetry-proto-go-compat/otlp/common/v1"
+	resource "github.com/maxedmands/opentelemetry-proto-go-compat/otlp/resource/v1"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
