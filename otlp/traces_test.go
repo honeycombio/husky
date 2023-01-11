@@ -11,12 +11,12 @@ import (
 	"time"
 
 	"github.com/maxedmands/husky-testing/test"
-	collectortrace "github.com/maxedmands/opentelemetry-proto-go-compat/otlp/collector/trace/v1"
-	common "github.com/maxedmands/opentelemetry-proto-go-compat/otlp/common/v1"
-	resource "github.com/maxedmands/opentelemetry-proto-go-compat/otlp/resource/v1"
-	trace "github.com/maxedmands/opentelemetry-proto-go-compat/otlp/trace/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	collectortrace "go.opentelemetry.io/proto/otlp/collector/trace/v1"
+	common "go.opentelemetry.io/proto/otlp/common/v1"
+	resource "go.opentelemetry.io/proto/otlp/resource/v1"
+	trace "go.opentelemetry.io/proto/otlp/trace/v1"
 	"google.golang.org/protobuf/proto"
 )
 
