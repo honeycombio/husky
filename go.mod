@@ -1,4 +1,4 @@
-module github.com/maxedmands/husky-testing
+module github.com/honeycombio/husky
 
 go 1.18
 

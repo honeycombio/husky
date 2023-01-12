@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/maxedmands/husky-testing/test"
+	"github.com/honeycombio/husky/test"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	collectorlogs "go.opentelemetry.io/proto/otlp/collector/logs/v1"
