@@ -9,7 +9,7 @@ IMPORTANT NOTE: most consumers of husky will probably want to use a backwards-co
 of the opentelemetry protobufs. If this applies to you, add the following to your go.mod file:
 
 ```go.mod
-replace go.opentelemetry.io/proto/otlp => github.com/honeycombio/opentelemetry-proto-go-compat/otlp v0.19.2
+replace go.opentelemetry.io/proto/otlp => github.com/honeycombio/opentelemetry-proto-go/otlp v0.19.0
 ```
 
 - [OTLP](./otlp/README.md)
