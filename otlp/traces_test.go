@@ -10,13 +10,13 @@ import (
 	"testing"
 	"time"
 
-	collectortrace "github.com/honeycombio/husky/proto/otlp/collector/trace/v1"
-	common "github.com/honeycombio/husky/proto/otlp/common/v1"
-	resource "github.com/honeycombio/husky/proto/otlp/resource/v1"
-	trace "github.com/honeycombio/husky/proto/otlp/trace/v1"
 	"github.com/honeycombio/husky/test"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	collectortrace "go.opentelemetry.io/proto/otlp/collector/trace/v1"
+	common "go.opentelemetry.io/proto/otlp/common/v1"
+	resource "go.opentelemetry.io/proto/otlp/resource/v1"
+	trace "go.opentelemetry.io/proto/otlp/trace/v1"
 	"google.golang.org/protobuf/proto"
 )
 

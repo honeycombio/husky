@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	common "github.com/honeycombio/husky/proto/otlp/common/v1"
 	"github.com/stretchr/testify/assert"
+	common "go.opentelemetry.io/proto/otlp/common/v1"
 	"google.golang.org/grpc/metadata"
 )
 

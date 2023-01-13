@@ -7,8 +7,8 @@ import (
 	"strconv"
 	"time"
 
-	collectorTrace "github.com/honeycombio/husky/proto/otlp/collector/trace/v1"
-	trace "github.com/honeycombio/husky/proto/otlp/trace/v1"
+	collectorTrace "go.opentelemetry.io/proto/otlp/collector/trace/v1"
+	trace "go.opentelemetry.io/proto/otlp/trace/v1"
 	"google.golang.org/protobuf/proto"
 )
 
