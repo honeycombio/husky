@@ -1,5 +1,21 @@
 # Husky Changelog
 
+## 0.19.0 2023-01-13
+
+### Enhancements
+
+- Add error field to events/links on spans that are error spans (#159) | [@cartermp](https://github.com/cartermp)
+
+### Fixed
+
+- Makes husky compatible with OTel SDK (#161) | [@maxedmands](https://github.com/maxedmands)
+
+### Maintenance
+
+- Make dependabot titles work better (#157) | [@kentquirk](https://github.com/kentquirk)
+- Update validate PR title workflow (#152) | [@pkanal](https://github.com/pkanal)
+- Validate PR title (#151) | [@pkanal](https://github.com/pkanal)
+
 ## 0.18.0 2022-11-07
 
 ### Fixed
