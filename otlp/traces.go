@@ -162,6 +162,30 @@ func TranslateTraceRequest(request *collectorTrace.ExportTraceServiceRequest, ri
 						Timestamp:  timestamp, // use timestamp from parent span
 						SampleRate: sampleRate,
 					})
+
+					if getBidirectionalLinkValue(attrs) {
+						// create a bidirectional link event
+						bidirectionalLinkAttrs := make(map[string]interface{})
+						for k, v := range attrs {
+							// swap the trace fields with the linked trace fields
+							if k == "trace.trace_id" {
+								k = "trace.link.trace_id"
+							} else if k == "trace.parent_id" {
+								k = "trace.link.span_id"
+							} else if k == "trace.link.trace_id" {
+								k = "trace.trace_id"
+							} else if k == "trace.link.span_id" {
+								k = "trace.parent_id"
+							}
+							bidirectionalLinkAttrs[k] = v
+						}
+
+						events = append(events, Event{
+							Attributes: bidirectionalLinkAttrs,
+							Timestamp:  timestamp, // use timestamp from parent span
+							SampleRate: sampleRate,
+						})
+					}
 				}
 			}
 		}
@@ -292,6 +316,38 @@ func getSampleRateKey(attrs map[string]interface{}) string {
 	}
 	if _, ok := attrs["SampleRate"]; ok {
 		return "SampleRate"
+	}
+	return ""
+}
+
+func getBidirectionalLinkValue(attrs map[string]interface{}) bool {
+	bidirectionalLinkKey := getBidirectionalLinkKey(attrs)
+	if bidirectionalLinkKey == "" {
+		return false
+	}
+
+	bidirectionalLinkVal := attrs[bidirectionalLinkKey]
+	switch v := bidirectionalLinkVal.(type) {
+	case bool:
+		return v
+	case string:
+		if b, err := strconv.ParseBool(v); err == nil {
+			return b
+		}
+	case int:
+		return v != 0
+	case int64:
+		return v != 0
+	}
+	return false
+}
+
+func getBidirectionalLinkKey(attrs map[string]interface{}) string {
+	if _, ok := attrs["bidirectionalLink"]; ok {
+		return "bidirectionalLink"
+	}
+	if _, ok := attrs["biDirectionalLink"]; ok {
+		return "biDirectionalLink"
 	}
 	return ""
 }
