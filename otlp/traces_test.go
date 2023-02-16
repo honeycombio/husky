@@ -946,3 +946,115 @@ func TestBadTraceRequest(t *testing.T) {
 		}
 	}
 }
+
+func TestInstrumentationLibrarySpansHaveAttributeAdded(t *testing.T) {
+	ri := RequestInfo{
+		ApiKey:      "abc123DEF456ghi789jklm",
+		Dataset:     "legacy-dataset",
+		ContentType: "application/protobuf",
+	}
+
+	req := &collectortrace.ExportTraceServiceRequest{
+		ResourceSpans: []*trace.ResourceSpans{{
+			Resource: &resource.Resource{
+				Attributes: []*common.KeyValue{{
+					Key: "service.name",
+					Value: &common.AnyValue{
+						Value: &common.AnyValue_StringValue{StringValue: "my-service"},
+					},
+				}},
+			},
+			ScopeSpans: []*trace.ScopeSpans{{
+				Scope: &common.InstrumentationScope{
+					Name:    "First",
+					Version: "1.1.1",
+				},
+				Spans: []*trace.Span{{
+					TraceId: test.RandomBytes(16),
+					SpanId:  test.RandomBytes(8),
+					Name:    "test_span_a",
+				}},
+			}, {
+				Scope: &common.InstrumentationScope{
+					Name:    "io.opentelemetry.instrumentation.http", // instrumentation library
+					Version: "2.2.2",
+				},
+				Spans: []*trace.Span{{
+					TraceId: test.RandomBytes(16),
+					SpanId:  test.RandomBytes(8),
+					Name:    "test_span_b",
+				}},
+			}},
+		}},
+	}
+
+	result, err := TranslateTraceRequest(req, ri)
+	assert.NoError(t, err)
+	assert.Equal(t, proto.Size(req), result.RequestSize)
+	assert.Equal(t, 1, len(result.Batches))
+	batch := result.Batches[0]
+	assert.Equal(t, "my-service", batch.Dataset)
+	events := batch.Events
+	assert.Equal(t, 2, len(events))
+
+	first_event := events[0]
+	assert.Equal(t, "test_span_a", first_event.Attributes["name"])
+	assert.Equal(t, "First", first_event.Attributes["library.name"])
+	assert.Equal(t, "1.1.1", first_event.Attributes["library.version"])
+	assert.NotContains(t, first_event.Attributes, "telemtetry.instrumentation_library")
+	second_event := events[1]
+	assert.Equal(t, "test_span_b", second_event.Attributes["name"])
+	assert.Equal(t, "io.opentelemetry.instrumentation.http", second_event.Attributes["library.name"])
+	assert.Equal(t, "2.2.2", second_event.Attributes["library.version"])
+	assert.Equal(t, true, second_event.Attributes["telemetry.instrumentation_library"])
+}
+
+func TestKnownInstrumentationPrefixesReturnTrue(t *testing.T) {
+	tests := []struct{
+		name string
+		libraryName string
+		isInstrumentationLibrary bool
+	}{
+		{
+			name: "empty",
+			libraryName: "",
+			isInstrumentationLibrary: false,
+		},
+		{
+			name: "unknown",
+			libraryName: "unknown",
+			isInstrumentationLibrary: false,
+		},
+		{
+			name: "java",
+			libraryName: "io.opentelemetry.instrumentation.http",
+			isInstrumentationLibrary: true,
+		},
+		{
+			name: "python / .net",
+			libraryName: "opentelemetry.instrumentation.http",
+			isInstrumentationLibrary: true,
+		},
+		{
+			name: "ruby",
+			libraryName: "opentelemetry-instrumentation-http",
+			isInstrumentationLibrary: true,
+		},
+		{
+			name: "go",
+			libraryName: "go.opentelemetry.io/contrib/instrumentation/http",
+			isInstrumentationLibrary: true,
+		},
+		{
+			name: "js",
+			libraryName: "@opentelemetry/instrumentation/http",
+			isInstrumentationLibrary: true,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func (t *testing.T)  {
+			assert.Equal(t, test.isInstrumentationLibrary, isInstrumentationLibrary(test.libraryName))
+		})
+	}
+}
