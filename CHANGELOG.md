@@ -1,5 +1,11 @@
 # Husky Changelog
 
+## 0.20.0 2023-02-16
+
+### Enhancements
+
+- Detect if scope is from instrumentation library (#170) | [@MikeGoldsmith](https://github.com/MikeGoldsmith)
+
 ## 0.19.0 2023-01-13
 
 ### Enhancements
