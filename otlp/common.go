@@ -51,6 +51,15 @@ var (
 
 	// Use json-iterator for better performance
 	json = jsoniter.ConfigCompatibleWithStandardLibrary
+
+	// List of per-lang instrumentation library prefixes
+	instrumentationLibraryPrefixes = []string{
+		"io.opentelemetry.instrumentation",            // Java,
+		"opentelemetry.instrumentation",               // Python & .NET:
+		"opentelemetry-instrumentation",               // Ruby
+		"go.opentelemetry.io/contrib/instrumentation", // Go
+		"@opentelemetry/instrumentation",              // JS
+	}
 )
 
 // List of HTTP Content Types supported for OTLP ingest.
@@ -223,6 +232,9 @@ func getScopeAttributes(scope *common.InstrumentationScope) map[string]interface
 	if scope != nil {
 		if scope.Name != "" {
 			attrs["library.name"] = scope.Name
+			if isInstrumentationLibrary(scope.Name) {
+				attrs["telemetry.instrumentation_library"] = true
+			}
 		}
 		if scope.Version != "" {
 			attrs["library.version"] = scope.Version
@@ -230,6 +242,15 @@ func getScopeAttributes(scope *common.InstrumentationScope) map[string]interface
 		addAttributesToMap(attrs, scope.Attributes)
 	}
 	return attrs
+}
+
+func isInstrumentationLibrary(libraryName string) bool {
+	for _, prefix := range instrumentationLibraryPrefixes {
+		if strings.HasPrefix(libraryName, prefix) {
+			return true
+		}
+	}
+	return false
 }
 
 func getDataset(ri RequestInfo, attrs map[string]interface{}) string {
