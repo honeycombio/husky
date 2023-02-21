@@ -54,7 +54,7 @@ var (
 
 	// List of per-lang instrumentation library prefixes
 	instrumentationLibraryPrefixes = []string{
-		"io.opentelemetry.instrumentation",            // Java,
+		"io.opentelemetry",                            // Java,
 		"opentelemetry.instrumentation",               // Python & .NET:
 		"opentelemetry-instrumentation",               // Ruby
 		"go.opentelemetry.io/contrib/instrumentation", // Go

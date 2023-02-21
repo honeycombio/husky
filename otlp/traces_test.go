@@ -1027,7 +1027,7 @@ func TestKnownInstrumentationPrefixesReturnTrue(t *testing.T) {
 		},
 		{
 			name: "java",
-			libraryName: "io.opentelemetry.instrumentation.http",
+			libraryName: "io.opentelemetry.tomcat-7.0",
 			isInstrumentationLibrary: true,
 		},
 		{
