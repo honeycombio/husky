@@ -1031,8 +1031,13 @@ func TestKnownInstrumentationPrefixesReturnTrue(t *testing.T) {
 			isInstrumentationLibrary: true,
 		},
 		{
-			name: "python / .net",
+			name: "python",
 			libraryName: "opentelemetry.instrumentation.http",
+			isInstrumentationLibrary: true,
+		},
+		{
+			name: ".net",
+			libraryName: "OpenTelemetry.Instrumentation.AspNetCore",
 			isInstrumentationLibrary: true,
 		},
 		{
