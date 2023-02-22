@@ -57,7 +57,7 @@ var (
 		"io.opentelemetry",                            // Java,
 		"opentelemetry.instrumentation",               // Python
 		"OpenTelemetry.Instrumentation",               // .NET
-		"opentelemetry-instrumentation",               // Ruby
+		"OpenTelemetry::Instrumentation",              // Ruby
 		"go.opentelemetry.io/contrib/instrumentation", // Go
 		"@opentelemetry/instrumentation",              // JS
 	}

@@ -1010,55 +1010,55 @@ func TestInstrumentationLibrarySpansHaveAttributeAdded(t *testing.T) {
 }
 
 func TestKnownInstrumentationPrefixesReturnTrue(t *testing.T) {
-	tests := []struct{
-		name string
-		libraryName string
+	tests := []struct {
+		name                     string
+		libraryName              string
 		isInstrumentationLibrary bool
 	}{
 		{
-			name: "empty",
-			libraryName: "",
+			name:                     "empty",
+			libraryName:              "",
 			isInstrumentationLibrary: false,
 		},
 		{
-			name: "unknown",
-			libraryName: "unknown",
+			name:                     "unknown",
+			libraryName:              "unknown",
 			isInstrumentationLibrary: false,
 		},
 		{
-			name: "java",
-			libraryName: "io.opentelemetry.tomcat-7.0",
+			name:                     "java",
+			libraryName:              "io.opentelemetry.tomcat-7.0",
 			isInstrumentationLibrary: true,
 		},
 		{
-			name: "python",
-			libraryName: "opentelemetry.instrumentation.http",
+			name:                     "python",
+			libraryName:              "opentelemetry.instrumentation.http",
 			isInstrumentationLibrary: true,
 		},
 		{
-			name: ".net",
-			libraryName: "OpenTelemetry.Instrumentation.AspNetCore",
+			name:                     ".net",
+			libraryName:              "OpenTelemetry.Instrumentation.AspNetCore",
 			isInstrumentationLibrary: true,
 		},
 		{
-			name: "ruby",
-			libraryName: "opentelemetry-instrumentation-http",
+			name:                     "ruby",
+			libraryName:              "OpenTelemetry::Instrumentation::HTTP",
 			isInstrumentationLibrary: true,
 		},
 		{
-			name: "go",
-			libraryName: "go.opentelemetry.io/contrib/instrumentation/http",
+			name:                     "go",
+			libraryName:              "go.opentelemetry.io/contrib/instrumentation/http",
 			isInstrumentationLibrary: true,
 		},
 		{
-			name: "js",
-			libraryName: "@opentelemetry/instrumentation/http",
+			name:                     "js",
+			libraryName:              "@opentelemetry/instrumentation/http",
 			isInstrumentationLibrary: true,
 		},
 	}
 
 	for _, test := range tests {
-		t.Run(test.name, func (t *testing.T)  {
+		t.Run(test.name, func(t *testing.T) {
 			assert.Equal(t, test.isInstrumentationLibrary, isInstrumentationLibrary(test.libraryName))
 		})
 	}
