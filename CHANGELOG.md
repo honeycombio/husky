@@ -1,5 +1,13 @@
 # Husky Changelog
 
+## 0.21.0 2021-02-22
+
+### Enhancements
+
+- fix: correct Ruby library/scope name prefix (#172) | [Robb Kidd](https://github.com/)
+- fix: update dotnet library name prefix (#174) | [Jamie Danielson](https://github.com/)
+- fix: update java library name prefix (#173) | [Jamie Danielson](https://github.com/)
+
 ## 0.20.0 2023-02-16
 
 ### Enhancements
