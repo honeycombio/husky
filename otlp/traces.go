@@ -1,6 +1,7 @@
 package otlp
 
 import (
+	"encoding/base64"
 	"encoding/hex"
 	"io"
 	"math"
@@ -13,9 +14,11 @@ import (
 )
 
 const (
-	traceIDShortLength = 8
-	traceIDLongLength  = 16
-	defaultSampleRate  = int32(1)
+	traceIDShortLength     = 8
+	traceIDLongLength      = 16
+	traceIDCorruptedLength = 24
+	spanIDCorruptedLength  = 12
+	defaultSampleRate      = int32(1)
 )
 
 // TranslateTraceRequestFromReader translates an OTLP/HTTP request into Honeycomb-friendly structure
@@ -48,7 +51,7 @@ func TranslateTraceRequest(request *collectorTrace.ExportTraceServiceRequest, ri
 
 			for _, span := range scopeSpan.GetSpans() {
 				traceID := BytesToTraceID(span.TraceId)
-				spanID := hex.EncodeToString(span.SpanId)
+				spanID := bytesToSpanID(span.SpanId)
 
 				spanKind := getSpanKind(span.Kind)
 				statusCode, isError := getSpanStatusCode(span.Status)
@@ -215,11 +218,29 @@ func BytesToTraceID(traceID []byte) string {
 		}
 	case traceIDShortLength: // 8 bytes
 		encoded = make([]byte, 16)
+	case traceIDCorruptedLength: // 24 bytes
+		encoded := make([]byte, base64.StdEncoding.EncodedLen(len(traceID)))
+		base64.StdEncoding.Encode(encoded, traceID)
+		return string(encoded) // it's already hex, so quit here
 	default:
 		encoded = make([]byte, len(traceID)*2)
 	}
 	hex.Encode(encoded, traceID)
 	return string(encoded)
+}
+
+func bytesToSpanID(spanID []byte) string {
+	var encoded []byte
+	switch len(spanID) {
+	case spanIDCorruptedLength: // 12 bytes
+		encoded := make([]byte, base64.StdEncoding.EncodedLen(len(spanID)))
+		base64.StdEncoding.Encode(encoded, spanID)
+		return string(encoded) // it's already hex, so quit here
+	default:
+		encoded = make([]byte, len(spanID)*2)
+		hex.Encode(encoded, spanID)
+		return string(encoded)
+	}
 }
 
 func shouldTrimTraceId(traceID []byte) bool {
