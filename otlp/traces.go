@@ -14,11 +14,11 @@ import (
 )
 
 const (
-	traceIDShortLength     = 8
-	traceIDLongLength      = 16
-	traceIDCorruptedLength = 24
-	spanIDCorruptedLength  = 12
-	defaultSampleRate      = int32(1)
+	traceIDShortLength = 8
+	traceIDLongLength  = 16
+	traceIDb64Length   = 24
+	spanIDb64Length    = 12
+	defaultSampleRate  = int32(1)
 )
 
 // TranslateTraceRequestFromReader translates an OTLP/HTTP request into Honeycomb-friendly structure
@@ -216,31 +216,36 @@ func BytesToTraceID(traceID []byte) string {
 		} else {
 			encoded = make([]byte, 32)
 		}
+		hex.Encode(encoded, traceID)
 	case traceIDShortLength: // 8 bytes
 		encoded = make([]byte, 16)
-	case traceIDCorruptedLength: // 24 bytes
+		hex.Encode(encoded, traceID)
+	case traceIDb64Length: // 24 bytes
+		// The spec says that traceID and spanID should be encoded as hex, but
+		// the protobuf system is interpreting them as b64, so we need to
+		// reverse them back to b64 and then reencode as hex.
 		encoded := make([]byte, base64.StdEncoding.EncodedLen(len(traceID)))
 		base64.StdEncoding.Encode(encoded, traceID)
-		return string(encoded) // it's already hex, so quit here
 	default:
 		encoded = make([]byte, len(traceID)*2)
 	}
-	hex.Encode(encoded, traceID)
 	return string(encoded)
 }
 
 func bytesToSpanID(spanID []byte) string {
 	var encoded []byte
 	switch len(spanID) {
-	case spanIDCorruptedLength: // 12 bytes
+	case spanIDb64Length: // 12 bytes
+		// The spec says that traceID and spanID should be encoded as hex, but
+		// the protobuf system is interpreting them as b64, so we need to
+		// reverse them back to b64 and then reencode as hex.
 		encoded := make([]byte, base64.StdEncoding.EncodedLen(len(spanID)))
 		base64.StdEncoding.Encode(encoded, spanID)
-		return string(encoded) // it's already hex, so quit here
 	default:
 		encoded = make([]byte, len(spanID)*2)
 		hex.Encode(encoded, spanID)
-		return string(encoded)
 	}
+	return string(encoded)
 }
 
 func shouldTrimTraceId(traceID []byte) bool {
