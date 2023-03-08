@@ -1,6 +1,17 @@
 # Husky Changelog
 
-## 0.21.0 2021-02-22
+## 0.22.0 2023-03-08
+
+This release fixes an issue where the traceID and spanID in OTLP/JSON data is being misinterpreted by protojson as base64,
+rather than hex. We can't fix it in the protobuf, but we can reverse the bad decoding.
+
+- fix: JSON ingestion issue (#179) | [Kent Quirk](https://github.com/)
+- maint: clean up after dependabot  (#180) | [Kent Quirk](https://github.com/)
+- maint(deps): bump github.com/stretchr/testify from 1.8.0 to 1.8.2 (#178) | [dependabot[bot]](https://github.com/)
+- maint(deps): bump google.golang.org/grpc from 1.50.0 to 1.53.0 (#177) | [dependabot[bot]](https://github.com/)
+- maint(deps): bump github.com/klauspost/compress from 1.15.11 to 1.16.0 (#176) | [dependabot[bot]](https://github.com/)
+
+## 0.21.0 2023-02-22
 
 ### Enhancements
 
