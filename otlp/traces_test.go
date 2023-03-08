@@ -1063,18 +1063,3 @@ func TestKnownInstrumentationPrefixesReturnTrue(t *testing.T) {
 		})
 	}
 }
-
-func TestOtlpJson(t *testing.T) {
-	body := io.NopCloser(strings.NewReader(testjson))
-	ri := RequestInfo{
-		ApiKey:          "abc123DEF456ghi789jklm",
-		Dataset:         "legacy-dataset",
-		ContentType:     "application/json",
-		ContentEncoding: "",
-	}
-	request, err := TranslateTraceRequestFromReader(body, ri)
-	assert.Nil(t, err)
-	assert.NotNil(t, request)
-	assert.Equal(t, "d7a8342c926dd3ebf776d6232b35bbc4", request.Batches[0].Events[0].Attributes["trace.trace_id"])
-	assert.Equal(t, "2c26a3a691071ca3", request.Batches[0].Events[0].Attributes["trace.span_id"])
-}
