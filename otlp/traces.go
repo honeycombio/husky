@@ -1,6 +1,7 @@
 package otlp
 
 import (
+	"encoding/base64"
 	"encoding/hex"
 	"io"
 	"math"
@@ -15,6 +16,8 @@ import (
 const (
 	traceIDShortLength = 8
 	traceIDLongLength  = 16
+	traceIDb64Length   = 24
+	spanIDb64Length    = 12
 	defaultSampleRate  = int32(1)
 )
 
@@ -48,7 +51,7 @@ func TranslateTraceRequest(request *collectorTrace.ExportTraceServiceRequest, ri
 
 			for _, span := range scopeSpan.GetSpans() {
 				traceID := BytesToTraceID(span.TraceId)
-				spanID := hex.EncodeToString(span.SpanId)
+				spanID := bytesToSpanID(span.SpanId)
 
 				spanKind := getSpanKind(span.Kind)
 				statusCode, isError := getSpanStatusCode(span.Status)
@@ -213,12 +216,35 @@ func BytesToTraceID(traceID []byte) string {
 		} else {
 			encoded = make([]byte, 32)
 		}
+		hex.Encode(encoded, traceID)
 	case traceIDShortLength: // 8 bytes
 		encoded = make([]byte, 16)
+		hex.Encode(encoded, traceID)
+	case traceIDb64Length: // 24 bytes
+		// The spec says that traceID and spanID should be encoded as hex, but
+		// the protobuf system is interpreting them as b64, so we need to
+		// reverse them back to b64 and then reencode as hex.
+		encoded := make([]byte, base64.StdEncoding.EncodedLen(len(traceID)))
+		base64.StdEncoding.Encode(encoded, traceID)
 	default:
 		encoded = make([]byte, len(traceID)*2)
 	}
-	hex.Encode(encoded, traceID)
+	return string(encoded)
+}
+
+func bytesToSpanID(spanID []byte) string {
+	var encoded []byte
+	switch len(spanID) {
+	case spanIDb64Length: // 12 bytes
+		// The spec says that traceID and spanID should be encoded as hex, but
+		// the protobuf system is interpreting them as b64, so we need to
+		// reverse them back to b64 and then reencode as hex.
+		encoded := make([]byte, base64.StdEncoding.EncodedLen(len(spanID)))
+		base64.StdEncoding.Encode(encoded, spanID)
+	default:
+		encoded = make([]byte, len(spanID)*2)
+		hex.Encode(encoded, spanID)
+	}
 	return string(encoded)
 }
 
