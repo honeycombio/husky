@@ -1,5 +1,9 @@
 # Husky Changelog
 
+## 0.22.1 2023-03-08
+
+- Fix bug in BytesToTraceID, add test for it. | [Kent Quirk](https://github.com/)
+
 ## 0.22.0 2023-03-08
 
 This release fixes an issue where the traceID and spanID in OTLP/JSON data is being misinterpreted by protojson as base64,
