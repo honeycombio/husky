@@ -240,7 +240,7 @@ func bytesToSpanID(spanID []byte) string {
 		// The spec says that traceID and spanID should be encoded as hex, but
 		// the protobuf system is interpreting them as b64, so we need to
 		// reverse them back to b64 and then reencode as hex.
-		encoded := make([]byte, base64.StdEncoding.EncodedLen(len(spanID)))
+		encoded = make([]byte, base64.StdEncoding.EncodedLen(len(spanID)))
 		base64.StdEncoding.Encode(encoded, spanID)
 	default:
 		encoded = make([]byte, len(spanID)*2)
