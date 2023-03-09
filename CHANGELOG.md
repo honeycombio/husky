@@ -1,16 +1,21 @@
 # Husky Changelog
 
+## 0.22.2 2023-03-09
+
+- Use bytesToSpanID for parentID too. (#185) | [Robb Kidd](https://github.com/robbkidd)
+- Fix bug in bytesToSpanID, add test for it. (#184) | [Robb Kidd](https://github.com/robbkidd)
+
 ## 0.22.1 2023-03-08
 
-- Fix bug in BytesToTraceID, add test for it. | [Kent Quirk](https://github.com/)
+- Fix bug in BytesToTraceID, add test for it. (#182) | [Kent Quirk](https://github.com/kentquirk)
 
 ## 0.22.0 2023-03-08
 
 This release fixes an issue where the traceID and spanID in OTLP/JSON data is being misinterpreted by protojson as base64,
 rather than hex. We can't fix it in the protobuf, but we can reverse the bad decoding.
 
-- fix: JSON ingestion issue (#179) | [Kent Quirk](https://github.com/)
-- maint: clean up after dependabot  (#180) | [Kent Quirk](https://github.com/)
+- fix: JSON ingestion issue (#179) | [Kent Quirk](https://github.com/kentquirk)
+- maint: clean up after dependabot  (#180) | [Kent Quirk](https://github.com/kentquirk)
 - maint(deps): bump github.com/stretchr/testify from 1.8.0 to 1.8.2 (#178) | [dependabot[bot]](https://github.com/)
 - maint(deps): bump google.golang.org/grpc from 1.50.0 to 1.53.0 (#177) | [dependabot[bot]](https://github.com/)
 - maint(deps): bump github.com/klauspost/compress from 1.15.11 to 1.16.0 (#176) | [dependabot[bot]](https://github.com/)
@@ -19,9 +24,9 @@ rather than hex. We can't fix it in the protobuf, but we can reverse the bad dec
 
 ### Enhancements
 
-- fix: correct Ruby library/scope name prefix (#172) | [Robb Kidd](https://github.com/)
-- fix: update dotnet library name prefix (#174) | [Jamie Danielson](https://github.com/)
-- fix: update java library name prefix (#173) | [Jamie Danielson](https://github.com/)
+- fix: correct Ruby library/scope name prefix (#172) | [Robb Kidd](https://github.com/robbkidd)
+- fix: update dotnet library name prefix (#174) | [Jamie Danielson](https://github.com/JamieDanielson)
+- fix: update java library name prefix (#173) | [Jamie Danielson](https://github.com/JamieDanielson)
 
 ## 0.20.0 2023-02-16
 
