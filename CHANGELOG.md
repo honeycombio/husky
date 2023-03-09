@@ -2,11 +2,12 @@
 
 ## 0.22.2 2023-03-09
 
-- Fix bug in bytesToSpanID, add test for it. | [Robb Kidd](https://github.com/robbkidd)
+- Use bytesToSpanID for parentID too. (#185) | [Robb Kidd](https://github.com/robbkidd)
+- Fix bug in bytesToSpanID, add test for it. (#184) | [Robb Kidd](https://github.com/robbkidd)
 
 ## 0.22.1 2023-03-08
 
-- Fix bug in BytesToTraceID, add test for it. | [Kent Quirk](https://github.com/kentquirk)
+- Fix bug in BytesToTraceID, add test for it. (#182) | [Kent Quirk](https://github.com/kentquirk)
 
 ## 0.22.0 2023-03-08
 
