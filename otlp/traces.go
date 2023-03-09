@@ -69,7 +69,7 @@ func TranslateTraceRequest(request *collectorTrace.ExportTraceServiceRequest, ri
 					"meta.signal_type": "trace",
 				}
 				if span.ParentSpanId != nil {
-					eventAttrs["trace.parent_id"] = hex.EncodeToString(span.ParentSpanId)
+					eventAttrs["trace.parent_id"] = bytesToSpanID(span.ParentSpanId)
 				}
 				if isError {
 					eventAttrs["error"] = true
