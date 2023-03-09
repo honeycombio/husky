@@ -1124,3 +1124,43 @@ func Test_BytesToTraceID(t *testing.T) {
 		})
 	}
 }
+
+func Test_BytesToSpanID(t *testing.T) {
+	tests := []struct {
+		name   string
+		spanID string
+		b64    bool
+		want   string
+	}{
+		{
+			name:   "spanID",
+			spanID: "890452a577ef2e0f",
+			want:   "890452a577ef2e0f",
+		},
+		{
+			name:   "spanID munged by browser",
+			spanID: "890452a577ef2e0f",
+			b64:    true,
+			want:   "890452a577ef2e0f",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var spanID []byte
+			var err error
+			if tt.b64 {
+				spanID, err = base64.StdEncoding.DecodeString(tt.spanID)
+			} else {
+				spanID, err = hex.DecodeString(tt.spanID)
+			}
+			if err != nil {
+				spanID = []byte(tt.spanID)
+			}
+			got := bytesToSpanID(spanID)
+			if got != tt.want {
+				t.Errorf("got:  %#v\n\twant: %#v", got, tt.want)
+			}
+		})
+	}
+}
