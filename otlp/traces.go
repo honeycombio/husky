@@ -129,9 +129,9 @@ func TranslateTraceRequest(request *collectorTrace.ExportTraceServiceRequest, ri
 							if seventAttr.Key == "exception.message" ||
 								seventAttr.Key == "exception.type" ||
 								seventAttr.Key == "exception.stacktrace" ||
-								seventAttr.Key == "exception.excaped" {
-								if _, present := attrs[seventAttr.Key]; !present {
-									attrs[seventAttr.Key] = seventAttr.Value
+								seventAttr.Key == "exception.escaped" {
+								if _, present := eventAttrs[seventAttr.Key]; !present {
+									eventAttrs[seventAttr.Key] = seventAttr.Value
 								}
 							}
 						}
