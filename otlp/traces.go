@@ -95,11 +95,6 @@ func TranslateTraceRequest(request *collectorTrace.ExportTraceServiceRequest, ri
 				// Now we need to wrap the eventAttrs in an event so we can specify the timestamp
 				// which is the StartTime as a time.Time object
 				timestamp := time.Unix(0, int64(span.StartTimeUnixNano)).UTC()
-				events = append(events, Event{
-					Attributes: eventAttrs,
-					Timestamp:  timestamp,
-					SampleRate: sampleRate,
-				})
 
 				for _, sevent := range span.Events {
 					timestamp := time.Unix(0, int64(sevent.TimeUnixNano)).UTC()
@@ -125,6 +120,21 @@ func TranslateTraceRequest(request *collectorTrace.ExportTraceServiceRequest, ri
 					}
 					if isError {
 						attrs["error"] = true
+
+						// Copy over span event error attributes because:
+						// 1. They are common and high-value for error investigations
+						// 2. It sucks to have to look at span events in our trace UI today to hunt these down on an error span
+						// 3. This makes bubble up better because you can see these error details without having to query the span events
+						for _, seventAttr := range sevent.Attributes {
+							if seventAttr.Key == "exception.message" ||
+								seventAttr.Key == "exception.type" ||
+								seventAttr.Key == "exception.stacktrace" ||
+								seventAttr.Key == "exception.excaped" {
+								if _, present := attrs[seventAttr.Key]; !present {
+									attrs[seventAttr.Key] = seventAttr.Value
+								}
+							}
+						}
 					}
 
 					events = append(events, Event{
@@ -166,6 +176,12 @@ func TranslateTraceRequest(request *collectorTrace.ExportTraceServiceRequest, ri
 						SampleRate: sampleRate,
 					})
 				}
+
+				events = append(events, Event{
+					Attributes: eventAttrs,
+					Timestamp:  timestamp,
+					SampleRate: sampleRate,
+				})
 			}
 		}
 		batches = append(batches, Batch{
