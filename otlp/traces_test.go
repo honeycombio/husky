@@ -186,6 +186,167 @@ func TestTranslateGrpcTraceRequest(t *testing.T) {
 	}
 }
 
+func TestTranslateException(t *testing.T) {
+	traceID := test.RandomBytes(16)
+	spanID := test.RandomBytes(8)
+	startTimestamp := time.Now()
+	endTimestamp := startTimestamp.Add(time.Millisecond * 5)
+
+	testServiceName := "my-service"
+
+	req := &collectortrace.ExportTraceServiceRequest{
+		ResourceSpans: []*trace.ResourceSpans{{
+			Resource: &resource.Resource{
+				Attributes: []*common.KeyValue{{
+					Key: "resource_attr",
+					Value: &common.AnyValue{
+						Value: &common.AnyValue_StringValue{StringValue: "resource_attr_val"},
+					},
+				}, {
+					Key: "service.name",
+					Value: &common.AnyValue{
+						Value: &common.AnyValue_StringValue{StringValue: testServiceName},
+					},
+				}},
+			},
+			ScopeSpans: []*trace.ScopeSpans{{
+				Scope: &common.InstrumentationScope{
+					Name:    "library-name",
+					Version: "library-version",
+					Attributes: []*common.KeyValue{
+						{
+							Key: "scope_attr",
+							Value: &common.AnyValue{
+								Value: &common.AnyValue_StringValue{StringValue: "scope_attr_val"},
+							},
+						},
+					},
+				},
+				Spans: []*trace.Span{{
+					TraceId:           traceID,
+					SpanId:            spanID,
+					Name:              "test_span",
+					Kind:              trace.Span_SPAN_KIND_CLIENT,
+					Status:            &trace.Status{Code: trace.Status_STATUS_CODE_OK},
+					StartTimeUnixNano: uint64(startTimestamp.Nanosecond()),
+					EndTimeUnixNano:   uint64(endTimestamp.Nanosecond()),
+					Attributes: []*common.KeyValue{
+						{
+							Key: "span_attr",
+							Value: &common.AnyValue{
+								Value: &common.AnyValue_StringValue{StringValue: "span_attr_val"},
+							},
+						},
+						{
+							Key: "sampleRate",
+							Value: &common.AnyValue{
+								Value: &common.AnyValue_IntValue{IntValue: 100},
+							},
+						},
+					},
+					Events: []*trace.Span_Event{{
+						Name: "exception",
+						Attributes: []*common.KeyValue{
+							{
+								Key: "exception.type",
+								Value: &common.AnyValue{
+									Value: &common.AnyValue_StringValue{StringValue: "something_broke"},
+								},
+							},
+							{
+								Key: "exception.stacktrace",
+								Value: &common.AnyValue{
+									Value: &common.AnyValue_StringValue{StringValue: "this stacktrace should be long"},
+								},
+							},
+							{
+								Key: "exception.escaped",
+								Value: &common.AnyValue{
+									Value: &common.AnyValue_BoolValue{BoolValue: true},
+								},
+							},
+							{
+								Key: "exception.message",
+								Value: &common.AnyValue{
+									Value: &common.AnyValue_StringValue{StringValue: "aaaaaaa!!"},
+								},
+							},
+						},
+					}},
+				}},
+			}},
+		}},
+	}
+
+	testCases := []struct {
+		Name            string
+		ri              RequestInfo
+		expectedDataset string
+	}{
+		{
+			Name: "Classic",
+			ri: RequestInfo{
+				ApiKey:      "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+				Dataset:     "legacy-dataset",
+				ContentType: "application/protobuf",
+			},
+			expectedDataset: "legacy-dataset",
+		},
+		{
+			Name: "E&S",
+			ri: RequestInfo{
+				ApiKey:      "abc123DEF456ghi789jklm",
+				Dataset:     "legacy-dataset",
+				ContentType: "application/protobuf",
+			},
+			expectedDataset: testServiceName,
+		},
+	}
+	for _, tC := range testCases {
+		t.Run(tC.Name, func(t *testing.T) {
+
+			result, err := TranslateTraceRequest(req, tC.ri)
+			assert.Nil(t, err)
+			assert.Equal(t, proto.Size(req), result.RequestSize)
+			assert.Equal(t, 1, len(result.Batches))
+			batch := result.Batches[0]
+			assert.Equal(t, tC.expectedDataset, batch.Dataset)
+			assert.Equal(t, proto.Size(req.ResourceSpans[0]), batch.SizeBytes)
+			events := batch.Events
+			assert.Equal(t, 2, len(events))
+
+			// event
+			ev := events[0]
+			assert.Equal(t, BytesToTraceID(traceID), ev.Attributes["trace.trace_id"])
+			assert.Equal(t, int32(100), ev.SampleRate)
+			assert.Equal(t, hex.EncodeToString(spanID), ev.Attributes["trace.parent_id"])
+			assert.Equal(t, "exception", ev.Attributes["name"])
+			assert.Equal(t, "test_span", ev.Attributes["parent_name"])
+			assert.Equal(t, "something_broke", ev.Attributes["exception.type"])
+			assert.Equal(t, "this stacktrace should be long", ev.Attributes["exception.stacktrace"])
+			assert.Equal(t, true, ev.Attributes["exception.escaped"])
+			assert.Equal(t, "aaaaaaa!!", ev.Attributes["exception.message"])
+			assert.Equal(t, "resource_attr_val", ev.Attributes["resource_attr"])
+
+			// span
+			ev = events[1]
+			assert.Equal(t, startTimestamp.Nanosecond(), ev.Timestamp.Nanosecond())
+			assert.Equal(t, int32(100), ev.SampleRate)
+			assert.Equal(t, BytesToTraceID(traceID), ev.Attributes["trace.trace_id"])
+			assert.Equal(t, hex.EncodeToString(spanID), ev.Attributes["trace.span_id"])
+			assert.Equal(t, "client", ev.Attributes["type"])
+			assert.Equal(t, "client", ev.Attributes["span.kind"])
+			assert.Equal(t, "test_span", ev.Attributes["name"])
+			assert.Equal(t, float64(endTimestamp.Nanosecond()-startTimestamp.Nanosecond())/float64(time.Millisecond), ev.Attributes["duration_ms"])
+			assert.Equal(t, int(trace.Status_STATUS_CODE_OK), ev.Attributes["status_code"])
+			assert.Equal(t, "span_attr_val", ev.Attributes["span_attr"])
+			assert.Equal(t, "resource_attr_val", ev.Attributes["resource_attr"])
+			assert.Equal(t, 0, ev.Attributes["span.num_links"])
+			assert.Equal(t, 1, ev.Attributes["span.num_events"])
+		})
+	}
+}
+
 func TestTranslateGrpcTraceRequestFromMultipleServices(t *testing.T) {
 	ri := RequestInfo{
 		ApiKey:      "abc123DEF456ghi789jklm",

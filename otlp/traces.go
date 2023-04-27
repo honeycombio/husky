@@ -120,16 +120,19 @@ func TranslateTraceRequest(request *collectorTrace.ExportTraceServiceRequest, ri
 					}
 					if isError {
 						attrs["error"] = true
+					}
 
-						// Copy over span event error attributes because:
-						// 1. They are common and high-value for error investigations
-						// 2. It sucks to have to look at span events in our trace UI today to hunt these down on an error span
-						// 3. This makes bubble up better because you can see these error details without having to query the span events
+					// For span events that are following the "exception" semantic convention,
+					// we're going to copy their attributes to the parent span because:
+					// 1. They are common and high-value for error investigations
+					// 2. It sucks to have to look at span events in our trace UI today to hunt these down on an error span
+					// 3. This makes bubble up better because you can see these error details without having to query the span events
+					// If there is more than one exception event, only the first one we encounter will be copied.
+					if sevent.Name == "exception" {
 						for _, seventAttr := range sevent.Attributes {
-							if seventAttr.Key == "exception.message" ||
-								seventAttr.Key == "exception.type" ||
-								seventAttr.Key == "exception.stacktrace" ||
-								seventAttr.Key == "exception.escaped" {
+							switch seventAttr.Key {
+							case "exception.message", "exception.type", "exception.stacktrace", "exception.escaped":
+								// don't overwrite if the value is already on the span
 								if _, present := eventAttrs[seventAttr.Key]; !present {
 									eventAttrs[seventAttr.Key] = seventAttr.Value
 								}
