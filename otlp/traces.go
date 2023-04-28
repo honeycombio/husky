@@ -95,11 +95,6 @@ func TranslateTraceRequest(request *collectorTrace.ExportTraceServiceRequest, ri
 				// Now we need to wrap the eventAttrs in an event so we can specify the timestamp
 				// which is the StartTime as a time.Time object
 				timestamp := time.Unix(0, int64(span.StartTimeUnixNano)).UTC()
-				events = append(events, Event{
-					Attributes: eventAttrs,
-					Timestamp:  timestamp,
-					SampleRate: sampleRate,
-				})
 
 				for _, sevent := range span.Events {
 					timestamp := time.Unix(0, int64(sevent.TimeUnixNano)).UTC()
@@ -125,6 +120,24 @@ func TranslateTraceRequest(request *collectorTrace.ExportTraceServiceRequest, ri
 					}
 					if isError {
 						attrs["error"] = true
+					}
+
+					// For span events that are following the "exception" semantic convention,
+					// we're going to copy their attributes to the parent span because:
+					// 1. They are common and high-value for error investigations
+					// 2. It sucks to have to look at span events in our trace UI today to hunt these down on an error span
+					// 3. This makes bubble up better because you can see these error details without having to query the span events
+					// If there is more than one exception event, only the first one we encounter will be copied.
+					if sevent.Name == "exception" {
+						for _, seventAttr := range sevent.Attributes {
+							switch seventAttr.Key {
+							case "exception.message", "exception.type", "exception.stacktrace", "exception.escaped":
+								// don't overwrite if the value is already on the span
+								if _, present := eventAttrs[seventAttr.Key]; !present {
+									eventAttrs[seventAttr.Key] = seventAttr.Value
+								}
+							}
+						}
 					}
 
 					events = append(events, Event{
@@ -166,6 +179,12 @@ func TranslateTraceRequest(request *collectorTrace.ExportTraceServiceRequest, ri
 						SampleRate: sampleRate,
 					})
 				}
+
+				events = append(events, Event{
+					Attributes: eventAttrs,
+					Timestamp:  timestamp,
+					SampleRate: sampleRate,
+				})
 			}
 		}
 		batches = append(batches, Batch{
