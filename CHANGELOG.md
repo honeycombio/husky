@@ -1,5 +1,16 @@
 # Husky Changelog
 
+## 0.22.3 2023-05-12
+
+- feat: copy exception details from span event to parent span (#191) | [Phillip Carter](https://github.com/cartermp)
+- maint: Remove refs to proxy token and headers (#193) | [Kent Quirk](https://github.com/kentquirk)
+- maint: update dependabot config (#195) | [Vera Reynolds](https://github.com/vreynolds)
+- maint(deps): bump google.golang.org/grpc from 1.53.0 to 1.54.0 (#190)
+- maint(deps): bump github.com/klauspost/compress from 1.16.0 to 1.16.3 (#189)
+- maint(deps): bump google.golang.org/protobuf from 1.28.1 to 1.30.0 (#188)
+- maint(deps): bump github.com/klauspost/compress from 1.16.3 to 1.16.5 (#194)
+
+
 ## 0.22.2 2023-03-09
 
 - Use bytesToSpanID for parentID too. (#185) | [Robb Kidd](https://github.com/robbkidd)
