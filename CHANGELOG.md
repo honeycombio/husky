@@ -1,5 +1,9 @@
 # Husky Changelog
 
+## 0.22.4 2023-05-16
+
+fix: Send the values not the Values in exception details (#197) | [Kent Quirk](https://github.com/kentquirk)
+
 ## 0.22.3 2023-05-12
 
 - feat: copy exception details from span event to parent span (#191) | [Phillip Carter](https://github.com/cartermp)
