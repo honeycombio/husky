@@ -131,10 +131,15 @@ func TranslateTraceRequest(request *collectorTrace.ExportTraceServiceRequest, ri
 					if sevent.Name == "exception" {
 						for _, seventAttr := range sevent.Attributes {
 							switch seventAttr.Key {
-							case "exception.message", "exception.type", "exception.stacktrace", "exception.escaped":
+							case "exception.message", "exception.type", "exception.stacktrace":
 								// don't overwrite if the value is already on the span
 								if _, present := eventAttrs[seventAttr.Key]; !present {
-									eventAttrs[seventAttr.Key] = seventAttr.Value
+									eventAttrs[seventAttr.Key] = seventAttr.Value.GetStringValue()
+								}
+							case "exception.escaped":
+								// don't overwrite if the value is already on the span
+								if _, present := eventAttrs[seventAttr.Key]; !present {
+									eventAttrs[seventAttr.Key] = seventAttr.Value.GetBoolValue()
 								}
 							}
 						}
