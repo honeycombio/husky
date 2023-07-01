@@ -4,7 +4,7 @@ go 1.18
 
 require (
 	github.com/json-iterator/go v1.1.12
-	github.com/klauspost/compress v1.16.5
+	github.com/klauspost/compress v1.16.6
 	github.com/stretchr/testify v1.8.4
 	go.opentelemetry.io/proto/otlp v0.19.0
 	google.golang.org/grpc v1.55.0
