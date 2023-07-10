@@ -30,6 +30,11 @@ const (
 	gRPCAcceptEncodingHeader = "grpc-accept-encoding"
 	defaultServiceName       = "unknown_service"
 	unknownLogSource         = "unknown_log_source"
+	resourceAttrsPrefix      = "resource."
+	scopeAttrsPrefix         = "scope."
+	spanAttrsPrefix          = "span."
+	seventAttrsPrefix        = "sevent."
+	slinkAttrsPrefix         = "slink."
 )
 
 // fieldSizeMax is the maximum size of a field that will be accepted by honeycomb.
@@ -192,14 +197,14 @@ func getValueFromMetadata(md metadata.MD, key string) string {
 	return ""
 }
 
-func addAttributesToMap(attrs map[string]interface{}, attributes []*common.KeyValue) {
+func addAttributesToMap(prefix string, attrs map[string]interface{}, attributes []*common.KeyValue) {
 	for _, attr := range attributes {
 		// ignore entries if the key is empty or value is nil
 		if attr.Key == "" || attr.Value == nil {
 			continue
 		}
 		if val, truncatedBytes := getValue(attr.Value); val != nil {
-			attrs[attr.Key] = val
+			attrs[prefix+attr.Key] = val
 			if truncatedBytes != 0 {
 				// if we trim a field, add telemetry about it; because we trim at 64K and
 				// a whole span can't be more than 100K, this can't happen more than once
@@ -215,7 +220,7 @@ func addAttributesToMap(attrs map[string]interface{}, attributes []*common.KeyVa
 func getResourceAttributes(resource *resource.Resource) map[string]interface{} {
 	attrs := map[string]interface{}{}
 	if resource != nil {
-		addAttributesToMap(attrs, resource.Attributes)
+		addAttributesToMap(resourceAttrsPrefix, attrs, resource.Attributes)
 	}
 	return attrs
 }
@@ -232,7 +237,7 @@ func getScopeAttributes(scope *common.InstrumentationScope) map[string]interface
 		if scope.Version != "" {
 			attrs["library.version"] = scope.Version
 		}
-		addAttributesToMap(attrs, scope.Attributes)
+		addAttributesToMap(scopeAttrsPrefix,attrs, scope.Attributes)
 	}
 	return attrs
 }
