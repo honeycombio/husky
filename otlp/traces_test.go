@@ -152,7 +152,7 @@ func TestTranslateGrpcTraceRequest(t *testing.T) {
 			assert.Equal(t, "test_span", ev.Attributes["parent_name"])
 			assert.Equal(t, "span_event", ev.Attributes["meta.annotation_type"])
 			assert.Equal(t, "span_event_attr_val", ev.Attributes["span_event_attr"])
-			assert.Equal(t, "span_attr_val", ev.Attributes["span_attr_val"])
+			assert.Equal(t, "span_attr_val", ev.Attributes["span_attr"])
 			assert.Equal(t, "resource_attr_val", ev.Attributes["resource_attr"])
 
 			// link
