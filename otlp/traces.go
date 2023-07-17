@@ -115,6 +115,9 @@ func TranslateTraceRequest(request *collectorTrace.ExportTraceServiceRequest, ri
 						attrs[k] = v
 					}
 
+				  if span.Attributes != nil {
+            addAttributesToMap(attrs, span.Attributes)
+          }
 					if sevent.Attributes != nil {
 						addAttributesToMap(attrs, sevent.Attributes)
 					}
