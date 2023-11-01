@@ -7,7 +7,7 @@ require (
 	github.com/klauspost/compress v1.17.2
 	github.com/stretchr/testify v1.8.4
 	go.opentelemetry.io/proto/otlp v0.19.0
-	google.golang.org/grpc v1.58.2
+	google.golang.org/grpc v1.58.3
 	google.golang.org/protobuf v1.31.0
 )
 
