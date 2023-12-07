@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"fmt"
 	"io"
 	"math"
 	"net/http"
@@ -13,8 +14,12 @@ import (
 
 	jsoniter "github.com/json-iterator/go"
 	"github.com/klauspost/compress/zstd"
+	collectorlogs "go.opentelemetry.io/proto/otlp/collector/logs/v1"
+	collectormetrics "go.opentelemetry.io/proto/otlp/collector/metrics/v1"
+	collectortrace "go.opentelemetry.io/proto/otlp/collector/trace/v1"
 	common "go.opentelemetry.io/proto/otlp/common/v1"
 	resource "go.opentelemetry.io/proto/otlp/resource/v1"
+	spb "google.golang.org/genproto/googleapis/rpc/status"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
@@ -183,6 +188,66 @@ func GetRequestInfoFromHttpHeaders(header http.Header) RequestInfo {
 		ContentEncoding:    header.Get(contentEncodingHeader),
 		GRPCAcceptEncoding: header.Get(gRPCAcceptEncodingHeader),
 	}
+}
+
+// WriteOtlpHttpFailureResponse is a quick way to write an otlp response for an error.
+// It calls WriteOtlpHttpResponse, using the error's HttpStatusCode and building a Status
+// using the error's string.
+func WriteOtlpHttpFailureResponse(w http.ResponseWriter, r *http.Request, err OTLPError) error {
+	return WriteOtlpHttpResponse(w, r, err.HTTPStatusCode, &spb.Status{Message: err.Error()})
+}
+
+// WriteOtlpHttpTraceSuccessResponse is a quick way to write an otlp success response for a trace request.
+// It calls WriteOtlpHttpResponse, using the 200 status code and an empty ExportTraceServiceResponse
+func WriteOtlpHttpTraceSuccessResponse(w http.ResponseWriter, r *http.Request) error {
+	return WriteOtlpHttpResponse(w, r, http.StatusOK, &collectortrace.ExportTraceServiceResponse{})
+}
+
+// WriteOtlpHttpMetricSuccessResponse is a quick way to write an otlp success response for a metric request.
+// It calls WriteOtlpHttpResponse, using the 200 status code and an empty ExportMetricsServiceResponse
+func WriteOtlpHttpMetricSuccessResponse(w http.ResponseWriter, r *http.Request) error {
+	return WriteOtlpHttpResponse(w, r, http.StatusOK, &collectormetrics.ExportMetricsServiceResponse{})
+}
+
+// WriteOtlpHttpLogSuccessResponse is a quick way to write an otlp success response for a trace request.
+// It calls WriteOtlpHttpResponse, using the 200 status code and an empty ExportLogsServiceResponse
+func WriteOtlpHttpLogSuccessResponse(w http.ResponseWriter, r *http.Request) error {
+	return WriteOtlpHttpResponse(w, r, http.StatusOK, &collectorlogs.ExportLogsServiceResponse{})
+}
+
+// WriteOtlpHttpResponse writes a compliant OTLP HTTP response to the given http.ResponseWriter
+// based on the provided `contentType`. If an error occurs while marshalling to either json or proto it is returned.
+// If an error occurs while writing to the http.ResponseWriter it is returned
+func WriteOtlpHttpResponse(w http.ResponseWriter, r *http.Request, statusCode int, m proto.Message) error {
+	if r == nil {
+		return fmt.Errorf("nil Request")
+	}
+
+	contentType := r.Header.Get("Content-Type")
+	if contentType == "" {
+		return ErrInvalidContentType
+	}
+
+	w.Header().Set("Content-Type", contentType)
+	w.WriteHeader(statusCode)
+
+	var body []byte
+	var err error
+	switch contentType {
+	case "application/json":
+		body, err = protojson.Marshal(m)
+	case "application/x-protobuf", "application/protobuf":
+		body, err = proto.Marshal(m)
+	default:
+		return ErrInvalidContentType
+	}
+
+	if err != nil {
+		return err
+	}
+
+	_, err = w.Write(body)
+	return err
 }
 
 func getValueFromMetadata(md metadata.MD, key string) string {
