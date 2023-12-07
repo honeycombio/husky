@@ -12,7 +12,7 @@ updates:
     labels:
       - "type: dependencies"
     reviewers:
-      - "honeycombio/collection-team"
+      - "honeycombio/pipeline"
     commit-message:
       prefix: "maint"
       include: "scope"
