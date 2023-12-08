@@ -2,14 +2,22 @@ package otlp
 
 import (
 	"context"
+	"io"
 	"net/http"
+	"net/http/httptest"
 	"reflect"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	collectorlogs "go.opentelemetry.io/proto/otlp/collector/logs/v1"
+	collectormetrics "go.opentelemetry.io/proto/otlp/collector/metrics/v1"
+	collectortrace "go.opentelemetry.io/proto/otlp/collector/trace/v1"
 	common "go.opentelemetry.io/proto/otlp/common/v1"
+	spb "google.golang.org/genproto/googleapis/rpc/status"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
 )
 
 func TestParseGrpcMetadataIntoRequestInfo(t *testing.T) {
@@ -416,6 +424,223 @@ func Test_limitedWriter(t *testing.T) {
 			s := l.String()
 			if s != tt.want {
 				t.Errorf("limitedWriter.String() = '%v', want '%v'", s, tt.want)
+			}
+		})
+	}
+}
+
+func Test_WriteOtlpHttpFailureResponse(t *testing.T) {
+	tests := []struct {
+		contentType   string
+		err           OTLPError
+		expectedError error
+	}{
+		{
+			contentType: "application/x-protobuf",
+			err: OTLPError{
+				HTTPStatusCode: http.StatusBadRequest,
+				Message:        "test",
+			},
+		},
+		{
+			contentType: "application/protobuf",
+			err: OTLPError{
+				HTTPStatusCode: http.StatusBadRequest,
+				Message:        "test",
+			},
+		},
+		{
+			contentType: "application/json",
+			err: OTLPError{
+				HTTPStatusCode: http.StatusBadRequest,
+				Message:        "test",
+			},
+		},
+		{
+			contentType: "nonsense",
+			err: OTLPError{
+				HTTPStatusCode: http.StatusBadRequest,
+				Message:        "test",
+			},
+			expectedError: ErrInvalidContentType,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.contentType, func(t *testing.T) {
+			w := httptest.NewRecorder()
+			r := httptest.NewRequest("POST", "/", nil)
+			r.Header.Set("Content-Type", tt.contentType)
+
+			err := WriteOtlpHttpFailureResponse(w, r, tt.err)
+			if tt.expectedError != nil {
+				assert.Equal(t, tt.expectedError, err)
+			} else {
+				assert.NoError(t, err)
+
+				assert.Equal(t, tt.contentType, w.Header().Get("Content-Type"))
+				assert.Equal(t, tt.err.HTTPStatusCode, w.Code)
+
+				data, err := io.ReadAll(w.Body)
+				assert.NoError(t, err)
+				var result spb.Status
+				if tt.contentType == "application/json" {
+					err = protojson.Unmarshal(data, &result)
+					assert.NoError(t, err)
+				} else {
+					err = proto.Unmarshal(data, &result)
+					assert.NoError(t, err)
+				}
+				assert.Equal(t, tt.err.Message, result.Message)
+			}
+		})
+	}
+}
+
+func Test_WriteOtlpHttpTraceSuccessResponse(t *testing.T) {
+	tests := []struct {
+		contentType   string
+		expectedError error
+	}{
+		{
+			contentType: "application/x-protobuf",
+		},
+		{
+			contentType: "application/protobuf",
+		},
+		{
+			contentType: "application/json",
+		},
+		{
+			contentType:   "nonsense",
+			expectedError: ErrInvalidContentType,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.contentType, func(t *testing.T) {
+			w := httptest.NewRecorder()
+			r := httptest.NewRequest("POST", "/", nil)
+			r.Header.Set("Content-Type", tt.contentType)
+
+			err := WriteOtlpHttpTraceSuccessResponse(w, r)
+			if tt.expectedError != nil {
+				assert.Equal(t, tt.expectedError, err)
+			} else {
+				assert.NoError(t, err)
+
+				assert.Equal(t, tt.contentType, w.Header().Get("Content-Type"))
+				assert.Equal(t, http.StatusOK, w.Code)
+
+				data, err := io.ReadAll(w.Body)
+				assert.NoError(t, err)
+				var result collectortrace.ExportTraceServiceResponse
+				if tt.contentType == "application/json" {
+					err = protojson.Unmarshal(data, &result)
+					assert.NoError(t, err)
+				} else {
+					err = proto.Unmarshal(data, &result)
+					assert.NoError(t, err)
+				}
+				assert.Nil(t, result.GetPartialSuccess())
+			}
+		})
+	}
+}
+
+func Test_WriteOtlpHttpMetricSuccessResponse(t *testing.T) {
+	tests := []struct {
+		contentType   string
+		expectedError error
+	}{
+		{
+			contentType: "application/x-protobuf",
+		},
+		{
+			contentType: "application/protobuf",
+		},
+		{
+			contentType: "application/json",
+		},
+		{
+			contentType:   "nonsense",
+			expectedError: ErrInvalidContentType,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.contentType, func(t *testing.T) {
+			w := httptest.NewRecorder()
+			r := httptest.NewRequest("POST", "/", nil)
+			r.Header.Set("Content-Type", tt.contentType)
+
+			err := WriteOtlpHttpMetricSuccessResponse(w, r)
+			if tt.expectedError != nil {
+				assert.Equal(t, tt.expectedError, err)
+			} else {
+				assert.NoError(t, err)
+
+				assert.Equal(t, tt.contentType, w.Header().Get("Content-Type"))
+				assert.Equal(t, http.StatusOK, w.Code)
+
+				data, err := io.ReadAll(w.Body)
+				assert.NoError(t, err)
+				var result collectormetrics.ExportMetricsServiceResponse
+				if tt.contentType == "application/json" {
+					err = protojson.Unmarshal(data, &result)
+					assert.NoError(t, err)
+				} else {
+					err = proto.Unmarshal(data, &result)
+					assert.NoError(t, err)
+				}
+				assert.Nil(t, result.GetPartialSuccess())
+			}
+		})
+	}
+}
+
+func Test_WriteOtlpHttpLogSuccessResponse(t *testing.T) {
+	tests := []struct {
+		contentType   string
+		expectedError error
+	}{
+		{
+			contentType: "application/x-protobuf",
+		},
+		{
+			contentType: "application/protobuf",
+		},
+		{
+			contentType: "application/json",
+		},
+		{
+			contentType:   "nonsense",
+			expectedError: ErrInvalidContentType,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.contentType, func(t *testing.T) {
+			w := httptest.NewRecorder()
+			r := httptest.NewRequest("POST", "/", nil)
+			r.Header.Set("Content-Type", tt.contentType)
+
+			err := WriteOtlpHttpLogSuccessResponse(w, r)
+			if tt.expectedError != nil {
+				assert.Equal(t, tt.expectedError, err)
+			} else {
+				assert.NoError(t, err)
+
+				assert.Equal(t, tt.contentType, w.Header().Get("Content-Type"))
+				assert.Equal(t, http.StatusOK, w.Code)
+
+				data, err := io.ReadAll(w.Body)
+				assert.NoError(t, err)
+				var result collectorlogs.ExportLogsServiceResponse
+				if tt.contentType == "application/json" {
+					err = protojson.Unmarshal(data, &result)
+					assert.NoError(t, err)
+				} else {
+					err = proto.Unmarshal(data, &result)
+					assert.NoError(t, err)
+				}
+				assert.Nil(t, result.GetPartialSuccess())
 			}
 		})
 	}
