@@ -1,5 +1,11 @@
 # Husky Changelog
 
+## 0.23.1 2023-12-08
+
+- fix: bug where we could error after writing a status code (#224) | [Tyler Helmuth](https://github.com/TylerHelmuth)
+- maint: add deps and docs to maintenance in release (#223) | [Jamie Danielson](https://github.com/JamieDanielson)
+- maint: add extra detail to release doc (#222) | [Jamie Danielson](https://github.com/JamieDanielson)
+
 ## 0.23.0 2023-12-08
 
 - feat: Add public functions for handling OTLP HTTP responses (#219) | [Tyler Helmuth](https://github.com/TylerHelmuth)
