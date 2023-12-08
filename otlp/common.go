@@ -216,21 +216,14 @@ func WriteOtlpHttpLogSuccessResponse(w http.ResponseWriter, r *http.Request) err
 }
 
 // WriteOtlpHttpResponse writes a compliant OTLP HTTP response to the given http.ResponseWriter
-// based on the provided `contentType`. If an error occurs while marshalling to either json or proto it is returned.
-// If an error occurs while writing to the http.ResponseWriter it is returned
+// based on the provided `contentType`. If an error occurs while marshalling to either json or proto it is returned
+// before the http.ResponseWriter is updated. If an error occurs while writing to the http.ResponseWriter it is ignored.
 func WriteOtlpHttpResponse(w http.ResponseWriter, r *http.Request, statusCode int, m proto.Message) error {
 	if r == nil {
 		return fmt.Errorf("nil Request")
 	}
 
 	contentType := r.Header.Get("Content-Type")
-	if contentType == "" {
-		return ErrInvalidContentType
-	}
-
-	w.Header().Set("Content-Type", contentType)
-	w.WriteHeader(statusCode)
-
 	var body []byte
 	var err error
 	switch contentType {
@@ -241,13 +234,15 @@ func WriteOtlpHttpResponse(w http.ResponseWriter, r *http.Request, statusCode in
 	default:
 		return ErrInvalidContentType
 	}
-
 	if err != nil {
 		return err
 	}
 
-	_, err = w.Write(body)
-	return err
+	// At this point we're committed
+	w.Header().Set("Content-Type", contentType)
+	w.WriteHeader(statusCode)
+	_, _ = w.Write(body)
+	return nil
 }
 
 func getValueFromMetadata(md metadata.MD, key string) string {
