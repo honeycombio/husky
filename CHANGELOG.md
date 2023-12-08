@@ -1,5 +1,22 @@
 # Husky Changelog
 
+## 0.23.0 2023-12-08
+
+- feat: Add public functions for handling OTLP HTTP responses (#219) | [Tyler Helmuth](https://github.com/)
+- maint: update codeowners (#220) | [Tyler Helmuth](https://github.com/)
+- maint(deps): bump google.golang.org/grpc from 1.58.3 to 1.59.0 (#218) | [dependabot[bot]](https://github.com/)
+- maint(deps): bump github.com/klauspost/compress from 1.17.2 to 1.17.4 (#217) | [dependabot[bot]](https://github.com/)
+- maint(deps): bump google.golang.org/grpc from 1.58.2 to 1.58.3 (#215) | [dependabot[bot]](https://github.com/)
+- maint(deps): bump golang.org/x/net from 0.12.0 to 0.17.0 (#214) | [dependabot[bot]](https://github.com/)
+- maint: bump github.com/klauspost/compress from 1.16.7 to 1.17.2 (#213) | [Tyler Helmuth](https://github.com/)
+- maint(deps): bump google.golang.org/grpc from 1.56.1 to 1.58.2 (#210) | [dependabot[bot]](https://github.com/)
+- maint(deps): bump github.com/klauspost/compress from 1.16.5 to 1.16.7 (#204) | [dependabot[bot]](https://github.com/)
+- maint(deps): bump google.golang.org/grpc from 1.55.0 to 1.56.1 (#202) | [dependabot[bot]](https://github.com/)
+- maint(deps): bump google.golang.org/protobuf from 1.30.0 to 1.31.0 (#203) | [dependabot[bot]](https://github.com/)
+- maint(deps): bump google.golang.org/grpc from 1.54.0 to 1.55.0 (#200) | [dependabot[bot]](https://github.com/)
+- maint(deps): bump github.com/stretchr/testify from 1.8.2 to 1.8.4 (#199) | [dependabot[bot]](https://github.com/)
+
+
 ## 0.22.4 2023-05-16
 
 fix: Send the values not the Values in exception details (#197) | [Kent Quirk](https://github.com/kentquirk)
