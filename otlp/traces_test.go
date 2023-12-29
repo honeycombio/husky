@@ -177,7 +177,7 @@ func TestTranslateGrpcTraceRequest(t *testing.T) {
 			assert.Equal(t, "client", ev.Attributes["span.kind"])
 			assert.Equal(t, "test_span", ev.Attributes["name"])
 			assert.Equal(t, float64(endTimestamp.Nanosecond()-startTimestamp.Nanosecond())/float64(time.Millisecond), ev.Attributes["duration_ms"])
-			assert.Equal(t, int(trace.Status_STATUS_CODE_OK), ev.Attributes["status_code"])
+			assert.Equal(t, int(trace.Status_STATUS_CODE_OK), ev.Attributes["span.status_code"])
 			assert.Equal(t, "span_attr_val", ev.Attributes["span_attr"])
 			assert.Equal(t, "resource_attr_val", ev.Attributes["resource_attr"])
 			assert.Equal(t, 1, ev.Attributes["span.num_links"])
@@ -338,7 +338,7 @@ func TestTranslateException(t *testing.T) {
 			assert.Equal(t, "client", ev.Attributes["span.kind"])
 			assert.Equal(t, "test_span", ev.Attributes["name"])
 			assert.Equal(t, float64(endTimestamp.Nanosecond()-startTimestamp.Nanosecond())/float64(time.Millisecond), ev.Attributes["duration_ms"])
-			assert.Equal(t, int(trace.Status_STATUS_CODE_OK), ev.Attributes["status_code"])
+			assert.Equal(t, int(trace.Status_STATUS_CODE_OK), ev.Attributes["span.status_code"])
 			assert.Equal(t, "span_attr_val", ev.Attributes["span_attr"])
 			assert.Equal(t, "resource_attr_val", ev.Attributes["resource_attr"])
 			assert.Equal(t, true, ev.Attributes["exception.escaped"])
@@ -628,7 +628,7 @@ func TestTranslateHttpTraceRequest(t *testing.T) {
 							assert.Equal(t, "test_span", ev.Attributes["name"])
 							assert.Equal(t, "my-service", ev.Attributes["service.name"])
 							assert.Equal(t, float64(endTimestamp.Nanosecond()-startTimestamp.Nanosecond())/float64(time.Millisecond), ev.Attributes["duration_ms"])
-							assert.Equal(t, int(trace.Status_STATUS_CODE_OK), ev.Attributes["status_code"])
+							assert.Equal(t, int(trace.Status_STATUS_CODE_OK), ev.Attributes["span.status_code"])
 							assert.Equal(t, "span_attr_val", ev.Attributes["span_attr"])
 							assert.Equal(t, "resource_attr_val", ev.Attributes["resource_attr"])
 						})
@@ -1091,6 +1091,50 @@ func TestEvaluateSpanStatus(t *testing.T) {
 			assert.Equal(t, tC.expectedIsError, isError)
 		})
 	}
+}
+
+func TestTranslateGrpcTraceRequestStatusIsWhatItShouldBe(t *testing.T) {
+	ri := RequestInfo{
+		ApiKey:      "abc123DEF456ghi789jklm",
+		Dataset:     "legacy-dataset",
+		ContentType: "application/protobuf",
+	}
+
+	req := &collectortrace.ExportTraceServiceRequest{
+		ResourceSpans: []*trace.ResourceSpans{{
+			Resource: &resource.Resource{
+				Attributes: []*common.KeyValue{{
+					Key: "service.name",
+					Value: &common.AnyValue{
+						Value: &common.AnyValue_StringValue{StringValue: "my-service-a"},
+					},
+				}},
+			},
+			ScopeSpans: []*trace.ScopeSpans{{
+				Spans: []*trace.Span{{
+					TraceId: test.RandomBytes(16),
+					SpanId:  test.RandomBytes(8),
+					Name:    "test_span_a",
+					Status: &trace.Status{
+						Code:    trace.Status_STATUS_CODE_UNSET,
+						Message: "OK!",
+					},
+				}},
+			}},
+		}},
+	}
+
+	result, err := TranslateTraceRequest(req, ri)
+	assert.Nil(t, err)
+	assert.Equal(t, proto.Size(req), result.RequestSize)
+	assert.Equal(t, 1, len(result.Batches))
+	batchA := result.Batches[0]
+	assert.Equal(t, "my-service-a", batchA.Dataset)
+	assert.Equal(t, proto.Size(req.ResourceSpans[0]), batchA.SizeBytes)
+	eventsA := batchA.Events
+	assert.Equal(t, 1, len(eventsA))
+
+	assert.Equal(t, 0, eventsA[0].Attributes["span.status_code"])
 }
 
 func TestBadTraceRequest(t *testing.T) {

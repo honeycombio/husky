@@ -63,7 +63,7 @@ func TranslateTraceRequest(request *collectorTrace.ExportTraceServiceRequest, ri
 					"span.kind":        spanKind,
 					"name":             span.Name,
 					"duration_ms":      float64(span.EndTimeUnixNano-span.StartTimeUnixNano) / float64(time.Millisecond),
-					"status_code":      statusCode,
+					"span.status_code": statusCode,
 					"span.num_links":   len(span.Links),
 					"span.num_events":  len(span.Events),
 					"meta.signal_type": "trace",
