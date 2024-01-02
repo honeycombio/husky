@@ -50,7 +50,7 @@ func TranslateLogsRequest(request *collectorLogs.ExportLogsServiceRequest, ri Re
 					attrs["meta.annotation_type"] = "span_event"
 				}
 				if len(log.SpanId) > 0 {
-					attrs["trace.parent_id"] = bytesToSpanID(log.SpanId)
+					attrs["trace.parent_id"] = BytesToSpanID(log.SpanId)
 				}
 				if log.SeverityText != "" {
 					attrs["severity_text"] = log.SeverityText
