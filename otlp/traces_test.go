@@ -1303,10 +1303,16 @@ func Test_BytesToSpanID(t *testing.T) {
 			want:   "890452a577ef2e0f",
 		},
 		{
-			name:   "spanID munged by browser",
+			name:   "spanID munged by browser (converted in this test)",
 			spanID: "890452a577ef2e0f",
 			b64:    true,
 			want:   "890452a577ef2e0f",
+		},
+		{
+			name:   "spanID munged by browser (from a bad trace)",
+			spanID: "e77ddbeb7f7adf77fbd396b9",
+			b64:    false,
+			want:   "533b639633f705a5",
 		},
 	}
 
