@@ -61,12 +61,18 @@ func TranslateTraceRequest(request *collectorTrace.ExportTraceServiceRequest, ri
 					"type":             spanKind,
 					"span.kind":        spanKind,
 					"name":             span.Name,
-					"duration_ms":      float64(span.EndTimeUnixNano-span.StartTimeUnixNano) / float64(time.Millisecond),
 					"status_code":      statusCode,
 					"span.num_links":   len(span.Links),
 					"span.num_events":  len(span.Events),
 					"meta.signal_type": "trace",
 				}
+				duration := float64(span.EndTimeUnixNano-span.StartTimeUnixNano) / float64(time.Millisecond)
+				if duration < 0 {
+					duration = 0
+					eventAttrs["meta.negative_duration"] = true
+				}
+				eventAttrs["duration_ms"] = duration
+
 				if span.ParentSpanId != nil {
 					eventAttrs["trace.parent_id"] = BytesToSpanID(span.ParentSpanId)
 				}
