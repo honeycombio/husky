@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"encoding/base64"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"math"
@@ -475,4 +477,63 @@ func parseOtlpRequestBody(body io.ReadCloser, contentType string, contentEncodin
 	}
 
 	return nil
+}
+
+// BytesToTraceID returns an ID suitable for use for spans and traces. Before
+// encoding the bytes as a hex string, we want to handle cases where we are
+// given 128-bit IDs with zero padding, e.g. 0000000000000000f798a1e7f33c8af6.
+// There are many ways to achieve this, but careful benchmarking and testing
+// showed the below as the most performant, avoiding memory allocations
+// and the use of flexible but expensive library functions. As this is hot code,
+// it seemed worthwhile to do it this way.
+func BytesToTraceID(traceID []byte) string {
+	var encoded []byte
+	switch len(traceID) {
+	case traceIDLongLength: // 16 bytes, trim leading 8 bytes if all 0's
+		if shouldTrimTraceId(traceID) {
+			encoded = make([]byte, 16)
+			traceID = traceID[traceIDShortLength:]
+		} else {
+			encoded = make([]byte, 32)
+		}
+		hex.Encode(encoded, traceID)
+	case traceIDShortLength: // 8 bytes
+		encoded = make([]byte, 16)
+		hex.Encode(encoded, traceID)
+	case traceIDb64Length: // 24 bytes
+		// The spec says that traceID and spanID should be encoded as hex, but
+		// the protobuf system is interpreting them as b64, so we need to
+		// reverse them back to b64 which gives us the original hex.
+		encoded = make([]byte, base64.StdEncoding.EncodedLen(len(traceID)))
+		base64.StdEncoding.Encode(encoded, traceID)
+	default:
+		encoded = make([]byte, len(traceID)*2)
+		hex.Encode(encoded, traceID)
+	}
+	return string(encoded)
+}
+
+func BytesToSpanID(spanID []byte) string {
+	var encoded []byte
+	switch len(spanID) {
+	case spanIDb64Length: // 12 bytes
+		// The spec says that traceID and spanID should be encoded as hex, but
+		// the protobuf system is interpreting them as b64, so we need to
+		// reverse them back to b64 which gives us the original hex.
+		encoded = make([]byte, base64.StdEncoding.EncodedLen(len(spanID)))
+		base64.StdEncoding.Encode(encoded, spanID)
+	default:
+		encoded = make([]byte, len(spanID)*2)
+		hex.Encode(encoded, spanID)
+	}
+	return string(encoded)
+}
+
+func shouldTrimTraceId(traceID []byte) bool {
+	for i := 0; i < 8; i++ {
+		if traceID[i] != 0 {
+			return false
+		}
+	}
+	return true
 }

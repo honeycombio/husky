@@ -2,7 +2,6 @@ package otlp
 
 import (
 	"bytes"
-	"encoding/base64"
 	"encoding/hex"
 	"io"
 	"math"
@@ -1226,106 +1225,6 @@ func TestKnownInstrumentationPrefixesReturnTrue(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			assert.Equal(t, test.isInstrumentationLibrary, isInstrumentationLibrary(test.libraryName))
-		})
-	}
-}
-
-func Test_BytesToTraceID(t *testing.T) {
-	tests := []struct {
-		name    string
-		traceID string
-		b64     bool
-		want    string
-	}{
-		{
-			name:    "64-bit traceID",
-			traceID: "cbe4decd12429177",
-			want:    "cbe4decd12429177",
-		},
-		{
-			name:    "128-bit zero-padded traceID",
-			traceID: "0000000000000000cbe4decd12429177",
-			want:    "cbe4decd12429177",
-		},
-		{
-			name:    "128-bit non-zero-padded traceID",
-			traceID: "f23b42eac289a0fdcde48fcbe3ab1a32",
-			want:    "f23b42eac289a0fdcde48fcbe3ab1a32",
-		},
-		{
-			name:    "Non-hex traceID",
-			traceID: "foobar1",
-			want:    "666f6f62617231",
-		},
-		{
-			name:    "Longer non-hex traceID",
-			traceID: "foobarbaz",
-			want:    "666f6f62617262617a",
-		},
-		{
-			name:    "traceID munged by browser",
-			traceID: "6e994e8673e93a51200c137330aeddad",
-			b64:     true,
-			want:    "6e994e8673e93a51200c137330aeddad",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			var traceID []byte
-			var err error
-			if tt.b64 {
-				traceID, err = base64.StdEncoding.DecodeString(tt.traceID)
-			} else {
-				traceID, err = hex.DecodeString(tt.traceID)
-			}
-			if err != nil {
-				traceID = []byte(tt.traceID)
-			}
-			got := BytesToTraceID(traceID)
-			if got != tt.want {
-				t.Errorf("got:  %#v\n\twant: %#v", got, tt.want)
-			}
-		})
-	}
-}
-
-func Test_BytesToSpanID(t *testing.T) {
-	tests := []struct {
-		name   string
-		spanID string
-		b64    bool
-		want   string
-	}{
-		{
-			name:   "spanID",
-			spanID: "890452a577ef2e0f",
-			want:   "890452a577ef2e0f",
-		},
-		{
-			name:   "spanID munged by browser",
-			spanID: "890452a577ef2e0f",
-			b64:    true,
-			want:   "890452a577ef2e0f",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			var spanID []byte
-			var err error
-			if tt.b64 {
-				spanID, err = base64.StdEncoding.DecodeString(tt.spanID)
-			} else {
-				spanID, err = hex.DecodeString(tt.spanID)
-			}
-			if err != nil {
-				spanID = []byte(tt.spanID)
-			}
-			got := bytesToSpanID(spanID)
-			if got != tt.want {
-				t.Errorf("got:  %#v\n\twant: %#v", got, tt.want)
-			}
 		})
 	}
 }
