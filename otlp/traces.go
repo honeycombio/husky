@@ -69,7 +69,7 @@ func TranslateTraceRequest(request *collectorTrace.ExportTraceServiceRequest, ri
 				duration := float64(span.EndTimeUnixNano-span.StartTimeUnixNano) / float64(time.Millisecond)
 				if duration < 0 {
 					duration = 0
-					eventAttrs["meta.negative_duration"] = true
+					eventAttrs["meta.invalid_duration"] = true
 				}
 				eventAttrs["duration_ms"] = duration
 
