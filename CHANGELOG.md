@@ -1,5 +1,17 @@
 # Husky Changelog
 
+## 0.24.0 2024-01-05
+
+### Fixes
+- fix: Handle case of endtime before starttime (#231) | [Kent Quirk](https://github.com/kentquirk)
+- fix: properly parse parent id for logs (#230) | [Kent Quirk](https://github.com/kentquirk)
+
+### Maintenance
+- maint(deps): bump google.golang.org/grpc from 1.59.0 to 1.60.1 (#229) | [dependabot[bot]](https://github.com/dependabot[bot])
+- maint(deps): bump google.golang.org/protobuf from 1.31.0 to 1.32.0 (#228) | [dependabot[bot]](https://github.com/dependabot[bot])
+- maint: update codeowners to pipeline-team (#226) | [Jamie Danielson](https://github.com/JamieDanielson)
+- chore: fix team name for dependabot (#233) | [Kent Quirk](https://github.com/kentquirk)
+
 ## 0.23.1 2023-12-08
 
 - fix: bug where we could error after writing a status code (#224) | [Tyler Helmuth](https://github.com/TylerHelmuth)
