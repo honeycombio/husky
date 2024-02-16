@@ -91,7 +91,7 @@ func TranslateTraceRequest(request *collectorTrace.ExportTraceServiceRequest, ri
 					eventAttrs[k] = v
 				}
 				if span.Attributes != nil {
-					addAttributesToMap(eventAttrs, span.Attributes)
+					AddAttributesToMap(eventAttrs, span.Attributes)
 				}
 
 				// get sample rate after resource and scope attributes have been added
@@ -121,7 +121,7 @@ func TranslateTraceRequest(request *collectorTrace.ExportTraceServiceRequest, ri
 					}
 
 					if sevent.Attributes != nil {
-						addAttributesToMap(attrs, sevent.Attributes)
+						AddAttributesToMap(attrs, sevent.Attributes)
 					}
 					if isError {
 						attrs["error"] = true
@@ -177,7 +177,7 @@ func TranslateTraceRequest(request *collectorTrace.ExportTraceServiceRequest, ri
 					}
 
 					if slink.Attributes != nil {
-						addAttributesToMap(attrs, slink.Attributes)
+						AddAttributesToMap(attrs, slink.Attributes)
 					}
 					if isError {
 						attrs["error"] = true

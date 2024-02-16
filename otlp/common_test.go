@@ -7,8 +7,6 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"reflect"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -52,48 +50,43 @@ func TestParseHttpHeadersIntoRequestInfo(t *testing.T) {
 
 func TestAddAttributesToMap(t *testing.T) {
 	testCases := []struct {
-		key       string
 		expected  interface{}
 		attribute *common.KeyValue
 	}{
 		{
-			key:      "str-attr",
-			expected: "str-value",
+			expected: map[string]interface{}{"str-attr": "str-value"},
 			attribute: &common.KeyValue{
 				Key: "str-attr", Value: &common.AnyValue{Value: &common.AnyValue_StringValue{StringValue: "str-value"}},
 			},
 		},
 		{
-			key:      "int-attr",
-			expected: int64(123),
+			expected: map[string]interface{}{"int-attr": int64(123)},
 			attribute: &common.KeyValue{
 				Key: "int-attr", Value: &common.AnyValue{Value: &common.AnyValue_IntValue{IntValue: 123}},
 			},
 		},
 		{
-			key:      "double-attr",
-			expected: float64(12.3),
+			expected: map[string]interface{}{"double-attr": float64(12.3)},
 			attribute: &common.KeyValue{
 				Key: "double-attr", Value: &common.AnyValue{Value: &common.AnyValue_DoubleValue{DoubleValue: 12.3}},
 			},
 		},
 		{
-			key:      "bool-attr",
-			expected: true,
+			expected: map[string]interface{}{"bool-attr": true},
 			attribute: &common.KeyValue{
 				Key: "bool-attr", Value: &common.AnyValue{Value: &common.AnyValue_BoolValue{BoolValue: true}},
 			},
 		},
 		{
-			key:      "empty-key",
-			expected: nil,
+			expected: map[string]interface{}{},
 			attribute: &common.KeyValue{
 				Key: "", Value: &common.AnyValue{Value: &common.AnyValue_StringValue{StringValue: "str-value"}},
 			},
 		},
 		{
-			key:      "array-attr",
-			expected: "[\"one\",true,3]\n",
+			expected: map[string]interface{}{
+				"array-attr": "[\"one\",true,3]\n",
+			},
 			attribute: &common.KeyValue{
 				Key: "array-attr", Value: &common.AnyValue{Value: &common.AnyValue_ArrayValue{ArrayValue: &common.ArrayValue{
 					Values: []*common.AnyValue{
@@ -107,16 +100,15 @@ func TestAddAttributesToMap(t *testing.T) {
 		// that functionality is more completely tested by Test_getValue(). The case of a nested map will fail
 		// badly in the way this test is structured, so we don't do maps at all here.
 		{
-			key:       "nil-value-attr",
-			expected:  nil,
+			expected:  map[string]interface{}{},
 			attribute: &common.KeyValue{Key: "kv-attr", Value: nil},
 		},
 	}
 
 	for _, tc := range testCases {
 		attrs := map[string]interface{}{}
-		addAttributesToMap(attrs, []*common.KeyValue{tc.attribute})
-		assert.Equal(t, tc.expected, attrs[tc.key])
+		AddAttributesToMap(attrs, []*common.KeyValue{tc.attribute})
+		assert.Equal(t, tc.expected, attrs)
 	}
 }
 
@@ -334,17 +326,20 @@ func Test_getValue(t *testing.T) {
 		value *common.AnyValue
 		want  interface{}
 	}{
-		{"int64", &common.AnyValue{Value: &common.AnyValue_IntValue{IntValue: 123}}, int64(123)},
-		{"bool", &common.AnyValue{Value: &common.AnyValue_BoolValue{BoolValue: true}}, true},
-		{"float64", &common.AnyValue{Value: &common.AnyValue_DoubleValue{DoubleValue: 123}}, float64(123)},
-		{"bytes as b64", &common.AnyValue{Value: &common.AnyValue_BytesValue{BytesValue: []byte{10, 20, 30}}}, `"ChQe"` + "\n"},
+		{"string", &common.AnyValue{Value: &common.AnyValue_StringValue{StringValue: "foo"}}, map[string]interface{}{"body": "foo"}},
+		{"int64", &common.AnyValue{Value: &common.AnyValue_IntValue{IntValue: 123}}, map[string]interface{}{"body": int64(123)}},
+		{"bool", &common.AnyValue{Value: &common.AnyValue_BoolValue{BoolValue: true}}, map[string]interface{}{"body": true}},
+		{"float64", &common.AnyValue{Value: &common.AnyValue_DoubleValue{DoubleValue: 123}}, map[string]interface{}{"body": float64(123)}},
+		{"bytes as b64", &common.AnyValue{Value: &common.AnyValue_BytesValue{BytesValue: []byte{10, 20, 30}}}, map[string]interface{}{"body": `"ChQe"` + "\n"}},
 		{"array as mixed-type string", &common.AnyValue{Value: &common.AnyValue_ArrayValue{
 			ArrayValue: &common.ArrayValue{Values: []*common.AnyValue{
 				{Value: &common.AnyValue_IntValue{IntValue: 123}},
 				{Value: &common.AnyValue_DoubleValue{DoubleValue: 45.6}},
 				{Value: &common.AnyValue_StringValue{StringValue: "hi mom"}},
 			}},
-		}}, `[123,45.6,"hi mom"]` + "\n"},
+		}}, map[string]interface{}{
+			"body": "[123,45.6,\"hi mom\"]\n",
+		}},
 		{"map as mixed-type string", &common.AnyValue{
 			Value: &common.AnyValue_KvlistValue{KvlistValue: &common.KeyValueList{
 				Values: []*common.KeyValue{
@@ -352,7 +347,13 @@ func Test_getValue(t *testing.T) {
 					{Key: "bar", Value: &common.AnyValue{Value: &common.AnyValue_DoubleValue{DoubleValue: 45.6}}},
 					{Key: "mom", Value: &common.AnyValue{Value: &common.AnyValue_StringValue{StringValue: "hi mom"}}},
 				},
-			}}}, `{"foo":123,"bar":45.6,"mom":"hi mom"}` + "\n"},
+			}}},
+			map[string]interface{}{
+				"body.foo": int64(123),
+				"body.bar": float64(45.6),
+				"body.mom": "hi mom",
+			},
+		},
 		{"nested map as mixed-type string", &common.AnyValue{
 			Value: &common.AnyValue_KvlistValue{KvlistValue: &common.KeyValueList{
 				Values: []*common.KeyValue{
@@ -367,29 +368,21 @@ func Test_getValue(t *testing.T) {
 							},
 						}}}},
 				},
-			}}}, `{"bar":45.6,"foo":123,"nest":{"bar":45.6,"foo":123,"mom":"hi mom"}}`},
+			}}},
+			map[string]interface{}{
+				"body.foo":      int64(123),
+				"body.bar":      float64(45.6),
+				"body.nest.bar": float64(45.6),
+				"body.nest.foo": int64(123),
+				"body.nest.mom": "hi mom",
+			},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, truncated := getValue(tt.value)
-			if truncated != 0 {
-				t.Errorf("getValue() returned %v for truncatedBytes, should be 0", truncated)
-			}
-			if s, ok := got.(string); ok && strings.HasPrefix(s, "{") {
-				// it's a string wrapping an object, and might be out of order, so convert them both to objects
-				// and compare them as unmarshalled objects
-				var g, w map[string]any
-				json.Unmarshal([]byte(s), &g)
-				json.Unmarshal([]byte(tt.want.(string)), &w)
-				if !reflect.DeepEqual(g, w) {
-					t.Errorf("getValue() unmarshalled = %#v, want %#v", g, w)
-					t.Errorf("getValue() marshalled = %v (%T), want %v (%T)", got, got, tt.want, tt.want)
-				}
-			} else {
-				if !reflect.DeepEqual(got, tt.want) {
-					t.Errorf("getValue() = %v (%T), want %v (%T)", got, got, tt.want, tt.want)
-				}
-			}
+			attrs := map[string]interface{}{}
+			addAttributeToMap(attrs, "body", tt.value, 0)
+			assert.Equal(t, tt.want, attrs)
 		})
 	}
 }

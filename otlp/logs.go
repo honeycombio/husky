@@ -56,13 +56,11 @@ func TranslateLogsRequest(request *collectorLogs.ExportLogsServiceRequest, ri Re
 					attrs["severity_text"] = log.SeverityText
 				}
 				if log.Body != nil {
-					if val, truncatedBytes := getValue(log.Body); val != nil {
-						attrs["body"] = val
-						if truncatedBytes != 0 {
-							// if we trim the body, add telemetry about it
-							attrs["meta.truncated_bytes"] = truncatedBytes
-							attrs["meta.truncated_field"] = "body"
-						}
+					// convert the log body to attributes, includes flattening kv pairs into multiple attributes
+					addAttributeToMap(attrs, "body", log.Body, 0)
+					// if the body attribute is not set, add the whole body as a json string
+					if _, ok := attrs["body"]; !ok {
+						addAttributeToMapAsJson(attrs, "body", log.Body)
 					}
 				}
 
@@ -74,7 +72,7 @@ func TranslateLogsRequest(request *collectorLogs.ExportLogsServiceRequest, ri Re
 					attrs[k] = v
 				}
 				if log.Attributes != nil {
-					addAttributesToMap(attrs, log.Attributes)
+					AddAttributesToMap(attrs, log.Attributes)
 				}
 
 				// Now we need to wrap the eventAttrs in an event so we can specify the timestamp

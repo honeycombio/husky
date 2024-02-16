@@ -37,6 +37,10 @@ const (
 	gRPCAcceptEncodingHeader = "grpc-accept-encoding"
 	defaultServiceName       = "unknown_service"
 	unknownLogSource         = "unknown_log_source"
+
+	// maxDepth is the maximum depth of a nested kvlist attribute that will be flattened.
+	// If the depth is exceeded, the attribute should be added as a JSON string.
+	maxDepth = 5
 )
 
 // fieldSizeMax is the maximum size of a field that will be accepted by honeycomb.
@@ -254,30 +258,24 @@ func getValueFromMetadata(md metadata.MD, key string) string {
 	return ""
 }
 
-func addAttributesToMap(attrs map[string]interface{}, attributes []*common.KeyValue) {
+// AddAttributesToMap adds attributes to a map, extracting the underlying attribute data type.
+// Supported types are string, bool, double, int, bytes, array, and kvlist.
+// kvlist attributes are flattened to a depth of (maxDepth), if the depth is exceeded, the attribute is added as a JSON string.
+// Bytes and array values are added as JSON strings.
+func AddAttributesToMap(attrs map[string]interface{}, attributes []*common.KeyValue) {
 	for _, attr := range attributes {
 		// ignore entries if the key is empty or value is nil
 		if attr.Key == "" || attr.Value == nil {
 			continue
 		}
-		if val, truncatedBytes := getValue(attr.Value); val != nil {
-			attrs[attr.Key] = val
-			if truncatedBytes != 0 {
-				// if we trim a field, add telemetry about it; because we trim at 64K and
-				// a whole span can't be more than 100K, this can't happen more than once
-				// for a single span. If we ever change those limits, this will need to
-				// become additive.
-				attrs["meta.truncated_bytes"] = val
-				attrs["meta.truncated_field"] = attr.Key
-			}
-		}
+		addAttributeToMap(attrs, attr.Key, attr.Value, 0)
 	}
 }
 
 func getResourceAttributes(resource *resource.Resource) map[string]interface{} {
 	attrs := map[string]interface{}{}
 	if resource != nil {
-		addAttributesToMap(attrs, resource.Attributes)
+		AddAttributesToMap(attrs, resource.Attributes)
 	}
 	return attrs
 }
@@ -294,7 +292,7 @@ func getScopeAttributes(scope *common.InstrumentationScope) map[string]interface
 		if scope.Version != "" {
 			attrs["library.version"] = scope.Version
 		}
-		addAttributesToMap(attrs, scope.Attributes)
+		AddAttributesToMap(attrs, scope.Attributes)
 	}
 	return attrs
 }
@@ -402,33 +400,48 @@ func getMarshallableValue(value *common.AnyValue) interface{} {
 	return nil
 }
 
-// This function returns a value that can be handled by Honeycomb -- it must be one of:
-// string, int, bool, float. All other values are converted to strings containing JSON.
-func getValue(value *common.AnyValue) (result interface{}, truncatedBytes int) {
+// addAttributeToMap adds an attribute to a map, extracting the underlying attribute data type.
+// Supported types are string, bool, double, int, bytes, array, and kvlist.
+// kvlist attributes are flattened to a depth of (maxDepth), if the depth is exceeded, the attribute is added as a JSON string.
+// Bytes and array values are added as JSON strings.
+func addAttributeToMap(result map[string]interface{}, key string, value *common.AnyValue, depth int) {
 	switch value.Value.(type) {
 	case *common.AnyValue_StringValue:
-		return value.GetStringValue(), 0
+		result[key] = value.GetStringValue()
 	case *common.AnyValue_BoolValue:
-		return value.GetBoolValue(), 0
+		result[key] = value.GetBoolValue()
 	case *common.AnyValue_DoubleValue:
-		return value.GetDoubleValue(), 0
+		result[key] = value.GetDoubleValue()
 	case *common.AnyValue_IntValue:
-		return value.GetIntValue(), 0
-	// These types are all be marshalled to a string after conversion to Honeycomb-safe values.
-	// We use our limitedWriter to ensure that the string can't be bigger than the allowable,
-	// and it also minimizes allocations.
-	// Note that an Encoder emits JSON with a trailing newline because it's intended for use
-	// in streaming. This is correct but sometimes surprising and the tests need to expect it.
-	case *common.AnyValue_ArrayValue, *common.AnyValue_KvlistValue, *common.AnyValue_BytesValue:
-		arr := getMarshallableValue(value)
-		w := newLimitedWriter(fieldSizeMax)
-		enc := json.NewEncoder(w)
-		err := enc.Encode(arr)
-		if err == nil {
-			return w.String(), w.truncatedBytes
+		result[key] = value.GetIntValue()
+	case *common.AnyValue_BytesValue, *common.AnyValue_ArrayValue:
+		addAttributeToMapAsJson(result, key, value)
+	case *common.AnyValue_KvlistValue:
+		for _, entry := range value.GetKvlistValue().Values {
+			k := key + "." + entry.Key
+			if depth < maxDepth {
+				addAttributeToMap(result, k, entry.Value, depth+1)
+			} else {
+				addAttributeToMapAsJson(result, k, entry.Value)
+			}
 		}
 	}
-	return nil, 0
+}
+
+// addAttributeToMapAsJson adds an attribute to a map as a JSON string.
+// Uses limitedWriter to ensure that the string can't be bigger than the maximum field size and
+// helps reduce allocation and copying.
+// Note that an Encoder emits JSON with a trailing newline because it's intended for use
+// in streaming. This is correct but sometimes surprising and the tests need to expect it.
+func addAttributeToMapAsJson(attrs map[string]interface{}, key string, value *common.AnyValue) int {
+	val := getMarshallableValue(value)
+	w := newLimitedWriter(fieldSizeMax)
+	if err := json.NewEncoder(w).Encode(val); err != nil {
+		// TODO: log error or report error when we have a way to do so
+		return 0
+	}
+	attrs[key] = w.String()
+	return w.truncatedBytes
 }
 
 func parseOtlpRequestBody(body io.ReadCloser, contentType string, contentEncoding string, request protoreflect.ProtoMessage) error {
