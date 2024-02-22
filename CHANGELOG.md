@@ -1,5 +1,16 @@
 # Husky Changelog
 
+## 0.25.0 2024-02-22
+
+### Enhancements
+
+- feat: Allow flattening of OTLP key-value lists (#240) | @MikeGoldsmith
+
+### Maintenance
+
+- maint(deps): bump github.com/klauspost/compress from 1.17.4 to 1.17.5 (#238) | @dependabot
+- maint(deps): bump google.golang.org/grpc from 1.60.1 to 1.61.0 (#237) | @dependabot
+
 ## 0.24.0 2024-01-05
 
 ### Fixes
