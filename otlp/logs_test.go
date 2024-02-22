@@ -324,24 +324,48 @@ func TestCanExtractBody(t *testing.T) {
 		expectedValue interface{}
 	}{
 		{
-			name:          "string",
-			body:          &common.AnyValue{Value: &common.AnyValue_StringValue{StringValue: "string_body"}},
-			expectedValue: "string_body",
+			name: "string",
+			body: &common.AnyValue{Value: &common.AnyValue_StringValue{StringValue: "string_body"}},
+			expectedValue: map[string]interface{}{
+				"body":             "string_body",
+				"flags":            uint32(0),
+				"meta.signal_type": "log",
+				"severity":         "unspecified",
+				"severity_code":    0,
+			},
 		},
 		{
-			name:          "int",
-			body:          &common.AnyValue{Value: &common.AnyValue_IntValue{IntValue: 100}},
-			expectedValue: int64(100),
+			name: "int",
+			body: &common.AnyValue{Value: &common.AnyValue_IntValue{IntValue: 100}},
+			expectedValue: map[string]interface{}{
+				"body":             int64(100),
+				"flags":            uint32(0),
+				"meta.signal_type": "log",
+				"severity":         "unspecified",
+				"severity_code":    0,
+			},
 		},
 		{
-			name:          "bool",
-			body:          &common.AnyValue{Value: &common.AnyValue_BoolValue{BoolValue: true}},
-			expectedValue: true,
+			name: "bool",
+			body: &common.AnyValue{Value: &common.AnyValue_BoolValue{BoolValue: true}},
+			expectedValue: map[string]interface{}{
+				"body":             true,
+				"flags":            uint32(0),
+				"meta.signal_type": "log",
+				"severity":         "unspecified",
+				"severity_code":    0,
+			},
 		},
 		{
-			name:          "double",
-			body:          &common.AnyValue{Value: &common.AnyValue_DoubleValue{DoubleValue: 12.34}},
-			expectedValue: 12.34,
+			name: "double",
+			body: &common.AnyValue{Value: &common.AnyValue_DoubleValue{DoubleValue: 12.34}},
+			expectedValue: map[string]interface{}{
+				"body":             12.34,
+				"flags":            uint32(0),
+				"meta.signal_type": "log",
+				"severity":         "unspecified",
+				"severity_code":    0,
+			},
 		},
 		{
 			name: "array",
@@ -351,7 +375,13 @@ func TestCanExtractBody(t *testing.T) {
 				{Value: &common.AnyValue_BoolValue{BoolValue: true}},
 			},
 			}}},
-			expectedValue: "[\"one\",2,true]\n",
+			expectedValue: map[string]interface{}{
+				"body":             "[\"one\",2,true]\n",
+				"flags":            uint32(0),
+				"meta.signal_type": "log",
+				"severity":         "unspecified",
+				"severity_code":    0,
+			},
 		},
 		{
 			name: "kvlist",
@@ -362,7 +392,16 @@ func TestCanExtractBody(t *testing.T) {
 					{Key: "key3", Value: &common.AnyValue{Value: &common.AnyValue_BoolValue{BoolValue: true}}},
 				},
 			}}},
-			expectedValue: "{\"key1\":\"value1\",\"key2\":2,\"key3\":true}\n",
+			expectedValue: map[string]interface{}{
+				"body":             "{\"key1\":\"value1\",\"key2\":2,\"key3\":true}\n",
+				"body.key1":        "value1",
+				"body.key2":        int64(2),
+				"body.key3":        true,
+				"flags":            uint32(0),
+				"meta.signal_type": "log",
+				"severity":         "unspecified",
+				"severity_code":    0,
+			},
 		},
 	}
 	ri := RequestInfo{
@@ -385,7 +424,7 @@ func TestCanExtractBody(t *testing.T) {
 			result, err := TranslateLogsRequest(req, ri)
 			assert.NotNil(t, result)
 			assert.Nil(t, err)
-			assert.Equal(t, tc.expectedValue, result.Batches[0].Events[0].Attributes["body"])
+			assert.Equal(t, tc.expectedValue, result.Batches[0].Events[0].Attributes)
 		})
 	}
 }
