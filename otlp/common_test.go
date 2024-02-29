@@ -426,9 +426,8 @@ func Test_limitedWriter(t *testing.T) {
 
 func Test_WriteOtlpHttpFailureResponse(t *testing.T) {
 	tests := []struct {
-		contentType   string
-		err           OTLPError
-		expectedError error
+		contentType string
+		err         OTLPError
 	}{
 		{
 			contentType: "application/x-protobuf",
@@ -454,10 +453,9 @@ func Test_WriteOtlpHttpFailureResponse(t *testing.T) {
 		{
 			contentType: "nonsense",
 			err: OTLPError{
-				HTTPStatusCode: http.StatusBadRequest,
-				Message:        "test",
+				HTTPStatusCode: ErrInvalidContentType.HTTPStatusCode,
+				Message:        ErrInvalidContentType.Message,
 			},
-			expectedError: ErrInvalidContentType,
 		},
 	}
 	for _, tt := range tests {
@@ -467,11 +465,9 @@ func Test_WriteOtlpHttpFailureResponse(t *testing.T) {
 			r.Header.Set("Content-Type", tt.contentType)
 
 			err := WriteOtlpHttpFailureResponse(w, r, tt.err)
-			if tt.expectedError != nil {
-				assert.Equal(t, tt.expectedError, err)
-			} else {
-				assert.NoError(t, err)
+			assert.NoError(t, err)
 
+			if IsContentTypeSupported(tt.contentType) {
 				assert.Equal(t, tt.contentType, w.Header().Get("Content-Type"))
 				assert.Equal(t, tt.err.HTTPStatusCode, w.Code)
 
@@ -486,6 +482,10 @@ func Test_WriteOtlpHttpFailureResponse(t *testing.T) {
 					assert.NoError(t, err)
 				}
 				assert.Equal(t, tt.err.Message, result.Message)
+			} else {
+				assert.Equal(t, "text/plain", w.Header().Get("Content-Type"))
+				assert.Equal(t, ErrInvalidContentType.HTTPStatusCode, w.Code)
+				assert.Equal(t, ErrInvalidContentType.Message, w.Body.String())
 			}
 		})
 	}
@@ -553,8 +553,7 @@ func Test_BytesToTraceID(t *testing.T) {
 
 func Test_WriteOtlpHttpTraceSuccessResponse(t *testing.T) {
 	tests := []struct {
-		contentType   string
-		expectedError error
+		contentType string
 	}{
 		{
 			contentType: "application/x-protobuf",
@@ -566,8 +565,7 @@ func Test_WriteOtlpHttpTraceSuccessResponse(t *testing.T) {
 			contentType: "application/json",
 		},
 		{
-			contentType:   "nonsense",
-			expectedError: ErrInvalidContentType,
+			contentType: "nonsense",
 		},
 	}
 	for _, tt := range tests {
@@ -577,9 +575,7 @@ func Test_WriteOtlpHttpTraceSuccessResponse(t *testing.T) {
 			r.Header.Set("Content-Type", tt.contentType)
 
 			err := WriteOtlpHttpTraceSuccessResponse(w, r)
-			if tt.expectedError != nil {
-				assert.Equal(t, tt.expectedError, err)
-			} else {
+			if IsContentTypeSupported(tt.contentType) {
 				assert.NoError(t, err)
 
 				assert.Equal(t, tt.contentType, w.Header().Get("Content-Type"))
@@ -596,6 +592,10 @@ func Test_WriteOtlpHttpTraceSuccessResponse(t *testing.T) {
 					assert.NoError(t, err)
 				}
 				assert.Nil(t, result.GetPartialSuccess())
+			} else {
+				assert.Equal(t, "text/plain", w.Header().Get("Content-Type"))
+				assert.Equal(t, ErrInvalidContentType.HTTPStatusCode, w.Code)
+				assert.Equal(t, ErrInvalidContentType.Message, w.Body.String())
 			}
 		})
 	}
@@ -603,8 +603,7 @@ func Test_WriteOtlpHttpTraceSuccessResponse(t *testing.T) {
 
 func Test_WriteOtlpHttpMetricSuccessResponse(t *testing.T) {
 	tests := []struct {
-		contentType   string
-		expectedError error
+		contentType string
 	}{
 		{
 			contentType: "application/x-protobuf",
@@ -616,8 +615,7 @@ func Test_WriteOtlpHttpMetricSuccessResponse(t *testing.T) {
 			contentType: "application/json",
 		},
 		{
-			contentType:   "nonsense",
-			expectedError: ErrInvalidContentType,
+			contentType: "nonsense",
 		},
 	}
 	for _, tt := range tests {
@@ -627,9 +625,7 @@ func Test_WriteOtlpHttpMetricSuccessResponse(t *testing.T) {
 			r.Header.Set("Content-Type", tt.contentType)
 
 			err := WriteOtlpHttpMetricSuccessResponse(w, r)
-			if tt.expectedError != nil {
-				assert.Equal(t, tt.expectedError, err)
-			} else {
+			if IsContentTypeSupported(tt.contentType) {
 				assert.NoError(t, err)
 
 				assert.Equal(t, tt.contentType, w.Header().Get("Content-Type"))
@@ -646,6 +642,10 @@ func Test_WriteOtlpHttpMetricSuccessResponse(t *testing.T) {
 					assert.NoError(t, err)
 				}
 				assert.Nil(t, result.GetPartialSuccess())
+			} else {
+				assert.Equal(t, "text/plain", w.Header().Get("Content-Type"))
+				assert.Equal(t, ErrInvalidContentType.HTTPStatusCode, w.Code)
+				assert.Equal(t, ErrInvalidContentType.Message, w.Body.String())
 			}
 		})
 	}
@@ -653,8 +653,7 @@ func Test_WriteOtlpHttpMetricSuccessResponse(t *testing.T) {
 
 func Test_WriteOtlpHttpLogSuccessResponse(t *testing.T) {
 	tests := []struct {
-		contentType   string
-		expectedError error
+		contentType string
 	}{
 		{
 			contentType: "application/x-protobuf",
@@ -666,8 +665,7 @@ func Test_WriteOtlpHttpLogSuccessResponse(t *testing.T) {
 			contentType: "application/json",
 		},
 		{
-			contentType:   "nonsense",
-			expectedError: ErrInvalidContentType,
+			contentType: "nonsense",
 		},
 	}
 	for _, tt := range tests {
@@ -677,9 +675,7 @@ func Test_WriteOtlpHttpLogSuccessResponse(t *testing.T) {
 			r.Header.Set("Content-Type", tt.contentType)
 
 			err := WriteOtlpHttpLogSuccessResponse(w, r)
-			if tt.expectedError != nil {
-				assert.Equal(t, tt.expectedError, err)
-			} else {
+			if IsContentTypeSupported(tt.contentType) {
 				assert.NoError(t, err)
 
 				assert.Equal(t, tt.contentType, w.Header().Get("Content-Type"))
@@ -696,6 +692,10 @@ func Test_WriteOtlpHttpLogSuccessResponse(t *testing.T) {
 					assert.NoError(t, err)
 				}
 				assert.Nil(t, result.GetPartialSuccess())
+			} else {
+				assert.Equal(t, "text/plain", w.Header().Get("Content-Type"))
+				assert.Equal(t, ErrInvalidContentType.HTTPStatusCode, w.Code)
+				assert.Equal(t, ErrInvalidContentType.Message, w.Body.String())
 			}
 		})
 	}

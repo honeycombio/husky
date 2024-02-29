@@ -239,6 +239,7 @@ func WriteOtlpHttpResponse(w http.ResponseWriter, r *http.Request, statusCode in
 	case "application/x-protobuf", "application/protobuf":
 		body, err = proto.Marshal(m)
 	default:
+		// If the content type is not supported, return a 415 Unsupported Media Type via text/plain
 		body = []byte(ErrInvalidContentType.Message)
 		contentType = "text/plain"
 		statusCode = ErrInvalidContentType.HTTPStatusCode
