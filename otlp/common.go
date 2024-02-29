@@ -48,7 +48,8 @@ const (
 const fieldSizeMax = math.MaxUint16
 
 var (
-	legacyApiKeyPattern = regexp.MustCompile("^[0-9a-f]{32}$")
+	legacyApiKeyPattern     = regexp.MustCompile("^[0-9a-f]*$")
+	classicIngestKeyPattern = regexp.MustCompile("^hc[a-z]ic_[0-9a-z]*$")
 	// Incoming OpenTelemetry HTTP Content-Types (e.g. "application/protobuf") we support
 	supportedContentTypes = []string{
 		"application/protobuf",
@@ -83,6 +84,18 @@ func IsContentTypeSupported(contentType string) bool {
 		if contentType == supportedType {
 			return true
 		}
+	}
+	return false
+}
+
+// IsLegacyApiKey checks if the given API key is a legacy (classic) API key.
+func IsLegacyApiKey(key string) bool {
+	if len(key) == 0 {
+		return true
+	} else if len(key) == 32 {
+		return legacyApiKeyPattern.MatchString(key)
+	} else if len(key) == 64 {
+		return classicIngestKeyPattern.MatchString(key)
 	}
 	return false
 }
@@ -127,7 +140,7 @@ type RequestInfo struct {
 }
 
 func (ri RequestInfo) hasLegacyKey() bool {
-	return legacyApiKeyPattern.MatchString(ri.ApiKey)
+	return IsLegacyApiKey(ri.ApiKey)
 }
 
 // ValidateTracesHeaders validates required headers/metadata for a trace OTLP request
