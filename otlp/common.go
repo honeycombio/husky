@@ -232,20 +232,20 @@ func WriteOtlpHttpResponse(w http.ResponseWriter, r *http.Request, statusCode in
 
 	contentType := r.Header.Get("Content-Type")
 	var body []byte
-	var err error
+	var serializationError error
 	switch contentType {
 	case "application/json":
-		body, err = protojson.Marshal(m)
+		body, serializationError = protojson.Marshal(m)
 	case "application/x-protobuf", "application/protobuf":
-		body, err = proto.Marshal(m)
+		body, serializationError = proto.Marshal(m)
 	default:
 		// If the content type is not supported, return a 415 Unsupported Media Type via text/plain
 		body = []byte(ErrInvalidContentType.Message)
 		contentType = "text/plain"
 		statusCode = ErrInvalidContentType.HTTPStatusCode
 	}
-	if err != nil {
-		return err
+	if serializationError != nil {
+		return serializationError
 	}
 
 	// At this point we're committed
