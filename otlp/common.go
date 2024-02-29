@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"math"
@@ -132,39 +133,39 @@ func (ri RequestInfo) hasLegacyKey() bool {
 
 // ValidateTracesHeaders validates required headers/metadata for a trace OTLP request
 func (ri *RequestInfo) ValidateTracesHeaders() error {
+	if !IsContentTypeSupported(ri.ContentType) {
+		return ErrInvalidContentType
+	}
 	if len(ri.ApiKey) == 0 {
 		return ErrMissingAPIKeyHeader
 	}
 	if ri.hasLegacyKey() && len(ri.Dataset) == 0 {
 		return ErrMissingDatasetHeader
-	}
-	if !IsContentTypeSupported(ri.ContentType) {
-		return ErrInvalidContentType
 	}
 	return nil // no error, headers passed all the validations
 }
 
 // ValidateMetricsHeaders validates required headers/metadata for a metric OTLP request
 func (ri *RequestInfo) ValidateMetricsHeaders() error {
+	if !IsContentTypeSupported(ri.ContentType) {
+		return ErrInvalidContentType
+	}
 	if len(ri.ApiKey) == 0 {
 		return ErrMissingAPIKeyHeader
 	}
 	if ri.hasLegacyKey() && len(ri.Dataset) == 0 {
 		return ErrMissingDatasetHeader
 	}
-	if !IsContentTypeSupported(ri.ContentType) {
-		return ErrInvalidContentType
-	}
 	return nil // no error, headers passed all the validations
 }
 
 // ValidateLogsHeaders validates required headers/metadata for a logs OTLP request
 func (ri *RequestInfo) ValidateLogsHeaders() error {
-	if len(ri.ApiKey) == 0 {
-		return ErrMissingAPIKeyHeader
-	}
 	if !IsContentTypeSupported(ri.ContentType) {
 		return ErrInvalidContentType
+	}
+	if len(ri.ApiKey) == 0 {
+		return ErrMissingAPIKeyHeader
 	}
 	return nil
 }
@@ -197,9 +198,17 @@ func GetRequestInfoFromHttpHeaders(header http.Header) RequestInfo {
 }
 
 // WriteOtlpHttpFailureResponse is a quick way to write an otlp response for an error.
-// It calls WriteOtlpHttpResponse, using the error's HttpStatusCode and building a Status
+// If the error is an ErrInvalidContentType, it writes a text/plain response with the error's message and status code.
+// Otherwise, it calls WriteOtlpHttpResponse, using the error's HttpStatusCode and building a Status
 // using the error's string.
 func WriteOtlpHttpFailureResponse(w http.ResponseWriter, r *http.Request, err OTLPError) error {
+	if errors.Is(err, ErrInvalidContentType) {
+		// Since we have an invalid content type for an OTLP HTTP response we choose to use to text/plain
+		w.Header().Set("Content-Type", "text/plain")
+		w.WriteHeader(err.HTTPStatusCode)
+		_, _ = io.WriteString(w, err.Message)
+		return nil
+	}
 	return WriteOtlpHttpResponse(w, r, err.HTTPStatusCode, &spb.Status{Message: err.Error()})
 }
 

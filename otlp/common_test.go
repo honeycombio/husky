@@ -120,9 +120,9 @@ func TestValidateTracesHeaders(t *testing.T) {
 		contentType string
 		err         error
 	}{
-		{name: "no key, no dataset", apikey: "", dataset: "", contentType: "", err: ErrMissingAPIKeyHeader},
-		{name: "no key, dataset present", apikey: "", dataset: "dataset", contentType: "", err: ErrMissingAPIKeyHeader},
-		{name: "classic/no dataset", apikey: "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1", dataset: "", contentType: "", err: ErrMissingDatasetHeader},
+		{name: "no key, no dataset", apikey: "", dataset: "", contentType: "application/protobuf", err: ErrMissingAPIKeyHeader},
+		{name: "no key, dataset present", apikey: "", dataset: "dataset", contentType: "application/protobuf", err: ErrMissingAPIKeyHeader},
+		{name: "classic/no dataset", apikey: "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1", dataset: "", contentType: "application/protobuf", err: ErrMissingDatasetHeader},
 		{name: "classic/dataset present", apikey: "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1", dataset: "dataset", contentType: "application/protobuf", err: nil},
 		{name: "E&S/no dataset", apikey: "abc123DEF456ghi789jklm", dataset: "", contentType: "application/protobuf", err: nil},
 		{name: "E&S/dataset present", apikey: "abc123DEF456ghi789jklm", dataset: "dataset", contentType: "application/protobuf", err: nil},
@@ -157,10 +157,10 @@ func TestValidateMetricsHeaders(t *testing.T) {
 		contentType string
 		err         error
 	}{
-		{name: "no key, no dataset", apikey: "", dataset: "", contentType: "", err: ErrMissingAPIKeyHeader},
-		{name: "no key, dataset present", apikey: "", dataset: "dataset", contentType: "", err: ErrMissingAPIKeyHeader},
+		{name: "no key, no dataset", apikey: "", dataset: "", contentType: "application/protobuf", err: ErrMissingAPIKeyHeader},
+		{name: "no key, dataset present", apikey: "", dataset: "dataset", contentType: "application/protobuf", err: ErrMissingAPIKeyHeader},
 		// classic environments need to tell us which dataset to put metrics in
-		{name: "classic/no dataset", apikey: "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1", dataset: "", contentType: "", err: ErrMissingDatasetHeader},
+		{name: "classic/no dataset", apikey: "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1", dataset: "", contentType: "application/protobuf", err: ErrMissingDatasetHeader},
 		{name: "classic/dataset present", apikey: "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1", dataset: "dataset", contentType: "application/protobuf", err: nil},
 		// dataset header not required for E&S, there's a fallback
 		{name: "E&S/no dataset", apikey: "abc123DEF456ghi789jklm", dataset: "", contentType: "application/protobuf", err: nil},
@@ -196,8 +196,8 @@ func TestValidateLogsHeaders(t *testing.T) {
 		contentType string
 		err         error
 	}{
-		{name: "no key, no dataset", apikey: "", dataset: "", contentType: "", err: ErrMissingAPIKeyHeader},
-		{name: "no key, dataset present", apikey: "", dataset: "dataset", contentType: "", err: ErrMissingAPIKeyHeader},
+		{name: "no key, no dataset", apikey: "", dataset: "", contentType: "application/protobuf", err: ErrMissingAPIKeyHeader},
+		{name: "no key, dataset present", apikey: "", dataset: "dataset", contentType: "application/protobuf", err: ErrMissingAPIKeyHeader},
 		// logs will use dataset header if present, but log ingest will also use service.name in the data
 		// and we will have a sensible default if neither are present, so a missing dataset header is not an error here
 		{name: "classic/no dataset", apikey: "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1", dataset: "", contentType: "application/protobuf", err: nil},
