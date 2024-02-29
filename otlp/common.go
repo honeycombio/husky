@@ -6,7 +6,6 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/hex"
-	"errors"
 	"fmt"
 	"io"
 	"math"
@@ -202,13 +201,6 @@ func GetRequestInfoFromHttpHeaders(header http.Header) RequestInfo {
 // Otherwise, it calls WriteOtlpHttpResponse, using the error's HttpStatusCode and building a Status
 // using the error's string.
 func WriteOtlpHttpFailureResponse(w http.ResponseWriter, r *http.Request, err OTLPError) error {
-	if errors.Is(err, ErrInvalidContentType) {
-		// Since we have an invalid content type for an OTLP HTTP response we choose to use to text/plain
-		w.Header().Set("Content-Type", "text/plain")
-		w.WriteHeader(err.HTTPStatusCode)
-		_, _ = io.WriteString(w, err.Message)
-		return nil
-	}
 	return WriteOtlpHttpResponse(w, r, err.HTTPStatusCode, &spb.Status{Message: err.Error()})
 }
 
@@ -247,7 +239,9 @@ func WriteOtlpHttpResponse(w http.ResponseWriter, r *http.Request, statusCode in
 	case "application/x-protobuf", "application/protobuf":
 		body, err = proto.Marshal(m)
 	default:
-		return ErrInvalidContentType
+		body = []byte(ErrInvalidContentType.Message)
+		contentType = "text/plain"
+		statusCode = ErrInvalidContentType.HTTPStatusCode
 	}
 	if err != nil {
 		return err
