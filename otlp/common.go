@@ -132,39 +132,39 @@ func (ri RequestInfo) hasLegacyKey() bool {
 
 // ValidateTracesHeaders validates required headers/metadata for a trace OTLP request
 func (ri *RequestInfo) ValidateTracesHeaders() error {
+	if !IsContentTypeSupported(ri.ContentType) {
+		return ErrInvalidContentType
+	}
 	if len(ri.ApiKey) == 0 {
 		return ErrMissingAPIKeyHeader
 	}
 	if ri.hasLegacyKey() && len(ri.Dataset) == 0 {
 		return ErrMissingDatasetHeader
-	}
-	if !IsContentTypeSupported(ri.ContentType) {
-		return ErrInvalidContentType
 	}
 	return nil // no error, headers passed all the validations
 }
 
 // ValidateMetricsHeaders validates required headers/metadata for a metric OTLP request
 func (ri *RequestInfo) ValidateMetricsHeaders() error {
+	if !IsContentTypeSupported(ri.ContentType) {
+		return ErrInvalidContentType
+	}
 	if len(ri.ApiKey) == 0 {
 		return ErrMissingAPIKeyHeader
 	}
 	if ri.hasLegacyKey() && len(ri.Dataset) == 0 {
 		return ErrMissingDatasetHeader
 	}
-	if !IsContentTypeSupported(ri.ContentType) {
-		return ErrInvalidContentType
-	}
 	return nil // no error, headers passed all the validations
 }
 
 // ValidateLogsHeaders validates required headers/metadata for a logs OTLP request
 func (ri *RequestInfo) ValidateLogsHeaders() error {
-	if len(ri.ApiKey) == 0 {
-		return ErrMissingAPIKeyHeader
-	}
 	if !IsContentTypeSupported(ri.ContentType) {
 		return ErrInvalidContentType
+	}
+	if len(ri.ApiKey) == 0 {
+		return ErrMissingAPIKeyHeader
 	}
 	return nil
 }
@@ -224,6 +224,7 @@ func WriteOtlpHttpLogSuccessResponse(w http.ResponseWriter, r *http.Request) err
 // WriteOtlpHttpResponse writes a compliant OTLP HTTP response to the given http.ResponseWriter
 // based on the provided `contentType`. If an error occurs while marshalling to either json or proto it is returned
 // before the http.ResponseWriter is updated. If an error occurs while writing to the http.ResponseWriter it is ignored.
+// If an invalid content type is provided, a 415 Unsupported Media Type via text/plain is returned.
 func WriteOtlpHttpResponse(w http.ResponseWriter, r *http.Request, statusCode int, m proto.Message) error {
 	if r == nil {
 		return fmt.Errorf("nil Request")
@@ -231,17 +232,20 @@ func WriteOtlpHttpResponse(w http.ResponseWriter, r *http.Request, statusCode in
 
 	contentType := r.Header.Get("Content-Type")
 	var body []byte
-	var err error
+	var serializationError error
 	switch contentType {
 	case "application/json":
-		body, err = protojson.Marshal(m)
+		body, serializationError = protojson.Marshal(m)
 	case "application/x-protobuf", "application/protobuf":
-		body, err = proto.Marshal(m)
+		body, serializationError = proto.Marshal(m)
 	default:
-		return ErrInvalidContentType
+		// If the content type is not supported, return a 415 Unsupported Media Type via text/plain
+		body = []byte(ErrInvalidContentType.Message)
+		contentType = "text/plain"
+		statusCode = ErrInvalidContentType.HTTPStatusCode
 	}
-	if err != nil {
-		return err
+	if serializationError != nil {
+		return serializationError
 	}
 
 	// At this point we're committed
