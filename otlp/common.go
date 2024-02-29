@@ -197,8 +197,7 @@ func GetRequestInfoFromHttpHeaders(header http.Header) RequestInfo {
 }
 
 // WriteOtlpHttpFailureResponse is a quick way to write an otlp response for an error.
-// If the error is an ErrInvalidContentType, it writes a text/plain response with the error's message and status code.
-// Otherwise, it calls WriteOtlpHttpResponse, using the error's HttpStatusCode and building a Status
+// It calls WriteOtlpHttpResponse, using the error's HttpStatusCode and building a Status
 // using the error's string.
 func WriteOtlpHttpFailureResponse(w http.ResponseWriter, r *http.Request, err OTLPError) error {
 	return WriteOtlpHttpResponse(w, r, err.HTTPStatusCode, &spb.Status{Message: err.Error()})
@@ -224,7 +223,9 @@ func WriteOtlpHttpLogSuccessResponse(w http.ResponseWriter, r *http.Request) err
 
 // WriteOtlpHttpResponse writes a compliant OTLP HTTP response to the given http.ResponseWriter
 // based on the provided `contentType`. If an error occurs while marshalling to either json or proto it is returned
-// before the http.ResponseWriter is updated. If an error occurs while writing to the http.ResponseWriter it is ignored.
+// before the http.ResponseWriter is updated.
+// If an invalid content type is provided, a 415 Unsupported Media Type via text/plain is returned.
+// If an error occurs while writing to the http.ResponseWriter it is ignored.
 func WriteOtlpHttpResponse(w http.ResponseWriter, r *http.Request, statusCode int, m proto.Message) error {
 	if r == nil {
 		return fmt.Errorf("nil Request")
