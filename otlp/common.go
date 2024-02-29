@@ -223,9 +223,8 @@ func WriteOtlpHttpLogSuccessResponse(w http.ResponseWriter, r *http.Request) err
 
 // WriteOtlpHttpResponse writes a compliant OTLP HTTP response to the given http.ResponseWriter
 // based on the provided `contentType`. If an error occurs while marshalling to either json or proto it is returned
-// before the http.ResponseWriter is updated.
+// before the http.ResponseWriter is updated. If an error occurs while writing to the http.ResponseWriter it is ignored.
 // If an invalid content type is provided, a 415 Unsupported Media Type via text/plain is returned.
-// If an error occurs while writing to the http.ResponseWriter it is ignored.
 func WriteOtlpHttpResponse(w http.ResponseWriter, r *http.Request, statusCode int, m proto.Message) error {
 	if r == nil {
 		return fmt.Errorf("nil Request")
