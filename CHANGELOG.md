@@ -1,5 +1,11 @@
 # Husky Changelog
 
+## 0.25.1 2024-03-22
+
+### Fixes
+
+- fix: Handle invalid content type errors first (#243) | @MikeGoldsmith
+
 ## 0.25.0 2024-02-22
 
 ### Enhancements
