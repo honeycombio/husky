@@ -90,9 +90,7 @@ func IsContentTypeSupported(contentType string) bool {
 
 // IsClassicApiKey checks if the given API key is a Classic API key.
 func IsClassicApiKey(key string) bool {
-	if len(key) == 0 {
-		return true
-	} else if len(key) == 32 {
+	if len(key) == 32 {
 		return classicApiKeyPattern.MatchString(key)
 	} else if len(key) == 64 {
 		return classicIngestKeyPattern.MatchString(key)
