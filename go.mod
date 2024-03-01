@@ -5,7 +5,7 @@ go 1.21
 require (
 	github.com/json-iterator/go v1.1.12
 	github.com/klauspost/compress v1.17.5
-	github.com/stretchr/testify v1.8.4
+	github.com/stretchr/testify v1.9.0
 	go.opentelemetry.io/proto/otlp v0.19.0
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20231106174013-bbf56f31fb17
 	google.golang.org/grpc v1.61.0
