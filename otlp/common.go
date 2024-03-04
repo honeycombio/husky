@@ -48,7 +48,8 @@ const (
 const fieldSizeMax = math.MaxUint16
 
 var (
-	legacyApiKeyPattern = regexp.MustCompile("^[0-9a-f]{32}$")
+	classicApiKeyPattern    = regexp.MustCompile("^[0-9a-f]*$")
+	classicIngestKeyPattern = regexp.MustCompile("^hc[a-z]ic_[0-9a-z]*$")
 	// Incoming OpenTelemetry HTTP Content-Types (e.g. "application/protobuf") we support
 	supportedContentTypes = []string{
 		"application/protobuf",
@@ -83,6 +84,16 @@ func IsContentTypeSupported(contentType string) bool {
 		if contentType == supportedType {
 			return true
 		}
+	}
+	return false
+}
+
+// IsClassicApiKey checks if the given API key is a Classic API key.
+func IsClassicApiKey(key string) bool {
+	if len(key) == 32 {
+		return classicApiKeyPattern.MatchString(key)
+	} else if len(key) == 64 {
+		return classicIngestKeyPattern.MatchString(key)
 	}
 	return false
 }
@@ -126,8 +137,8 @@ type RequestInfo struct {
 	GRPCAcceptEncoding string
 }
 
-func (ri RequestInfo) hasLegacyKey() bool {
-	return legacyApiKeyPattern.MatchString(ri.ApiKey)
+func (ri RequestInfo) hasClassicKey() bool {
+	return IsClassicApiKey(ri.ApiKey)
 }
 
 // ValidateTracesHeaders validates required headers/metadata for a trace OTLP request
@@ -138,7 +149,7 @@ func (ri *RequestInfo) ValidateTracesHeaders() error {
 	if len(ri.ApiKey) == 0 {
 		return ErrMissingAPIKeyHeader
 	}
-	if ri.hasLegacyKey() && len(ri.Dataset) == 0 {
+	if ri.hasClassicKey() && len(ri.Dataset) == 0 {
 		return ErrMissingDatasetHeader
 	}
 	return nil // no error, headers passed all the validations
@@ -152,7 +163,7 @@ func (ri *RequestInfo) ValidateMetricsHeaders() error {
 	if len(ri.ApiKey) == 0 {
 		return ErrMissingAPIKeyHeader
 	}
-	if ri.hasLegacyKey() && len(ri.Dataset) == 0 {
+	if ri.hasClassicKey() && len(ri.Dataset) == 0 {
 		return ErrMissingDatasetHeader
 	}
 	return nil // no error, headers passed all the validations
@@ -312,7 +323,7 @@ func isInstrumentationLibrary(libraryName string) bool {
 
 func getDataset(ri RequestInfo, attrs map[string]interface{}) string {
 	var dataset string
-	if ri.hasLegacyKey() {
+	if ri.hasClassicKey() {
 		dataset = ri.Dataset
 	} else {
 		serviceName, ok := attrs["service.name"].(string)
