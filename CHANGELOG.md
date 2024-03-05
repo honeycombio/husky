@@ -1,6 +1,17 @@
 # Husky Changelog
 
-## 0.25.1 2024-03-22
+## 0.26.0 2024-03-05
+
+### Enhancements
+
+- feat: add Classic Ingest Key support (#245) | @jharley
+
+### Maintenance
+
+- maint(deps): bump the minor-patch group with 3 updates (#250) | @dependabot
+- maint: group dependency updates (#249) | @codeboten
+
+## 0.25.1 2024-02-29
 
 ### Fixes
 
