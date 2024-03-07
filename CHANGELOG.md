@@ -1,6 +1,6 @@
 # Husky Changelog
 
-## 0.26.0 2024-03-06
+## 0.26.0 2024-03-07
 
 ### Enhancements
 
