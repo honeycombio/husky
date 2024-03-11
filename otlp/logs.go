@@ -1,6 +1,7 @@
 package otlp
 
 import (
+	"context"
 	"io"
 	"time"
 
@@ -11,7 +12,7 @@ import (
 
 // TranslateLogsRequestFromReader translates an OTLP log request into Honeycomb-friendly structure from a reader (eg HTTP body)
 // RequestInfo is the parsed information from the gRPC metadata
-func TranslateLogsRequestFromReader(body io.ReadCloser, ri RequestInfo) (*TranslateOTLPRequestResult, error) {
+func TranslateLogsRequestFromReader(ctx context.Context, body io.ReadCloser, ri RequestInfo) (*TranslateOTLPRequestResult, error) {
 	if err := ri.ValidateLogsHeaders(); err != nil {
 		return nil, err
 	}
@@ -19,23 +20,23 @@ func TranslateLogsRequestFromReader(body io.ReadCloser, ri RequestInfo) (*Transl
 	if err := parseOtlpRequestBody(body, ri.ContentType, ri.ContentEncoding, request); err != nil {
 		return nil, ErrFailedParseBody
 	}
-	return TranslateLogsRequest(request, ri)
+	return TranslateLogsRequest(ctx, request, ri)
 }
 
 // TranslateLogsRequest translates an OTLP proto log request into Honeycomb-friendly structure
 // RequestInfo is the parsed information from the gRPC metadata
-func TranslateLogsRequest(request *collectorLogs.ExportLogsServiceRequest, ri RequestInfo) (*TranslateOTLPRequestResult, error) {
+func TranslateLogsRequest(ctx context.Context, request *collectorLogs.ExportLogsServiceRequest, ri RequestInfo) (*TranslateOTLPRequestResult, error) {
 	if err := ri.ValidateLogsHeaders(); err != nil {
 		return nil, err
 	}
 	batches := []Batch{}
 	for _, resourceLog := range request.ResourceLogs {
 		var events []Event
-		resourceAttrs := getResourceAttributes(resourceLog.Resource)
+		resourceAttrs := getResourceAttributes(ctx, resourceLog.Resource)
 		dataset := getLogsDataset(ri, resourceAttrs)
 
 		for _, scopeLog := range resourceLog.ScopeLogs {
-			scopeAttrs := getScopeAttributes(scopeLog.Scope)
+			scopeAttrs := getScopeAttributes(ctx, scopeLog.Scope)
 
 			for _, log := range scopeLog.GetLogRecords() {
 				attrs := map[string]interface{}{
@@ -57,7 +58,7 @@ func TranslateLogsRequest(request *collectorLogs.ExportLogsServiceRequest, ri Re
 				}
 				if log.Body != nil {
 					// convert the log body to attributes, includes flattening kv pairs into multiple attributes
-					addAttributeToMap(attrs, "body", log.Body, 0)
+					addAttributeToMap(ctx, attrs, "body", log.Body, 0)
 					// if the body attribute is not set, add the whole body as a json string
 					if _, ok := attrs["body"]; !ok {
 						addAttributeToMapAsJson(attrs, "body", log.Body)
@@ -72,7 +73,7 @@ func TranslateLogsRequest(request *collectorLogs.ExportLogsServiceRequest, ri Re
 					attrs[k] = v
 				}
 				if log.Attributes != nil {
-					AddAttributesToMap(attrs, log.Attributes)
+					AddAttributesToMap(ctx, attrs, log.Attributes)
 				}
 
 				// Now we need to wrap the eventAttrs in an event so we can specify the timestamp

@@ -2,6 +2,7 @@ package otlp
 
 import (
 	"bytes"
+	"context"
 	"encoding/hex"
 	"io"
 	"strings"
@@ -53,7 +54,7 @@ func TestTranslateLogsRequest(t *testing.T) {
 	}
 	for _, tC := range testCases {
 		t.Run(tC.Name, func(t *testing.T) {
-			result, err := TranslateLogsRequest(req, tC.ri)
+			result, err := TranslateLogsRequest(context.Background(), req, tC.ri)
 			assert.Nil(t, err)
 			assert.Equal(t, proto.Size(req), result.RequestSize)
 			assert.Equal(t, 1, len(result.Batches))
@@ -124,7 +125,7 @@ func TestTranslateHttpLogsRequest(t *testing.T) {
 							body, err := prepareOtlpRequestHttpBody(req, testCaseContentType, testCaseContentEncoding)
 							require.NoError(t, err, "Womp womp. Ought to have been able to turn the OTLP log request into an HTTP body.")
 
-							result, err := TranslateLogsRequestFromReader(io.NopCloser(strings.NewReader(body)), tC.ri)
+							result, err := TranslateLogsRequestFromReader(context.Background(), io.NopCloser(strings.NewReader(body)), tC.ri)
 							require.NoError(t, err)
 							assert.Equal(t, proto.Size(req), result.RequestSize)
 							assert.Equal(t, 1, len(result.Batches))
@@ -238,13 +239,13 @@ func TestLogs_DetermineDestinationDataset(t *testing.T) {
 
 							switch protocol {
 							case "GRPC":
-								result, err = TranslateLogsRequest(req, ri)
+								result, err = TranslateLogsRequest(context.Background(), req, ri)
 								require.NoError(t, err, "Wasn't able to translate that OTLP logs request.")
 							case "HTTP":
 								body, err := prepareOtlpRequestHttpBody(req, ri.ContentType, "")
 								require.NoError(t, err, "Womp womp. Ought to have been able to turn the OTLP log request into an HTTP body.")
 
-								result, err = TranslateLogsRequestFromReader(io.NopCloser(strings.NewReader(body)), ri)
+								result, err = TranslateLogsRequestFromReader(context.Background(), io.NopCloser(strings.NewReader(body)), ri)
 								require.NoError(t, err, "Wasn't able to translate that OTLP logs request.")
 							default:
 								t.Errorf("lolwut - What kind of protocol is %v?", protocol)
@@ -308,7 +309,7 @@ func TestCanDetectLogSeverity(t *testing.T) {
 					}},
 				}
 
-				result, err := TranslateLogsRequest(req, ri)
+				result, err := TranslateLogsRequest(context.Background(), req, ri)
 				assert.NotNil(t, result)
 				assert.Nil(t, err)
 				assert.Equal(t, tc.name, result.Batches[0].Events[0].Attributes["severity"])
@@ -421,7 +422,7 @@ func TestCanExtractBody(t *testing.T) {
 				}},
 			}
 
-			result, err := TranslateLogsRequest(req, ri)
+			result, err := TranslateLogsRequest(context.Background(), req, ri)
 			assert.NotNil(t, result)
 			assert.Nil(t, err)
 			assert.Equal(t, tc.expectedValue, result.Batches[0].Events[0].Attributes)
@@ -436,7 +437,7 @@ func TestLogsRequestWithInvalidContentTypeReturnsError(t *testing.T) {
 		ContentType: "application/binary",
 	}
 
-	result, err := TranslateLogsRequest(req, ri)
+	result, err := TranslateLogsRequest(context.Background(), req, ri)
 	assert.Nil(t, result)
 	assert.Equal(t, ErrInvalidContentType, err)
 }
@@ -449,7 +450,7 @@ func TestLogsRequestWithInvalidBodyReturnsError(t *testing.T) {
 		ContentType: "application/protobuf",
 	}
 
-	result, err := TranslateLogsRequestFromReader(body, ri)
+	result, err := TranslateLogsRequestFromReader(context.Background(), body, ri)
 	assert.Nil(t, result)
 	assert.Equal(t, ErrFailedParseBody, err)
 }
@@ -482,7 +483,7 @@ func TestLogsWithoutTraceIdDoesNotGetAnnotationType(t *testing.T) {
 		}},
 	}
 
-	result, err := TranslateLogsRequest(req, ri)
+	result, err := TranslateLogsRequest(context.Background(), req, ri)
 	assert.Nil(t, err)
 	assert.Equal(t, proto.Size(req), result.RequestSize)
 	assert.Equal(t, 1, len(result.Batches))

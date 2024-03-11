@@ -107,7 +107,7 @@ func TestAddAttributesToMap(t *testing.T) {
 
 	for _, tc := range testCases {
 		attrs := map[string]interface{}{}
-		AddAttributesToMap(attrs, []*common.KeyValue{tc.attribute})
+		AddAttributesToMap(context.Background(), attrs, []*common.KeyValue{tc.attribute})
 		assert.Equal(t, tc.expected, attrs)
 	}
 }
@@ -393,7 +393,7 @@ func Test_getValue(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			attrs := map[string]interface{}{}
-			addAttributeToMap(attrs, "body", tt.value, 0)
+			addAttributeToMap(context.Background(), attrs, "body", tt.value, 0)
 			assert.Equal(t, tt.want, attrs)
 		})
 	}

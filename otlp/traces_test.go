@@ -134,7 +134,7 @@ func TestTranslateGrpcTraceRequest(t *testing.T) {
 	for _, tC := range testCases {
 		t.Run(tC.Name, func(t *testing.T) {
 
-			result, err := TranslateTraceRequest(req, tC.ri)
+			result, err := TranslateTraceRequest(context.Background(), req, tC.ri)
 			assert.Nil(t, err)
 			assert.Equal(t, proto.Size(req), result.RequestSize)
 			assert.Equal(t, 1, len(result.Batches))
@@ -306,7 +306,7 @@ func TestTranslateException(t *testing.T) {
 	for _, tC := range testCases {
 		t.Run(tC.Name, func(t *testing.T) {
 
-			result, err := TranslateTraceRequest(req, tC.ri)
+			result, err := TranslateTraceRequest(context.Background(), req, tC.ri)
 			assert.Nil(t, err)
 			assert.Equal(t, proto.Size(req), result.RequestSize)
 			assert.Equal(t, 1, len(result.Batches))
@@ -395,7 +395,7 @@ func TestTranslateGrpcTraceRequestFromMultipleServices(t *testing.T) {
 		}},
 	}
 
-	result, err := TranslateTraceRequest(req, ri)
+	result, err := TranslateTraceRequest(context.Background(), req, ri)
 	assert.Nil(t, err)
 	assert.Equal(t, proto.Size(req), result.RequestSize)
 	assert.Equal(t, 2, len(result.Batches))
@@ -464,7 +464,7 @@ func TestTranslateGrpcTraceRequestFromMultipleLibraries(t *testing.T) {
 		}},
 	}
 
-	result, err := TranslateTraceRequest(req, ri)
+	result, err := TranslateTraceRequest(context.Background(), req, ri)
 	assert.NoError(t, err)
 	assert.Equal(t, proto.Size(req), result.RequestSize)
 	assert.Equal(t, 1, len(result.Batches))
@@ -588,7 +588,7 @@ func TestTranslateHttpTraceRequest(t *testing.T) {
 							body, err := prepareOtlpRequestHttpBody(req, testCaseContentType, testCaseContentEncoding)
 							require.NoError(t, err, "Womp womp. Ought to have been able to turn the OTLP trace request into an HTTP body.")
 
-							result, err := TranslateTraceRequestFromReader(io.NopCloser(strings.NewReader(body)), tC.ri)
+							result, err := TranslateTraceRequestFromReader(context.Background(), io.NopCloser(strings.NewReader(body)), tC.ri)
 							assert.Nil(t, err)
 							assert.Equal(t, proto.Size(req), result.RequestSize)
 							assert.Equal(t, 1, len(result.Batches))
@@ -690,7 +690,7 @@ func TestTranslateHttpTraceRequestFromMultipleServices(t *testing.T) {
 		ContentType: "application/protobuf",
 	}
 
-	result, err := TranslateTraceRequestFromReader(body, ri)
+	result, err := TranslateTraceRequestFromReader(context.Background(), body, ri)
 	assert.Nil(t, err)
 	assert.Equal(t, proto.Size(req), result.RequestSize)
 	assert.Equal(t, 2, len(result.Batches))
@@ -719,7 +719,7 @@ func TestInvalidContentTypeReturnsError(t *testing.T) {
 		ContentType: "application/binary",
 	}
 
-	result, err := TranslateTraceRequestFromReader(body, ri)
+	result, err := TranslateTraceRequestFromReader(context.Background(), body, ri)
 	assert.Nil(t, result)
 	assert.Equal(t, ErrInvalidContentType, err)
 }
@@ -733,7 +733,7 @@ func TestInvalidBodyReturnsError(t *testing.T) {
 		ContentType: "application/protobuf",
 	}
 
-	result, err := TranslateTraceRequestFromReader(body, ri)
+	result, err := TranslateTraceRequestFromReader(context.Background(), body, ri)
 	assert.Nil(t, result)
 	assert.Equal(t, ErrFailedParseBody, err)
 }
@@ -890,7 +890,7 @@ func TestDefaultServiceNameApplied(t *testing.T) {
 				ContentType: "application/protobuf",
 			}
 
-			result, err := TranslateTraceRequest(req, ri)
+			result, err := TranslateTraceRequest(context.Background(), req, ri)
 			assert.Nil(t, err)
 			batch := result.Batches[0]
 			assert.NotNil(t, batch.Dataset)
@@ -963,7 +963,7 @@ func TestUnknownServiceNameIsTruncatedForDataset(t *testing.T) {
 				ContentType: "application/protobuf",
 			}
 
-			result, err := TranslateTraceRequestFromReader(body, ri)
+			result, err := TranslateTraceRequestFromReader(context.Background(), body, ri)
 			assert.Nil(t, err)
 
 			assert.Equal(t, 1, len(result.Batches))
@@ -1030,7 +1030,7 @@ func TestServiceNameIsTrimmedForDataset(t *testing.T) {
 				ContentType: "application/protobuf",
 			}
 
-			result, err := TranslateTraceRequest(req, ri)
+			result, err := TranslateTraceRequest(context.Background(), req, ri)
 			assert.Nil(t, err)
 
 			assert.Equal(t, 1, len(result.Batches))
@@ -1106,7 +1106,7 @@ func TestBadTraceRequest(t *testing.T) {
 					ContentEncoding: encoding,
 				}
 
-				_, err := TranslateTraceRequestFromReader(body, ri)
+				_, err := TranslateTraceRequestFromReader(context.Background(), body, ri)
 				assert.NotNil(t, err)
 				assert.Equal(t, ErrFailedParseBody, err)
 			})
@@ -1155,7 +1155,7 @@ func TestInstrumentationLibrarySpansHaveAttributeAdded(t *testing.T) {
 		}},
 	}
 
-	result, err := TranslateTraceRequest(req, ri)
+	result, err := TranslateTraceRequest(context.Background(), req, ri)
 	assert.NoError(t, err)
 	assert.Equal(t, proto.Size(req), result.RequestSize)
 	assert.Equal(t, 1, len(result.Batches))
@@ -1238,6 +1238,6 @@ func TestGetInstrumentationLibraryNameAndVersion(t *testing.T) {
 	}
 	attrs := map[string]interface{}{}
 	attr := &common.AnyValue{Value: &common.AnyValue_StringValue{StringValue: "test"}}
-	addAttributeToMap(attrs, "key", attr, 0)
+	addAttributeToMap(context.Background(), attrs, "key", attr, 0)
 	assert.True(t, called)
 }

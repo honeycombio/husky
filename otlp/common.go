@@ -279,25 +279,25 @@ func getValueFromMetadata(md metadata.MD, key string) string {
 // Supported types are string, bool, double, int, bytes, array, and kvlist.
 // kvlist attributes are flattened to a depth of (maxDepth), if the depth is exceeded, the attribute is added as a JSON string.
 // Bytes and array values are always added as JSON strings.
-func AddAttributesToMap(attrs map[string]interface{}, attributes []*common.KeyValue) {
+func AddAttributesToMap(ctx context.Context, attrs map[string]interface{}, attributes []*common.KeyValue) {
 	for _, attr := range attributes {
 		// ignore entries if the key is empty or value is nil
 		if attr.Key == "" || attr.Value == nil {
 			continue
 		}
-		addAttributeToMap(attrs, attr.Key, attr.Value, 0)
+		addAttributeToMap(ctx, attrs, attr.Key, attr.Value, 0)
 	}
 }
 
-func getResourceAttributes(resource *resource.Resource) map[string]interface{} {
+func getResourceAttributes(ctx context.Context, resource *resource.Resource) map[string]interface{} {
 	attrs := map[string]interface{}{}
 	if resource != nil {
-		AddAttributesToMap(attrs, resource.Attributes)
+		AddAttributesToMap(ctx, attrs, resource.Attributes)
 	}
 	return attrs
 }
 
-func getScopeAttributes(scope *common.InstrumentationScope) map[string]interface{} {
+func getScopeAttributes(ctx context.Context, scope *common.InstrumentationScope) map[string]interface{} {
 	attrs := map[string]interface{}{}
 	if scope != nil {
 		if scope.Name != "" {
@@ -309,7 +309,7 @@ func getScopeAttributes(scope *common.InstrumentationScope) map[string]interface
 		if scope.Version != "" {
 			attrs["library.version"] = scope.Version
 		}
-		AddAttributesToMap(attrs, scope.Attributes)
+		AddAttributesToMap(ctx, attrs, scope.Attributes)
 	}
 	return attrs
 }
@@ -421,8 +421,8 @@ func getMarshallableValue(value *common.AnyValue) interface{} {
 // Supported types are string, bool, double, int, bytes, array, and kvlist.
 // kvlist attributes are flattened to a depth of (maxDepth), if the depth is exceeded, the attribute is added as a JSON string.
 // Bytes and array values are always added as JSON strings.
-func addAttributeToMap(result map[string]interface{}, key string, value *common.AnyValue, depth int) {
-	husky.AddAttributes(context.Background(), map[string]interface{}{"depth": depth})
+func addAttributeToMap(ctx context.Context, result map[string]interface{}, key string, value *common.AnyValue, depth int) {
+	husky.AddAttributes(ctx, map[string]interface{}{"depth": depth})
 
 	switch value.Value.(type) {
 	case *common.AnyValue_StringValue:
@@ -439,7 +439,7 @@ func addAttributeToMap(result map[string]interface{}, key string, value *common.
 		for _, entry := range value.GetKvlistValue().Values {
 			k := key + "." + entry.Key
 			if depth < maxDepth {
-				addAttributeToMap(result, k, entry.Value, depth+1)
+				addAttributeToMap(ctx, result, k, entry.Value, depth+1)
 			} else {
 				addAttributeToMapAsJson(result, k, entry.Value)
 			}
