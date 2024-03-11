@@ -2,7 +2,9 @@ package otlp
 
 import (
 	"bytes"
+	"context"
 	"encoding/hex"
+	"github.com/honeycombio/husky"
 	"io"
 	"math"
 	"strconv"
@@ -1227,4 +1229,15 @@ func TestKnownInstrumentationPrefixesReturnTrue(t *testing.T) {
 			assert.Equal(t, test.isInstrumentationLibrary, isInstrumentationLibrary(test.libraryName))
 		})
 	}
+}
+
+func TestGetInstrumentationLibraryNameAndVersion(t *testing.T) {
+	called := false
+	husky.TracingFunc = func(ctx context.Context, values map[string]any) {
+		called = true
+	}
+	attrs := map[string]interface{}{}
+	attr := &common.AnyValue{Value: &common.AnyValue_StringValue{StringValue: "test"}}
+	addAttributeToMap(attrs, "key", attr, 0)
+	assert.True(t, called)
 }

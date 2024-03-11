@@ -14,6 +14,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/honeycombio/husky"
+
 	jsoniter "github.com/json-iterator/go"
 	"github.com/klauspost/compress/zstd"
 	collectorlogs "go.opentelemetry.io/proto/otlp/collector/logs/v1"
@@ -420,6 +422,8 @@ func getMarshallableValue(value *common.AnyValue) interface{} {
 // kvlist attributes are flattened to a depth of (maxDepth), if the depth is exceeded, the attribute is added as a JSON string.
 // Bytes and array values are always added as JSON strings.
 func addAttributeToMap(result map[string]interface{}, key string, value *common.AnyValue, depth int) {
+	husky.AddAttributes(context.Background(), map[string]interface{}{"depth": depth})
+
 	switch value.Value.(type) {
 	case *common.AnyValue_StringValue:
 		result[key] = value.GetStringValue()
