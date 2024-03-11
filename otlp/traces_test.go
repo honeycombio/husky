@@ -1231,13 +1231,23 @@ func TestKnownInstrumentationPrefixesReturnTrue(t *testing.T) {
 	}
 }
 
-func TestGetInstrumentationLibraryNameAndVersion(t *testing.T) {
+func TestArrayAttributesCallsConfiguredSetAttributesFunc(t *testing.T) {
 	called := false
 	husky.SetAttributesFunc = func(ctx context.Context, values map[string]any) {
 		called = true
 	}
-	attrs := map[string]interface{}{}
-	attr := &common.AnyValue{Value: &common.AnyValue_StringValue{StringValue: "test"}}
-	addAttributeToMap(context.Background(), attrs, "key", attr, 0)
+	fields := map[string]interface{}{}
+	attr := &common.AnyValue{
+		Value: &common.AnyValue_ArrayValue{
+			ArrayValue: &common.ArrayValue{
+				Values: []*common.AnyValue{
+					{
+						Value: &common.AnyValue_StringValue{StringValue: "io.opentelemetry.tomcat-7.0"},
+					},
+				},
+			},
+		},
+	}
+	addAttributeToMap(context.Background(), fields, "key", attr, 0)
 	assert.True(t, called)
 }
