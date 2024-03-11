@@ -1233,7 +1233,7 @@ func TestKnownInstrumentationPrefixesReturnTrue(t *testing.T) {
 
 func TestGetInstrumentationLibraryNameAndVersion(t *testing.T) {
 	called := false
-	husky.TracingFunc = func(ctx context.Context, values map[string]any) {
+	husky.SetAttributesFunc = func(ctx context.Context, values map[string]any) {
 		called = true
 	}
 	attrs := map[string]interface{}{}

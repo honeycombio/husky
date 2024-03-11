@@ -2,10 +2,15 @@ package husky
 
 import "context"
 
-var TracingFunc func(ctx context.Context, attributes map[string]any) = nil
+// SetAttributesFunc is a function that can be used to set attributes in telemetry controlled
+// by users of this package.
+// For example, beeline users would use beeline.AddField and OTel users would use span.SetAttributes.
+var SetAttributesFunc func(ctx context.Context, attributes map[string]any) = nil
 
-func AddAttributes(ctx context.Context, attributes map[string]any) {
-	if TracingFunc != nil {
-		TracingFunc(ctx, attributes)
+// SetAttributes is used internally to set attributes using the configured SetAttributesFunc.
+// This function is not intended to be used directly by consumers of this package.
+func SetAttributes(ctx context.Context, attributes map[string]any) {
+	if SetAttributesFunc != nil {
+		SetAttributesFunc(ctx, attributes)
 	}
 }

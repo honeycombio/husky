@@ -424,22 +424,21 @@ func getMarshallableValue(value *common.AnyValue) interface{} {
 func addAttributeToMap(ctx context.Context, result map[string]interface{}, key string, value *common.AnyValue, depth int) {
 	switch value.Value.(type) {
 	case *common.AnyValue_StringValue:
-		husky.AddAttributes(ctx, map[string]interface{}{key + ".type": "string"})
 		result[key] = value.GetStringValue()
 	case *common.AnyValue_BoolValue:
-		husky.AddAttributes(ctx, map[string]interface{}{key + ".type": "bool"})
 		result[key] = value.GetBoolValue()
 	case *common.AnyValue_DoubleValue:
-		husky.AddAttributes(ctx, map[string]interface{}{key + "type": "double"})
 		result[key] = value.GetDoubleValue()
 	case *common.AnyValue_IntValue:
-		husky.AddAttributes(ctx, map[string]interface{}{key + "type": "int"})
 		result[key] = value.GetIntValue()
-	case *common.AnyValue_BytesValue, *common.AnyValue_ArrayValue:
-		husky.AddAttributes(ctx, map[string]interface{}{key + "type": "string"})
+	case *common.AnyValue_BytesValue:
+		husky.SetAttributes(ctx, map[string]interface{}{"received_bytes_attr_type": true})
+		addAttributeToMapAsJson(result, key, value)
+	case *common.AnyValue_ArrayValue:
+		husky.SetAttributes(ctx, map[string]interface{}{"received_array_attr_type": true})
 		addAttributeToMapAsJson(result, key, value)
 	case *common.AnyValue_KvlistValue:
-		husky.AddAttributes(ctx, map[string]interface{}{key + "type": "string"})
+		husky.SetAttributes(ctx, map[string]interface{}{"kvlist_max_depth": depth})
 		for _, entry := range value.GetKvlistValue().Values {
 			k := key + "." + entry.Key
 			if depth < maxDepth {
