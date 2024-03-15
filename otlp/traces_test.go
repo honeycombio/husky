@@ -4,13 +4,14 @@ import (
 	"bytes"
 	"context"
 	"encoding/hex"
-	"github.com/honeycombio/husky"
 	"io"
 	"math"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/honeycombio/husky"
 
 	"github.com/honeycombio/husky/test"
 	"github.com/stretchr/testify/assert"
@@ -1233,7 +1234,7 @@ func TestKnownInstrumentationPrefixesReturnTrue(t *testing.T) {
 
 func TestArrayAttributesCallsConfiguredSetAttributesFunc(t *testing.T) {
 	called := false
-	husky.SetAttributesFunc = func(ctx context.Context, values map[string]any) {
+	husky.SetAddAttributesFunc = func(ctx context.Context, values map[string]any) {
 		called = true
 	}
 	fields := map[string]interface{}{}

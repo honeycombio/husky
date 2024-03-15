@@ -432,13 +432,13 @@ func addAttributeToMap(ctx context.Context, result map[string]interface{}, key s
 	case *common.AnyValue_IntValue:
 		result[key] = value.GetIntValue()
 	case *common.AnyValue_BytesValue:
-		husky.SetAttributes(ctx, map[string]interface{}{"received_bytes_attr_type": true})
+		husky.AddAttributes(ctx, map[string]interface{}{"received_bytes_attr_type": true})
 		addAttributeToMapAsJson(result, key, value)
 	case *common.AnyValue_ArrayValue:
-		husky.SetAttributes(ctx, map[string]interface{}{"received_array_attr_type": true})
+		husky.AddAttributes(ctx, map[string]interface{}{"received_array_attr_type": true})
 		addAttributeToMapAsJson(result, key, value)
 	case *common.AnyValue_KvlistValue:
-		husky.SetAttributes(ctx, map[string]interface{}{"kvlist_max_depth": depth})
+		husky.AddAttributes(ctx, map[string]interface{}{"kvlist_max_depth": depth})
 		for _, entry := range value.GetKvlistValue().Values {
 			k := key + "." + entry.Key
 			if depth < maxDepth {
