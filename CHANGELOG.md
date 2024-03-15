@@ -1,5 +1,11 @@
 # Husky Changelog
 
+## 0.27.0 2024-03-15
+
+### Enhancements
+
+- feat: Add tracing support (#253) | @MikeGoldsmith
+
 ## 0.26.0 2024-03-07
 
 ### Enhancements
