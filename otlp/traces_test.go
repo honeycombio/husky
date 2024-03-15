@@ -1313,10 +1313,8 @@ func TestOtlpAttributesRecordsAttribueType(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			telemetryFields := map[string]interface{}{}
-			husky.SetAddAttributesFunc = func(ctx context.Context, values map[string]any) {
-				for k, v := range values {
-					telemetryFields[k] = v
-				}
+			husky.AddTelemetryAttributeFunc = func(ctx context.Context, key string, value any) {
+				telemetryFields[key] = value
 			}
 
 			eventFields := map[string]interface{}{}
