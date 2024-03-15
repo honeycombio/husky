@@ -1253,7 +1253,7 @@ func TestOtlpAttributesRecordsAttribueType(t *testing.T) {
 				},
 			},
 			eventFields: map[string]interface{}{
-				"key": "[\"io.opentelemetry.tomcat-7.0\"]\n",
+				"attr": "[\"io.opentelemetry.tomcat-7.0\"]\n",
 			},
 			telemetryFields: map[string]interface{}{
 				"received_array_attr_type": true,
@@ -1267,10 +1267,45 @@ func TestOtlpAttributesRecordsAttribueType(t *testing.T) {
 				},
 			},
 			eventFields: map[string]interface{}{
-				"key": "\"ZGF0YQ==\"\n",
+				"attr": "\"ZGF0YQ==\"\n",
 			},
 			telemetryFields: map[string]interface{}{
 				"received_bytes_attr_type": true,
+			},
+		},
+		{
+			name: "kvlist",
+			attr: &common.AnyValue{
+				Value: &common.AnyValue_KvlistValue{
+					KvlistValue: &common.KeyValueList{
+						Values: []*common.KeyValue{
+							{
+								Key: "custom",
+								Value: &common.AnyValue{
+									Value: &common.AnyValue_KvlistValue{
+										KvlistValue: &common.KeyValueList{
+											Values: []*common.KeyValue{
+												{
+													Key: "name",
+													Value: &common.AnyValue{
+														Value: &common.AnyValue_StringValue{StringValue: "value"},
+													},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			eventFields: map[string]interface{}{
+				"attr.custom.name": "value",
+			},
+			telemetryFields: map[string]interface{}{
+				"received_kvlist_attr_type": true,
+				"kvlist_max_depth":          1,
 			},
 		},
 	}
@@ -1285,7 +1320,7 @@ func TestOtlpAttributesRecordsAttribueType(t *testing.T) {
 			}
 
 			eventFields := map[string]interface{}{}
-			addAttributeToMap(context.Background(), eventFields, "key", tc.attr, 0)
+			addAttributeToMap(context.Background(), eventFields, "attr", tc.attr, 0)
 			assert.Equal(t, tc.eventFields, eventFields)
 			assert.Equal(t, tc.telemetryFields, telemetryFields)
 		})
