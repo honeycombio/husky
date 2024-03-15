@@ -1,6 +1,7 @@
 package otlp
 
 import (
+	"context"
 	"encoding/hex"
 	"io"
 	"math"
@@ -22,7 +23,7 @@ const (
 
 // TranslateTraceRequestFromReader translates an OTLP/HTTP request into Honeycomb-friendly structure
 // RequestInfo is the parsed information from the HTTP headers
-func TranslateTraceRequestFromReader(body io.ReadCloser, ri RequestInfo) (*TranslateOTLPRequestResult, error) {
+func TranslateTraceRequestFromReader(ctx context.Context, body io.ReadCloser, ri RequestInfo) (*TranslateOTLPRequestResult, error) {
 	if err := ri.ValidateTracesHeaders(); err != nil {
 		return nil, err
 	}
@@ -30,23 +31,23 @@ func TranslateTraceRequestFromReader(body io.ReadCloser, ri RequestInfo) (*Trans
 	if err := parseOtlpRequestBody(body, ri.ContentType, ri.ContentEncoding, request); err != nil {
 		return nil, ErrFailedParseBody
 	}
-	return TranslateTraceRequest(request, ri)
+	return TranslateTraceRequest(ctx, request, ri)
 }
 
 // TranslateTraceRequest translates an OTLP/gRPC request into Honeycomb-friendly structure
 // RequestInfo is the parsed information from the gRPC metadata
-func TranslateTraceRequest(request *collectorTrace.ExportTraceServiceRequest, ri RequestInfo) (*TranslateOTLPRequestResult, error) {
+func TranslateTraceRequest(ctx context.Context, request *collectorTrace.ExportTraceServiceRequest, ri RequestInfo) (*TranslateOTLPRequestResult, error) {
 	if err := ri.ValidateTracesHeaders(); err != nil {
 		return nil, err
 	}
 	var batches []Batch
 	for _, resourceSpan := range request.ResourceSpans {
 		var events []Event
-		resourceAttrs := getResourceAttributes(resourceSpan.Resource)
+		resourceAttrs := getResourceAttributes(ctx, resourceSpan.Resource)
 		dataset := getDataset(ri, resourceAttrs)
 
 		for _, scopeSpan := range resourceSpan.ScopeSpans {
-			scopeAttrs := getScopeAttributes(scopeSpan.Scope)
+			scopeAttrs := getScopeAttributes(ctx, scopeSpan.Scope)
 
 			for _, span := range scopeSpan.GetSpans() {
 				traceID := BytesToTraceID(span.TraceId)
@@ -91,7 +92,7 @@ func TranslateTraceRequest(request *collectorTrace.ExportTraceServiceRequest, ri
 					eventAttrs[k] = v
 				}
 				if span.Attributes != nil {
-					AddAttributesToMap(eventAttrs, span.Attributes)
+					AddAttributesToMap(ctx, eventAttrs, span.Attributes)
 				}
 
 				// get sample rate after resource and scope attributes have been added
@@ -121,7 +122,7 @@ func TranslateTraceRequest(request *collectorTrace.ExportTraceServiceRequest, ri
 					}
 
 					if sevent.Attributes != nil {
-						AddAttributesToMap(attrs, sevent.Attributes)
+						AddAttributesToMap(ctx, attrs, sevent.Attributes)
 					}
 					if isError {
 						attrs["error"] = true
@@ -177,7 +178,7 @@ func TranslateTraceRequest(request *collectorTrace.ExportTraceServiceRequest, ri
 					}
 
 					if slink.Attributes != nil {
-						AddAttributesToMap(attrs, slink.Attributes)
+						AddAttributesToMap(ctx, attrs, slink.Attributes)
 					}
 					if isError {
 						attrs["error"] = true

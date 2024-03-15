@@ -2,6 +2,7 @@ package otlp
 
 import (
 	"bytes"
+	"context"
 	"encoding/hex"
 	"io"
 	"math"
@@ -9,6 +10,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/honeycombio/husky"
 
 	"github.com/honeycombio/husky/test"
 	"github.com/stretchr/testify/assert"
@@ -132,7 +135,7 @@ func TestTranslateGrpcTraceRequest(t *testing.T) {
 	for _, tC := range testCases {
 		t.Run(tC.Name, func(t *testing.T) {
 
-			result, err := TranslateTraceRequest(req, tC.ri)
+			result, err := TranslateTraceRequest(context.Background(), req, tC.ri)
 			assert.Nil(t, err)
 			assert.Equal(t, proto.Size(req), result.RequestSize)
 			assert.Equal(t, 1, len(result.Batches))
@@ -304,7 +307,7 @@ func TestTranslateException(t *testing.T) {
 	for _, tC := range testCases {
 		t.Run(tC.Name, func(t *testing.T) {
 
-			result, err := TranslateTraceRequest(req, tC.ri)
+			result, err := TranslateTraceRequest(context.Background(), req, tC.ri)
 			assert.Nil(t, err)
 			assert.Equal(t, proto.Size(req), result.RequestSize)
 			assert.Equal(t, 1, len(result.Batches))
@@ -393,7 +396,7 @@ func TestTranslateGrpcTraceRequestFromMultipleServices(t *testing.T) {
 		}},
 	}
 
-	result, err := TranslateTraceRequest(req, ri)
+	result, err := TranslateTraceRequest(context.Background(), req, ri)
 	assert.Nil(t, err)
 	assert.Equal(t, proto.Size(req), result.RequestSize)
 	assert.Equal(t, 2, len(result.Batches))
@@ -462,7 +465,7 @@ func TestTranslateGrpcTraceRequestFromMultipleLibraries(t *testing.T) {
 		}},
 	}
 
-	result, err := TranslateTraceRequest(req, ri)
+	result, err := TranslateTraceRequest(context.Background(), req, ri)
 	assert.NoError(t, err)
 	assert.Equal(t, proto.Size(req), result.RequestSize)
 	assert.Equal(t, 1, len(result.Batches))
@@ -586,7 +589,7 @@ func TestTranslateHttpTraceRequest(t *testing.T) {
 							body, err := prepareOtlpRequestHttpBody(req, testCaseContentType, testCaseContentEncoding)
 							require.NoError(t, err, "Womp womp. Ought to have been able to turn the OTLP trace request into an HTTP body.")
 
-							result, err := TranslateTraceRequestFromReader(io.NopCloser(strings.NewReader(body)), tC.ri)
+							result, err := TranslateTraceRequestFromReader(context.Background(), io.NopCloser(strings.NewReader(body)), tC.ri)
 							assert.Nil(t, err)
 							assert.Equal(t, proto.Size(req), result.RequestSize)
 							assert.Equal(t, 1, len(result.Batches))
@@ -688,7 +691,7 @@ func TestTranslateHttpTraceRequestFromMultipleServices(t *testing.T) {
 		ContentType: "application/protobuf",
 	}
 
-	result, err := TranslateTraceRequestFromReader(body, ri)
+	result, err := TranslateTraceRequestFromReader(context.Background(), body, ri)
 	assert.Nil(t, err)
 	assert.Equal(t, proto.Size(req), result.RequestSize)
 	assert.Equal(t, 2, len(result.Batches))
@@ -717,7 +720,7 @@ func TestInvalidContentTypeReturnsError(t *testing.T) {
 		ContentType: "application/binary",
 	}
 
-	result, err := TranslateTraceRequestFromReader(body, ri)
+	result, err := TranslateTraceRequestFromReader(context.Background(), body, ri)
 	assert.Nil(t, result)
 	assert.Equal(t, ErrInvalidContentType, err)
 }
@@ -731,7 +734,7 @@ func TestInvalidBodyReturnsError(t *testing.T) {
 		ContentType: "application/protobuf",
 	}
 
-	result, err := TranslateTraceRequestFromReader(body, ri)
+	result, err := TranslateTraceRequestFromReader(context.Background(), body, ri)
 	assert.Nil(t, result)
 	assert.Equal(t, ErrFailedParseBody, err)
 }
@@ -888,7 +891,7 @@ func TestDefaultServiceNameApplied(t *testing.T) {
 				ContentType: "application/protobuf",
 			}
 
-			result, err := TranslateTraceRequest(req, ri)
+			result, err := TranslateTraceRequest(context.Background(), req, ri)
 			assert.Nil(t, err)
 			batch := result.Batches[0]
 			assert.NotNil(t, batch.Dataset)
@@ -961,7 +964,7 @@ func TestUnknownServiceNameIsTruncatedForDataset(t *testing.T) {
 				ContentType: "application/protobuf",
 			}
 
-			result, err := TranslateTraceRequestFromReader(body, ri)
+			result, err := TranslateTraceRequestFromReader(context.Background(), body, ri)
 			assert.Nil(t, err)
 
 			assert.Equal(t, 1, len(result.Batches))
@@ -1028,7 +1031,7 @@ func TestServiceNameIsTrimmedForDataset(t *testing.T) {
 				ContentType: "application/protobuf",
 			}
 
-			result, err := TranslateTraceRequest(req, ri)
+			result, err := TranslateTraceRequest(context.Background(), req, ri)
 			assert.Nil(t, err)
 
 			assert.Equal(t, 1, len(result.Batches))
@@ -1104,7 +1107,7 @@ func TestBadTraceRequest(t *testing.T) {
 					ContentEncoding: encoding,
 				}
 
-				_, err := TranslateTraceRequestFromReader(body, ri)
+				_, err := TranslateTraceRequestFromReader(context.Background(), body, ri)
 				assert.NotNil(t, err)
 				assert.Equal(t, ErrFailedParseBody, err)
 			})
@@ -1153,7 +1156,7 @@ func TestInstrumentationLibrarySpansHaveAttributeAdded(t *testing.T) {
 		}},
 	}
 
-	result, err := TranslateTraceRequest(req, ri)
+	result, err := TranslateTraceRequest(context.Background(), req, ri)
 	assert.NoError(t, err)
 	assert.Equal(t, proto.Size(req), result.RequestSize)
 	assert.Equal(t, 1, len(result.Batches))
@@ -1225,6 +1228,99 @@ func TestKnownInstrumentationPrefixesReturnTrue(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			assert.Equal(t, test.isInstrumentationLibrary, isInstrumentationLibrary(test.libraryName))
+		})
+	}
+}
+
+func TestOtlpAttributesRecordsAttribueType(t *testing.T) {
+	testCases := []struct {
+		name            string
+		attr            *common.AnyValue
+		eventFields     map[string]interface{}
+		telemetryFields map[string]interface{}
+	}{
+		{
+			name: "array",
+			attr: &common.AnyValue{
+				Value: &common.AnyValue_ArrayValue{
+					ArrayValue: &common.ArrayValue{
+						Values: []*common.AnyValue{
+							{
+								Value: &common.AnyValue_StringValue{StringValue: "io.opentelemetry.tomcat-7.0"},
+							},
+						},
+					},
+				},
+			},
+			eventFields: map[string]interface{}{
+				"attr": "[\"io.opentelemetry.tomcat-7.0\"]\n",
+			},
+			telemetryFields: map[string]interface{}{
+				"received_array_attr_type": true,
+			},
+		},
+		{
+			name: "bytes",
+			attr: &common.AnyValue{
+				Value: &common.AnyValue_BytesValue{
+					BytesValue: []byte("data"),
+				},
+			},
+			eventFields: map[string]interface{}{
+				"attr": "\"ZGF0YQ==\"\n",
+			},
+			telemetryFields: map[string]interface{}{
+				"received_bytes_attr_type": true,
+			},
+		},
+		{
+			name: "kvlist",
+			attr: &common.AnyValue{
+				Value: &common.AnyValue_KvlistValue{
+					KvlistValue: &common.KeyValueList{
+						Values: []*common.KeyValue{
+							{
+								Key: "custom",
+								Value: &common.AnyValue{
+									Value: &common.AnyValue_KvlistValue{
+										KvlistValue: &common.KeyValueList{
+											Values: []*common.KeyValue{
+												{
+													Key: "name",
+													Value: &common.AnyValue{
+														Value: &common.AnyValue_StringValue{StringValue: "value"},
+													},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			eventFields: map[string]interface{}{
+				"attr.custom.name": "value",
+			},
+			telemetryFields: map[string]interface{}{
+				"received_kvlist_attr_type": true,
+				"kvlist_max_depth":          1,
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			telemetryFields := map[string]interface{}{}
+			husky.AddTelemetryAttributeFunc = func(ctx context.Context, key string, value any) {
+				telemetryFields[key] = value
+			}
+
+			eventFields := map[string]interface{}{}
+			addAttributeToMap(context.Background(), eventFields, "attr", tc.attr, 0)
+			assert.Equal(t, tc.eventFields, eventFields)
+			assert.Equal(t, tc.telemetryFields, telemetryFields)
 		})
 	}
 }
