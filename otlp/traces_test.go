@@ -1232,23 +1232,62 @@ func TestKnownInstrumentationPrefixesReturnTrue(t *testing.T) {
 	}
 }
 
-func TestArrayAttributesCallsConfiguredSetAttributesFunc(t *testing.T) {
-	called := false
-	husky.SetAddAttributesFunc = func(ctx context.Context, values map[string]any) {
-		called = true
-	}
-	fields := map[string]interface{}{}
-	attr := &common.AnyValue{
-		Value: &common.AnyValue_ArrayValue{
-			ArrayValue: &common.ArrayValue{
-				Values: []*common.AnyValue{
-					{
-						Value: &common.AnyValue_StringValue{StringValue: "io.opentelemetry.tomcat-7.0"},
+func TestOtlpAttributesRecordsAttribueType(t *testing.T) {
+	testCases := []struct {
+		name            string
+		attr            *common.AnyValue
+		eventFields     map[string]interface{}
+		telemetryFields map[string]interface{}
+	}{
+		{
+			name: "array",
+			attr: &common.AnyValue{
+				Value: &common.AnyValue_ArrayValue{
+					ArrayValue: &common.ArrayValue{
+						Values: []*common.AnyValue{
+							{
+								Value: &common.AnyValue_StringValue{StringValue: "io.opentelemetry.tomcat-7.0"},
+							},
+						},
 					},
 				},
 			},
+			eventFields: map[string]interface{}{
+				"key": "[\"io.opentelemetry.tomcat-7.0\"]\n",
+			},
+			telemetryFields: map[string]interface{}{
+				"received_array_attr_type": true,
+			},
+		},
+		{
+			name: "bytes",
+			attr: &common.AnyValue{
+				Value: &common.AnyValue_BytesValue{
+					BytesValue: []byte("data"),
+				},
+			},
+			eventFields: map[string]interface{}{
+				"key": "\"ZGF0YQ==\"\n",
+			},
+			telemetryFields: map[string]interface{}{
+				"received_bytes_attr_type": true,
+			},
 		},
 	}
-	addAttributeToMap(context.Background(), fields, "key", attr, 0)
-	assert.True(t, called)
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			telemetryFields := map[string]interface{}{}
+			husky.SetAddAttributesFunc = func(ctx context.Context, values map[string]any) {
+				for k, v := range values {
+					telemetryFields[k] = v
+				}
+			}
+
+			eventFields := map[string]interface{}{}
+			addAttributeToMap(context.Background(), eventFields, "key", tc.attr, 0)
+			assert.Equal(t, tc.eventFields, eventFields)
+			assert.Equal(t, tc.telemetryFields, telemetryFields)
+		})
+	}
 }
