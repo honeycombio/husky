@@ -51,7 +51,9 @@ func TranslateLogsRequest(ctx context.Context, request *collectorLogs.ExportLogs
 					attrs["meta.annotation_type"] = "span_event"
 				}
 				if len(log.SpanId) > 0 {
-					attrs["trace.span_id"] = BytesToSpanID(log.SpanId)
+					spanID := BytesToSpanID(log.SpanId)
+					attrs["trace.span_id"] = spanID
+					attrs["trace.parent_id"] = spanID
 				}
 				if log.SeverityText != "" {
 					attrs["severity_text"] = log.SeverityText
