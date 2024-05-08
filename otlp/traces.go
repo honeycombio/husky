@@ -104,6 +104,7 @@ func TranslateTraceRequest(ctx context.Context, request *collectorTrace.ExportTr
 
 				for _, sevent := range span.Events {
 					timestamp := time.Unix(0, int64(sevent.TimeUnixNano)).UTC()
+
 					attrs := map[string]interface{}{
 						"trace.trace_id":       traceID,
 						"trace.parent_id":      spanID,
@@ -113,6 +114,12 @@ func TranslateTraceRequest(ctx context.Context, request *collectorTrace.ExportTr
 						"meta.signal_type":     "trace",
 					}
 
+					time_since_span_start := float64(sevent.TimeUnixNano-span.StartTimeUnixNano) / float64(time.Millisecond)
+					if time_since_span_start < 0 {
+						time_since_span_start = 0
+						eventAttrs["meta.invalid_time_since_span_start"] = true
+					}
+					eventAttrs["meta.time_since_span_start"] = time_since_span_start
 					// copy resource & scope attributes then span event attributes
 					for k, v := range resourceAttrs {
 						attrs[k] = v
