@@ -85,7 +85,8 @@ func TestTranslateGrpcTraceRequest(t *testing.T) {
 						},
 					},
 					Events: []*trace.Span_Event{{
-						Name: "span_event",
+						Name:         "span_event",
+						TimeUnixNano: uint64(startTimestamp.Add(time.Millisecond * 1).Nanosecond()),
 						Attributes: []*common.KeyValue{{
 							Key: "span_event_attr",
 							Value: &common.AnyValue{
@@ -155,6 +156,7 @@ func TestTranslateGrpcTraceRequest(t *testing.T) {
 			assert.Equal(t, "span_event", ev.Attributes["meta.annotation_type"])
 			assert.Equal(t, "span_event_attr_val", ev.Attributes["span_event_attr"])
 			assert.Equal(t, "resource_attr_val", ev.Attributes["resource_attr"])
+			assert.Equal(t, float64(1), ev.Attributes["meta.time_since_span_start_ms"])
 
 			// link
 			ev = events[1]
@@ -247,7 +249,8 @@ func TestTranslateException(t *testing.T) {
 						},
 					},
 					Events: []*trace.Span_Event{{
-						Name: "exception",
+						Name:         "exception",
+						TimeUnixNano: uint64(startTimestamp.Add(time.Millisecond * 1).Nanosecond()),
 						Attributes: []*common.KeyValue{
 							{
 								Key: "exception.type",
@@ -530,7 +533,8 @@ func TestTranslateHttpTraceRequest(t *testing.T) {
 						},
 					}},
 					Events: []*trace.Span_Event{{
-						Name: "span_event",
+						Name:         "span_event",
+						TimeUnixNano: uint64(startTimestamp.Add(time.Millisecond * 1).Nanosecond()),
 						Attributes: []*common.KeyValue{{
 							Key: "span_event_attr",
 							Value: &common.AnyValue{
@@ -608,6 +612,7 @@ func TestTranslateHttpTraceRequest(t *testing.T) {
 							assert.Equal(t, "span_event", ev.Attributes["meta.annotation_type"])
 							assert.Equal(t, "span_event_attr_val", ev.Attributes["span_event_attr"])
 							assert.Equal(t, "resource_attr_val", ev.Attributes["resource_attr"])
+							assert.Equal(t, float64(1), ev.Attributes["meta.time_since_span_start_ms"])
 
 							// link
 							ev = events[1]
