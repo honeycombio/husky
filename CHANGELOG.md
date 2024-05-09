@@ -1,5 +1,18 @@
 # Husky Changelog
 
+## 0.28.0 2024-05-09
+
+### Enhancements
+
+- feat: Add in time since span event start from start of span (#259) | @McSick
+
+### Maintenance
+
+- maint(deps): bump the minor-patch group with 3 updates (#258) | @dependabot
+  - github.com/klauspost/compress from 1.17.7 to 1.17.8
+  - google.golang.org/grpc from 1.62.0 to 1.63.2
+  - google.golang.org/protobuf from 1.32.0 to 1.33.0
+
 ## 0.27.0 2024-03-15
 
 ### Enhancements
