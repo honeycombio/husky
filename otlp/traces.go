@@ -112,7 +112,13 @@ func TranslateTraceRequest(ctx context.Context, request *collectorTrace.ExportTr
 						"meta.annotation_type": "span_event",
 						"meta.signal_type":     "trace",
 					}
-
+					// calculate time since span start for querying capabilities
+					time_since_span_start := float64(sevent.TimeUnixNano-span.StartTimeUnixNano) / float64(time.Millisecond)
+					if time_since_span_start < 0 {
+						time_since_span_start = 0
+						attrs["meta.invalid_time_since_span_start"] = true
+					}
+					attrs["meta.time_since_span_start_ms"] = time_since_span_start
 					// copy resource & scope attributes then span event attributes
 					for k, v := range resourceAttrs {
 						attrs[k] = v
