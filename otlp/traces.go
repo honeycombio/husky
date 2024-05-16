@@ -84,7 +84,7 @@ func TranslateTraceRequest(ctx context.Context, request *collectorTrace.ExportTr
 					eventAttrs["status_message"] = span.Status.Message
 				}
 				if span.TraceState != "" {
-					eventAttrs["trace.tracestate"] = span.TraceState
+					eventAttrs["trace.trace_state"] = span.TraceState
 				}
 
 				// copy resource & scope attributes then span attributes
