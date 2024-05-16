@@ -354,6 +354,9 @@ func TestTranslateException(t *testing.T) {
 			assert.Equal(t, "this stacktrace should be long", ev.Attributes["exception.stacktrace"])
 			assert.Equal(t, 0, ev.Attributes["span.num_links"])
 			assert.Equal(t, 1, ev.Attributes["span.num_events"])
+
+			// verify the trace_state field has not been set
+			assert.Nil(t, ev.Attributes["trace.trace_state"])
 		})
 	}
 }
