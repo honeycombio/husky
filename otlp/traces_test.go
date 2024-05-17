@@ -65,6 +65,7 @@ func TestTranslateGrpcTraceRequest(t *testing.T) {
 				Spans: []*trace.Span{{
 					TraceId:           traceID,
 					SpanId:            spanID,
+					TraceState:        "tracestate",
 					Name:              "test_span",
 					Kind:              trace.Span_SPAN_KIND_CLIENT,
 					Status:            &trace.Status{Code: trace.Status_STATUS_CODE_OK},
@@ -177,6 +178,7 @@ func TestTranslateGrpcTraceRequest(t *testing.T) {
 			assert.Equal(t, int32(100), ev.SampleRate)
 			assert.Equal(t, BytesToTraceID(traceID), ev.Attributes["trace.trace_id"])
 			assert.Equal(t, hex.EncodeToString(spanID), ev.Attributes["trace.span_id"])
+			assert.Equal(t, "tracestate", ev.Attributes["trace.trace_state"])
 			assert.Equal(t, "client", ev.Attributes["type"])
 			assert.Equal(t, "client", ev.Attributes["span.kind"])
 			assert.Equal(t, "test_span", ev.Attributes["name"])
@@ -352,6 +354,9 @@ func TestTranslateException(t *testing.T) {
 			assert.Equal(t, "this stacktrace should be long", ev.Attributes["exception.stacktrace"])
 			assert.Equal(t, 0, ev.Attributes["span.num_links"])
 			assert.Equal(t, 1, ev.Attributes["span.num_events"])
+
+			// verify the trace_state field has not been set
+			assert.Nil(t, ev.Attributes["trace.trace_state"])
 		})
 	}
 }
@@ -521,6 +526,7 @@ func TestTranslateHttpTraceRequest(t *testing.T) {
 				Spans: []*trace.Span{{
 					TraceId:           traceID,
 					SpanId:            spanID,
+					TraceState:        "tracestate",
 					Name:              "test_span",
 					Kind:              trace.Span_SPAN_KIND_CLIENT,
 					Status:            &trace.Status{Code: trace.Status_STATUS_CODE_OK},
@@ -630,6 +636,7 @@ func TestTranslateHttpTraceRequest(t *testing.T) {
 							assert.Equal(t, startTimestamp.Nanosecond(), ev.Timestamp.Nanosecond())
 							assert.Equal(t, BytesToTraceID(traceID), ev.Attributes["trace.trace_id"])
 							assert.Equal(t, hex.EncodeToString(spanID), ev.Attributes["trace.span_id"])
+							assert.Equal(t, "tracestate", ev.Attributes["trace.trace_state"])
 							assert.Equal(t, "client", ev.Attributes["type"])
 							assert.Equal(t, "client", ev.Attributes["span.kind"])
 							assert.Equal(t, "test_span", ev.Attributes["name"])
