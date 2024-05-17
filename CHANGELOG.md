@@ -1,5 +1,11 @@
 # Husky Changelog
 
+## 0.29.0 2024-05-17
+
+### Enhancements
+
+- feat: Record span trace state as event field (#261) | @MikeGoldsmith
+
 ## 0.28.0 2024-05-09
 
 ### Enhancements
