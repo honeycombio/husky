@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -19,7 +20,6 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
-	"google.golang.org/protobuf/reflect/protoreflect"
 )
 
 func TestParseGrpcMetadataIntoRequestInfo(t *testing.T) {
@@ -762,10 +762,8 @@ func Test_BytesToSpanID(t *testing.T) {
 }
 
 func Test_ReadOtlpBodyTooLarge(t *testing.T) {
-	var body io.ReadCloser
-	contentType := "application/protobuf"
-	contentEncoding := "gzip"
-	var request protoreflect.ProtoMessage
-	err := parseOtlpRequestBody(body, contentType, contentEncoding, request)
+	body := io.NopCloser(strings.NewReader(string([]byte(strings.Repeat("a", 1000*1000*21)))))
+	request := &collectorlogs.ExportLogsServiceRequest{}
+	err := parseOtlpRequestBody(body, "application/protobuf", "other", request)
 	require.Error(t, err)
 }
