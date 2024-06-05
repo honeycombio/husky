@@ -2,9 +2,9 @@
 
 ## 0.30.0 2024-06-05
 
-- fix: Ensure a limited reader is used when decompressing payloads (#265)
-- maint(deps): bump golang.org/x/net from 0.22.0 to 0.23.0 (#264)
-- maint(deps): bump the minor-patch group with 2 updates (#263)
+- fix: Ensure a limited reader is used when decompressing payloads (#265) | @codeboten
+- maint(deps): bump golang.org/x/net from 0.22.0 to 0.23.0 (#264) | @codeboten
+- maint(deps): bump the minor-patch group with 2 updates (#263) | @codeboten
 
 ## 0.29.0 2024-05-17
 
