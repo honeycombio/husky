@@ -7,13 +7,16 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	collectorlogs "go.opentelemetry.io/proto/otlp/collector/logs/v1"
 	collectormetrics "go.opentelemetry.io/proto/otlp/collector/metrics/v1"
 	collectortrace "go.opentelemetry.io/proto/otlp/collector/trace/v1"
 	common "go.opentelemetry.io/proto/otlp/common/v1"
+	v1logs "go.opentelemetry.io/proto/otlp/logs/v1"
 	spb "google.golang.org/genproto/googleapis/rpc/status"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/encoding/protojson"
@@ -757,4 +760,19 @@ func Test_BytesToSpanID(t *testing.T) {
 			}
 		})
 	}
+}
+
+func Test_ReadOtlpBodyTooLarge(t *testing.T) {
+	b, err := proto.Marshal(&collectorlogs.ExportLogsServiceRequest{
+		ResourceLogs: []*v1logs.ResourceLogs{
+			{
+				SchemaUrl: "test",
+			},
+		},
+	})
+	require.NoError(t, err)
+	body := io.NopCloser(strings.NewReader(string(b)))
+	request := &collectorlogs.ExportLogsServiceRequest{}
+	err = parseOtlpRequestBody(body, "application/protobuf", "other", request, 1)
+	require.Error(t, err)
 }
