@@ -43,6 +43,8 @@ const (
 	// maxDepth is the maximum depth of a nested kvlist attribute that will be flattened.
 	// If the depth is exceeded, the attribute should be added as a JSON string instead.
 	maxDepth = 5
+
+	defaultMaxRequestBodySize = 20 * 1024 * 1024 // 20MiB
 )
 
 // fieldSizeMax is the maximum size of a field that will be accepted by honeycomb.
@@ -470,12 +472,15 @@ func addAttributeToMapAsJson(attrs map[string]interface{}, key string, value *co
 }
 
 func parseOtlpRequestBody(body io.ReadCloser, contentType string, contentEncoding string, request protoreflect.ProtoMessage) error {
-	defer body.Close()
+	defer func() {
+		_ = body.Close()
+	}()
+
 	bodyBytes, err := io.ReadAll(body)
 	if err != nil {
 		return err
 	}
-	bodyReader := bytes.NewReader(bodyBytes)
+	bodyReader := io.LimitReader(bytes.NewReader(bodyBytes), defaultMaxRequestBodySize)
 
 	var reader io.Reader
 	switch contentEncoding {

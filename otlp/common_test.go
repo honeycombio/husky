@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	collectorlogs "go.opentelemetry.io/proto/otlp/collector/logs/v1"
 	collectormetrics "go.opentelemetry.io/proto/otlp/collector/metrics/v1"
 	collectortrace "go.opentelemetry.io/proto/otlp/collector/trace/v1"
@@ -18,6 +19,7 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/reflect/protoreflect"
 )
 
 func TestParseGrpcMetadataIntoRequestInfo(t *testing.T) {
@@ -757,4 +759,13 @@ func Test_BytesToSpanID(t *testing.T) {
 			}
 		})
 	}
+}
+
+func Test_ReadOtlpBodyTooLarge(t *testing.T) {
+	var body io.ReadCloser
+	contentType := "application/protobuf"
+	contentEncoding := "gzip"
+	var request protoreflect.ProtoMessage
+	err := parseOtlpRequestBody(body, contentType, contentEncoding, request)
+	require.Error(t, err)
 }
