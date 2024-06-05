@@ -28,7 +28,7 @@ func TranslateTraceRequestFromReader(ctx context.Context, body io.ReadCloser, ri
 		return nil, err
 	}
 	request := &collectorTrace.ExportTraceServiceRequest{}
-	if err := parseOtlpRequestBody(body, ri.ContentType, ri.ContentEncoding, request); err != nil {
+	if err := parseOtlpRequestBody(body, ri.ContentType, ri.ContentEncoding, request, defaultMaxRequestBodySize); err != nil {
 		return nil, ErrFailedParseBody
 	}
 	return TranslateTraceRequest(ctx, request, ri)

@@ -471,7 +471,7 @@ func addAttributeToMapAsJson(attrs map[string]interface{}, key string, value *co
 	return w.truncatedBytes
 }
 
-func parseOtlpRequestBody(body io.ReadCloser, contentType string, contentEncoding string, request protoreflect.ProtoMessage) error {
+func parseOtlpRequestBody(body io.ReadCloser, contentType string, contentEncoding string, request protoreflect.ProtoMessage, maxRequestBodySize int64) error {
 	defer func() {
 		_ = body.Close()
 	}()
@@ -480,7 +480,7 @@ func parseOtlpRequestBody(body io.ReadCloser, contentType string, contentEncodin
 	if err != nil {
 		return err
 	}
-	bodyReader := io.LimitReader(bytes.NewReader(bodyBytes), defaultMaxRequestBodySize)
+	bodyReader := io.LimitReader(bytes.NewReader(bodyBytes), maxRequestBodySize)
 
 	var reader io.Reader
 	switch contentEncoding {
