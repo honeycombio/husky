@@ -16,18 +16,26 @@ func TestGetDescriptionForOtelAttributeName(t *testing.T) {
 			expectedDescription: "",
 		},
 		{
-			attrName:            "http.request.method",
-			expectedDescription: "HTTP request method.",
-		},
-		{
 			attrName:            "http.request.header",
 			expectedDescription: "HTTP request headers, `<key>` being the normalized HTTP Header name (lowercase), the value being the header values.",
-		},
-		{
-			attrName: "http.response.body.size",
-			expectedDescription: "The size of the response payload body in bytes. This is the number of bytes transferred excluding headers and" +
-				"is often, but not always, present as the [Content-Length](https://www.rfc-editor.org/rfc/rfc9110.html#field.content-length)" +
-				"header. For requests using transport encoding, this should be the compressed size.",
+		}, {
+			attrName:            "http.request.method",
+			expectedDescription: "HTTP request method.",
+		}, {
+			attrName:            "http.request.method_original",
+			expectedDescription: "Original HTTP method sent by the client in the request line.",
+		}, {
+			attrName:            "http.request.resend_count",
+			expectedDescription: "The ordinal number of request resending attempt (for any reason, including redirects).",
+		}, {
+			attrName:            "http.response.header",
+			expectedDescription: "HTTP response headers, `<key>` being the normalized HTTP Header name (lowercase), the value being the header values.",
+		}, {
+			attrName:            "http.response.status_code",
+			expectedDescription: "[HTTP response status code](https://tools.ietf.org/html/rfc7231#section-6).",
+		}, {
+			attrName:            "http.route",
+			expectedDescription: "The matched route, that is, the path template in the format used by the respective server framework.",
 		},
 	}
 	for _, tC := range testCases {
