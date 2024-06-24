@@ -41,6 +41,7 @@ func TestGetDescriptionForOtelAttributeName(t *testing.T) {
 	for _, tC := range testCases {
 		t.Run(tC.attrName, func(t *testing.T) {
 			assert.Equal(t, tC.expectedDescription, GetDescriptionForOtelAttributeName(tC.attrName))
+			assert.LessOrEqual(t, len(GetDescriptionForOtelAttributeName(tC.attrName)), 255, "Description is limited to 255 characters.")
 		})
 	}
 }
