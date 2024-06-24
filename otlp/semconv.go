@@ -1,5 +1,6 @@
 package otlp
 
+// GetDescriptionForOtelAttributeName returns an informative description of a given OpenTelemetry attribute name.
 func GetDescriptionForOtelAttributeName(name string) string {
 	switch name {
 	case "http.request.method":
