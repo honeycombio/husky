@@ -75,6 +75,7 @@ func TestTranslateLogsRequest(t *testing.T) {
 			assert.Equal(t, "debug", ev.Attributes["severity"])
 			assert.Equal(t, testServiceName, ev.Attributes["service.name"])
 			assert.Equal(t, "span_attr_val", ev.Attributes["span_attr"])
+			assert.Equal(t, int32(100), ev.SampleRate)
 			assert.Equal(t, "resource_attr_val", ev.Attributes["resource_attr"])
 		})
 	}
@@ -146,6 +147,7 @@ func TestTranslateHttpLogsRequest(t *testing.T) {
 							assert.Equal(t, "debug", ev.Attributes["severity"])
 							assert.Equal(t, "my-service", ev.Attributes["service.name"])
 							assert.Equal(t, "span_attr_val", ev.Attributes["span_attr"])
+							assert.Equal(t, int32(100), ev.SampleRate)
 							assert.Equal(t, "resource_attr_val", ev.Attributes["resource_attr"])
 							assert.Equal(t, "instr_scope_name", ev.Attributes["library.name"])
 							assert.Equal(t, "instr_scope_version", ev.Attributes["library.version"])
@@ -547,6 +549,12 @@ func buildExportLogsServiceRequest(traceID []byte, spanID []byte, startTimestamp
 							Key: "span_attr",
 							Value: &common.AnyValue{
 								Value: &common.AnyValue_StringValue{StringValue: "span_attr_val"},
+							},
+						},
+						{
+							Key: "sampleRate",
+							Value: &common.AnyValue{
+								Value: &common.AnyValue_IntValue{IntValue: 100},
 							},
 						},
 					},
