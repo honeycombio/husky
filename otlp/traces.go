@@ -4,8 +4,6 @@ import (
 	"context"
 	"encoding/hex"
 	"io"
-	"math"
-	"strconv"
 	"time"
 
 	collectorTrace "go.opentelemetry.io/proto/otlp/collector/trace/v1"
@@ -18,7 +16,6 @@ const (
 	traceIDLongLength  = 16
 	traceIDb64Length   = 24
 	spanIDb64Length    = 12
-	defaultSampleRate  = int32(1)
 )
 
 // TranslateTraceRequestFromReader translates an OTLP/HTTP request into Honeycomb-friendly structure
@@ -99,7 +96,7 @@ func TranslateTraceRequest(ctx context.Context, request *collectorTrace.ExportTr
 				}
 
 				// get sample rate after resource and scope attributes have been added
-				sampleRate := getSampleRate(eventAttrs)
+				sampleRate := GetSampleRate(eventAttrs)
 
 				// Now we need to wrap the eventAttrs in an event so we can specify the timestamp
 				// which is the StartTime as a time.Time object
@@ -249,56 +246,4 @@ func getSpanStatusCode(status *trace.Status) (int, bool) {
 		return int(trace.Status_STATUS_CODE_UNSET), false
 	}
 	return int(status.Code), status.Code == trace.Status_STATUS_CODE_ERROR
-}
-
-func getSampleRate(attrs map[string]interface{}) int32 {
-	sampleRateKey := getSampleRateKey(attrs)
-	if sampleRateKey == "" {
-		return defaultSampleRate
-	}
-
-	sampleRate := defaultSampleRate
-	sampleRateVal := attrs[sampleRateKey]
-	switch v := sampleRateVal.(type) {
-	case string:
-		if i, err := strconv.Atoi(v); err == nil {
-			if i < math.MaxInt32 {
-				sampleRate = int32(i)
-			} else {
-				sampleRate = math.MaxInt32
-			}
-		}
-	case int32:
-		sampleRate = v
-	case int:
-		if v < math.MaxInt32 {
-			sampleRate = int32(v)
-		} else {
-			sampleRate = math.MaxInt32
-		}
-	case int64:
-		if v < math.MaxInt32 {
-			sampleRate = int32(v)
-		} else {
-			sampleRate = math.MaxInt32
-		}
-	}
-	// To make sampleRate consistent between Otel and Honeycomb, we coerce all 0 values to 1 here
-	// A value of 1 means the span was not sampled
-	// For full explanation, see https://app.asana.com/0/365940753298424/1201973146987622/f
-	if sampleRate == 0 {
-		sampleRate = defaultSampleRate
-	}
-	delete(attrs, sampleRateKey) // remove attr
-	return sampleRate
-}
-
-func getSampleRateKey(attrs map[string]interface{}) string {
-	if _, ok := attrs["sampleRate"]; ok {
-		return "sampleRate"
-	}
-	if _, ok := attrs["SampleRate"]; ok {
-		return "SampleRate"
-	}
-	return ""
 }

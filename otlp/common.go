@@ -11,6 +11,7 @@ import (
 	"math"
 	"net/http"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -39,6 +40,8 @@ const (
 	gRPCAcceptEncodingHeader = "grpc-accept-encoding"
 	defaultServiceName       = "unknown_service"
 	unknownLogSource         = "unknown_log_source"
+
+	defaultSampleRate = int32(1)
 
 	// maxDepth is the maximum depth of a nested kvlist attribute that will be flattened.
 	// If the depth is exceeded, the attribute should be added as a JSON string instead.
@@ -579,4 +582,56 @@ func shouldTrimTraceId(traceID []byte) bool {
 		}
 	}
 	return true
+}
+
+func GetSampleRate(attrs map[string]interface{}) int32 {
+	sampleRateKey := GetSampleRateKey(attrs)
+	if sampleRateKey == "" {
+		return defaultSampleRate
+	}
+
+	sampleRate := defaultSampleRate
+	sampleRateVal := attrs[sampleRateKey]
+	switch v := sampleRateVal.(type) {
+	case string:
+		if i, err := strconv.Atoi(v); err == nil {
+			if i < math.MaxInt32 {
+				sampleRate = int32(i)
+			} else {
+				sampleRate = math.MaxInt32
+			}
+		}
+	case int32:
+		sampleRate = v
+	case int:
+		if v < math.MaxInt32 {
+			sampleRate = int32(v)
+		} else {
+			sampleRate = math.MaxInt32
+		}
+	case int64:
+		if v < math.MaxInt32 {
+			sampleRate = int32(v)
+		} else {
+			sampleRate = math.MaxInt32
+		}
+	}
+	// To make sampleRate consistent between Otel and Honeycomb, we coerce all 0 values to 1 here
+	// A value of 1 means the span was not sampled
+	// For full explanation, see https://app.asana.com/0/365940753298424/1201973146987622/f
+	if sampleRate == 0 {
+		sampleRate = defaultSampleRate
+	}
+	delete(attrs, sampleRateKey) // remove attr
+	return sampleRate
+}
+
+func GetSampleRateKey(attrs map[string]interface{}) string {
+	if _, ok := attrs["sampleRate"]; ok {
+		return "sampleRate"
+	}
+	if _, ok := attrs["SampleRate"]; ok {
+		return "SampleRate"
+	}
+	return ""
 }
