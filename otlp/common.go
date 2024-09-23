@@ -116,11 +116,9 @@ type TranslateOTLPRequestResult struct {
 }
 
 // Batch represents Honeycomb events grouped by their target dataset
-// SizeBytes is the total byte size of the OTLP structure that represents this batch
 type Batch struct {
-	Dataset   string
-	SizeBytes int
-	Events    []Event
+	Dataset string
+	Events  []Event
 }
 
 // Event represents a single Honeycomb event

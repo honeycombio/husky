@@ -208,9 +208,8 @@ func TranslateTraceRequest(ctx context.Context, request *collectorTrace.ExportTr
 			}
 		}
 		batches = append(batches, Batch{
-			Dataset:   dataset,
-			SizeBytes: proto.Size(resourceSpan),
-			Events:    events,
+			Dataset: dataset,
+			Events:  events,
 		})
 	}
 	return &TranslateOTLPRequestResult{
