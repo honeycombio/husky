@@ -1107,12 +1107,12 @@ func TestInstrumentationLibrarySpansHaveAttributeAdded(t *testing.T) {
 	assert.Equal(t, "test_span_a", first_event.Attributes["name"])
 	assert.Equal(t, "First", first_event.Attributes["library.name"])
 	assert.Equal(t, "1.1.1", first_event.Attributes["library.version"])
-	assert.NotContains(t, first_event.Attributes, "telemtetry.instrumentation_library")
+	assert.NotContains(t, first_event.Attributes, libraryNameKey)
 	second_event := events[1]
 	assert.Equal(t, "test_span_b", second_event.Attributes["name"])
 	assert.Equal(t, "io.opentelemetry.instrumentation.http", second_event.Attributes["library.name"])
 	assert.Equal(t, "2.2.2", second_event.Attributes["library.version"])
-	assert.Equal(t, true, second_event.Attributes["telemetry.instrumentation_library"])
+	assert.Equal(t, true, second_event.Attributes[libraryNameKey])
 }
 
 func TestKnownInstrumentationPrefixesReturnTrue(t *testing.T) {
