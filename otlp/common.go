@@ -78,6 +78,7 @@ var (
 		"OpenTelemetry::Instrumentation",              // Ruby
 		"go.opentelemetry.io/contrib/instrumentation", // Go
 		"@opentelemetry/instrumentation",              // JS
+		"io.opentelemetry.contrib.php",                // PHP
 	}
 )
 

@@ -1161,6 +1161,11 @@ func TestKnownInstrumentationPrefixesReturnTrue(t *testing.T) {
 			libraryName:              "@opentelemetry/instrumentation/http",
 			isInstrumentationLibrary: true,
 		},
+		{
+			name:                     "php",
+			libraryName:              "io.opentelemetry.contrib.php.slim",
+			isInstrumentationLibrary: true,
+		},
 	}
 
 	for _, test := range tests {
