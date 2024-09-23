@@ -631,7 +631,7 @@ func getSampleRate(attrs map[string]interface{}) int32 {
 	}
 	// To make sampleRate consistent between Otel and Honeycomb, we coerce all 0 values to 1 here.
 	// Negative values are also invalid and so we convert to 1
-	if sampleRate == 0 || sampleRate < 0 {
+	if sampleRate <= 0 {
 		sampleRate = defaultSampleRate
 	}
 	delete(attrs, sampleRateKey) // remove attr
