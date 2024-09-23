@@ -594,11 +594,11 @@ func getSampleRate(attrs map[string]interface{}) int32 {
 	switch v := sampleRateVal.(type) {
 	case string:
 		if i, err := strconv.ParseFloat(v, 64); err == nil {
-			j := int(i + 0.5)
-			if j < math.MaxInt32 {
-				sampleRate = int32(j)
-			} else {
+			if i >= float64(math.MaxInt32) {
 				sampleRate = math.MaxInt32
+			} else {
+				j := int(i + 0.5)
+				sampleRate = int32(j)
 			}
 		}
 	case int32:
