@@ -584,6 +584,7 @@ func shouldTrimTraceId(traceID []byte) bool {
 	return true
 }
 
+// Sample Rate must be a whole positive integer
 func getSampleRate(attrs map[string]interface{}) int32 {
 	sampleRateKey := getSampleRateKey(attrs)
 	if sampleRateKey == "" {
@@ -594,9 +595,10 @@ func getSampleRate(attrs map[string]interface{}) int32 {
 	sampleRateVal := attrs[sampleRateKey]
 	switch v := sampleRateVal.(type) {
 	case string:
-		if i, err := strconv.Atoi(v); err == nil {
-			if i < math.MaxInt32 {
-				sampleRate = int32(i)
+		if i, err := strconv.ParseFloat(v, 64); err == nil {
+			j := int(i + 0.5)
+			if j < math.MaxInt32 {
+				sampleRate = int32(j)
 			} else {
 				sampleRate = math.MaxInt32
 			}
@@ -615,11 +617,23 @@ func getSampleRate(attrs map[string]interface{}) int32 {
 		} else {
 			sampleRate = math.MaxInt32
 		}
+		// Floats get rounded and converted to ints
+	case float32:
+		if v < math.MaxInt32 {
+			sampleRate = int32(v + 0.5)
+		} else {
+			sampleRate = math.MaxInt32
+		}
+	case float64:
+		if v < math.MaxInt32 {
+			sampleRate = int32(v + 0.5)
+		} else {
+			sampleRate = math.MaxInt32
+		}
 	}
-	// To make sampleRate consistent between Otel and Honeycomb, we coerce all 0 values to 1 here
-	// A value of 1 means the span was not sampled
-	// For full explanation, see https://app.asana.com/0/365940753298424/1201973146987622/f
-	if sampleRate == 0 {
+	// To make sampleRate consistent between Otel and Honeycomb, we coerce all 0 values to 1 here.
+	// Negative values are also invalid and so we convert to 1
+	if sampleRate == 0 || sampleRate < 0 {
 		sampleRate = defaultSampleRate
 	}
 	delete(attrs, sampleRateKey) // remove attr
@@ -627,11 +641,10 @@ func getSampleRate(attrs map[string]interface{}) int32 {
 }
 
 func getSampleRateKey(attrs map[string]interface{}) string {
-	if _, ok := attrs["sampleRate"]; ok {
-		return "sampleRate"
-	}
-	if _, ok := attrs["SampleRate"]; ok {
-		return "SampleRate"
+	for key := range attrs {
+		if strings.EqualFold(key, "sampleRate") {
+			return "sampleRate"
+		}
 	}
 	return ""
 }

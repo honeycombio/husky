@@ -788,20 +788,23 @@ func TestNoSampleRateKeyReturnOne(t *testing.T) {
 }
 
 func TestCanDetectSampleRateCapitalizations(t *testing.T) {
-	t.Run("lowercase", func(t *testing.T) {
-		attrs := map[string]interface{}{
-			"sampleRate": 10,
-		}
-		key := getSampleRateKey(attrs)
-		assert.Equal(t, "sampleRate", key)
-	})
-	t.Run("uppercase", func(t *testing.T) {
-		attrs := map[string]interface{}{
-			"SampleRate": 10,
-		}
-		key := getSampleRateKey(attrs)
-		assert.Equal(t, "SampleRate", key)
-	})
+	tests := []struct {
+		name  string
+		attrs map[string]interface{}
+	}{
+		{"lowercase", map[string]interface{}{"samplerate": 10}},
+		{"UPPERCASE", map[string]interface{}{"SAMPLERATE": 10}},
+		{"camelCase", map[string]interface{}{"sampleRate": 10}},
+		{"PascalCase", map[string]interface{}{"SampleRate": 10}},
+		{"MiXeDcAsE", map[string]interface{}{"SaMpLeRaTe": 10}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			key := getSampleRateKey(tt.attrs)
+			assert.Equal(t, "sampleRate", key)
+		})
+
+	}
 }
 
 func TestGetSampleRateConversions(t *testing.T) {
@@ -813,6 +816,12 @@ func TestGetSampleRateConversions(t *testing.T) {
 		{sampleRate: "0", expected: 1},
 		{sampleRate: "1", expected: 1},
 		{sampleRate: "100", expected: 100},
+		{sampleRate: "100.0", expected: 100},
+		{sampleRate: "100.4", expected: 100},
+		{sampleRate: "100.6", expected: 101},
+		{sampleRate: "-100", expected: 1},
+		{sampleRate: "-100.0", expected: 1},
+		{sampleRate: "-100.6", expected: 1},
 		{sampleRate: "invalid", expected: 1},
 		{sampleRate: strconv.Itoa(math.MaxInt32), expected: math.MaxInt32},
 		{sampleRate: strconv.Itoa(math.MaxInt64), expected: math.MaxInt32},
@@ -820,6 +829,12 @@ func TestGetSampleRateConversions(t *testing.T) {
 		{sampleRate: 0, expected: 1},
 		{sampleRate: 1, expected: 1},
 		{sampleRate: 100, expected: 100},
+		{sampleRate: 100.0, expected: 100},
+		{sampleRate: 100.4, expected: 100},
+		{sampleRate: 100.6, expected: 101},
+		{sampleRate: -100, expected: 1},
+		{sampleRate: -100.0, expected: 1},
+		{sampleRate: -100.6, expected: 1},
 		{sampleRate: math.MaxInt32, expected: math.MaxInt32},
 		{sampleRate: math.MaxInt64, expected: math.MaxInt32},
 
