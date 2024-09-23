@@ -40,11 +40,10 @@ func TranslateTraceRequest(ctx context.Context, request *collectorTrace.ExportTr
 	if err := ri.ValidateTracesHeaders(); err != nil {
 		return nil, err
 	}
-	var batches []Batch
+	datasetEvents := map[string][]Event{}
 	for _, resourceSpan := range request.ResourceSpans {
-		var events []Event
 		resourceAttrs := getResourceAttributes(ctx, resourceSpan.Resource)
-		dataset := getDataset(ri, resourceAttrs)
+		dataset := getDataset(ri, resourceAttrs, defaultServiceName)
 
 		for _, scopeSpan := range resourceSpan.ScopeSpans {
 			scopeAttrs := getScopeAttributes(ctx, scopeSpan.Scope)
@@ -97,6 +96,9 @@ func TranslateTraceRequest(ctx context.Context, request *collectorTrace.ExportTr
 				if span.Attributes != nil {
 					AddAttributesToMap(ctx, eventAttrs, span.Attributes)
 				}
+
+				// let the dataset be overridden by the span attributes if set
+				dataset := getDataset(ri, eventAttrs, dataset)
 
 				// get sample rate after resource and scope attributes have been added
 				sampleRate := getSampleRate(eventAttrs)
@@ -160,7 +162,7 @@ func TranslateTraceRequest(ctx context.Context, request *collectorTrace.ExportTr
 						}
 					}
 
-					events = append(events, Event{
+					datasetEvents[dataset] = append(datasetEvents[dataset], Event{
 						Attributes: attrs,
 						Timestamp:  timestamp,
 						SampleRate: sampleRate,
@@ -193,20 +195,23 @@ func TranslateTraceRequest(ctx context.Context, request *collectorTrace.ExportTr
 						attrs["error"] = true
 					}
 
-					events = append(events, Event{
+					datasetEvents[dataset] = append(datasetEvents[dataset], Event{
 						Attributes: attrs,
 						Timestamp:  timestamp, // use timestamp from parent span
 						SampleRate: sampleRate,
 					})
 				}
 
-				events = append(events, Event{
+				datasetEvents[dataset] = append(datasetEvents[dataset], Event{
 					Attributes: eventAttrs,
 					Timestamp:  timestamp,
 					SampleRate: sampleRate,
 				})
 			}
 		}
+	}
+	batches := []Batch{}
+	for dataset, events := range datasetEvents {
 		batches = append(batches, Batch{
 			Dataset: dataset,
 			Events:  events,

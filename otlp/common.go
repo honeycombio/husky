@@ -323,7 +323,7 @@ func isInstrumentationLibrary(libraryName string) bool {
 	return false
 }
 
-func getDataset(ri RequestInfo, attrs map[string]interface{}) string {
+func getDataset(ri RequestInfo, attrs map[string]interface{}, defaultServiceName string) string {
 	var dataset string
 	if ri.hasClassicKey() {
 		dataset = ri.Dataset

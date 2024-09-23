@@ -406,17 +406,108 @@ func TestTranslateGrpcTraceRequestFromMultipleServices(t *testing.T) {
 	assert.Nil(t, err)
 	assert.Equal(t, proto.Size(req), result.RequestSize)
 	assert.Equal(t, 2, len(result.Batches))
-	batchA := result.Batches[0]
-	batchB := result.Batches[1]
-	assert.Equal(t, "my-service-a", batchA.Dataset)
-	assert.Equal(t, "my-service-b", batchB.Dataset)
-	eventsA := batchA.Events
-	eventsB := batchB.Events
+
+	datasetEvents := batchesToDatasetEvents(result.Batches)
+	assert.Equal(t, 2, len(datasetEvents))
+	assert.Contains(t, datasetEvents, "my-service-a")
+	assert.Contains(t, datasetEvents, "my-service-b")
+
+	eventsA := datasetEvents["my-service-a"]
+	eventsB := datasetEvents["my-service-b"]
 	assert.Equal(t, 1, len(eventsA))
 	assert.Equal(t, 1, len(eventsB))
 
 	assert.Equal(t, "test_span_a", eventsA[0].Attributes["name"])
 	assert.Equal(t, "test_span_b", eventsB[0].Attributes["name"])
+}
+
+func TestTranslateGrpcTraceRequestSpanLevelServiceName(t *testing.T) {
+	ri := RequestInfo{
+		ApiKey:      "abc123DEF456ghi789jklm",
+		Dataset:     "legacy-dataset",
+		ContentType: "application/protobuf",
+	}
+
+	req := &collectortrace.ExportTraceServiceRequest{
+		ResourceSpans: []*trace.ResourceSpans{{
+			Resource: &resource.Resource{
+				Attributes: []*common.KeyValue{{
+					Key: "service.name",
+					Value: &common.AnyValue{
+						Value: &common.AnyValue_StringValue{StringValue: "my-service-a"},
+					},
+				}},
+			},
+			ScopeSpans: []*trace.ScopeSpans{{
+				Spans: []*trace.Span{
+					{
+						TraceId: test.RandomBytes(16),
+						SpanId:  test.RandomBytes(8),
+						Name:    "test_span_a",
+						Attributes: []*common.KeyValue{{
+							Key: "service.name",
+							Value: &common.AnyValue{
+								Value: &common.AnyValue_StringValue{StringValue: "override-service-a"},
+							},
+						}},
+					},
+					{
+						TraceId: test.RandomBytes(16),
+						SpanId:  test.RandomBytes(8),
+						Name:    "test_span_one",
+						// does not override service name
+					},
+				},
+			}},
+		}, {
+			Resource: &resource.Resource{
+				Attributes: []*common.KeyValue{{
+					Key: "service.name",
+					Value: &common.AnyValue{
+						Value: &common.AnyValue_StringValue{StringValue: "my-service-b"},
+					},
+				}},
+			},
+			ScopeSpans: []*trace.ScopeSpans{{
+				Spans: []*trace.Span{
+					{
+						TraceId: test.RandomBytes(16),
+						SpanId:  test.RandomBytes(8),
+						Name:    "test_span_a",
+						// does not override service name
+					},
+					{
+						TraceId: test.RandomBytes(16),
+						SpanId:  test.RandomBytes(8),
+						Name:    "test_span_b",
+						Attributes: []*common.KeyValue{{
+							Key: "service.name",
+							Value: &common.AnyValue{
+								Value: &common.AnyValue_StringValue{StringValue: "override-service-b"},
+							},
+						}},
+					},
+				},
+			}},
+		}},
+	}
+
+	result, err := TranslateTraceRequest(context.Background(), req, ri)
+	assert.Nil(t, err)
+	assert.Equal(t, proto.Size(req), result.RequestSize)
+	assert.Equal(t, 4, len(result.Batches))
+
+	datasetEvents := batchesToDatasetEvents(result.Batches)
+	assert.Equal(t, 4, len(datasetEvents))
+	assert.Contains(t, datasetEvents, "my-service-a")
+	assert.Contains(t, datasetEvents, "my-service-b")
+	assert.Contains(t, datasetEvents, "override-service-a")
+	assert.Contains(t, datasetEvents, "override-service-b")
+
+	assert.Len(t, datasetEvents["my-service-a"], 1)
+	assert.Len(t, datasetEvents["my-service-b"], 1)
+	assert.Len(t, datasetEvents["override-service-a"], 1)
+	assert.Len(t, datasetEvents["override-service-b"], 1)
 }
 
 func TestTranslateGrpcTraceRequestFromMultipleLibraries(t *testing.T) {
@@ -703,17 +794,114 @@ func TestTranslateHttpTraceRequestFromMultipleServices(t *testing.T) {
 	assert.Equal(t, proto.Size(req), result.RequestSize)
 	assert.Equal(t, 2, len(result.Batches))
 
-	batchA := result.Batches[0]
-	batchB := result.Batches[1]
-	assert.Equal(t, "my-service-a", batchA.Dataset)
-	assert.Equal(t, "my-service-b", batchB.Dataset)
-	eventsA := batchA.Events
-	eventsB := batchB.Events
+	datasetEvents := batchesToDatasetEvents(result.Batches)
+	assert.Equal(t, 2, len(datasetEvents))
+	assert.Contains(t, datasetEvents, "my-service-a")
+	assert.Contains(t, datasetEvents, "my-service-b")
+
+	eventsA := datasetEvents["my-service-a"]
+	eventsB := datasetEvents["my-service-b"]
 	assert.Equal(t, 1, len(eventsA))
 	assert.Equal(t, 1, len(eventsB))
 
 	assert.Equal(t, "test_span_a", eventsA[0].Attributes["name"])
 	assert.Equal(t, "test_span_b", eventsB[0].Attributes["name"])
+}
+
+func TestTranslateHttpTraceRequestSpanLevelServiceName(t *testing.T) {
+	req := &collectortrace.ExportTraceServiceRequest{
+		ResourceSpans: []*trace.ResourceSpans{{
+			Resource: &resource.Resource{
+				Attributes: []*common.KeyValue{{
+					Key: "service.name",
+					Value: &common.AnyValue{
+						Value: &common.AnyValue_StringValue{StringValue: "my-service-a"},
+					},
+				}},
+			},
+			ScopeSpans: []*trace.ScopeSpans{{
+				Spans: []*trace.Span{
+					{
+						TraceId: test.RandomBytes(16),
+						SpanId:  test.RandomBytes(8),
+						Name:    "test_span_a",
+						Attributes: []*common.KeyValue{{
+							Key: "service.name",
+							Value: &common.AnyValue{
+								Value: &common.AnyValue_StringValue{StringValue: "override-service-a"},
+							},
+						}},
+					},
+					{
+						TraceId: test.RandomBytes(16),
+						SpanId:  test.RandomBytes(8),
+						Name:    "test_span_one",
+						// does not override service name
+					},
+				},
+			}},
+		}, {
+			Resource: &resource.Resource{
+				Attributes: []*common.KeyValue{{
+					Key: "service.name",
+					Value: &common.AnyValue{
+						Value: &common.AnyValue_StringValue{StringValue: "my-service-b"},
+					},
+				}},
+			},
+			ScopeSpans: []*trace.ScopeSpans{{
+				Spans: []*trace.Span{
+					{
+						TraceId: test.RandomBytes(16),
+						SpanId:  test.RandomBytes(8),
+						Name:    "test_span_a",
+						// does not override service name
+					},
+					{
+						TraceId: test.RandomBytes(16),
+						SpanId:  test.RandomBytes(8),
+						Name:    "test_span_b",
+						Attributes: []*common.KeyValue{{
+							Key: "service.name",
+							Value: &common.AnyValue{
+								Value: &common.AnyValue_StringValue{StringValue: "override-service-b"},
+							},
+						}},
+					},
+				},
+			}},
+		}},
+	}
+
+	bodyBytes, err := proto.Marshal(req)
+	assert.Nil(t, err)
+
+	buf := new(bytes.Buffer)
+	buf.Write(bodyBytes)
+
+	body := io.NopCloser(strings.NewReader(buf.String()))
+	ri := RequestInfo{
+		ApiKey:      "abc123DEF456ghi789jklm",
+		Dataset:     "legacy-dataset",
+		ContentType: "application/protobuf",
+	}
+
+	result, err := TranslateTraceRequestFromReader(context.Background(), body, ri)
+	assert.Nil(t, err)
+	assert.Equal(t, proto.Size(req), result.RequestSize)
+	assert.Equal(t, 4, len(result.Batches))
+
+	datasetEvents := batchesToDatasetEvents(result.Batches)
+	assert.Equal(t, 4, len(datasetEvents))
+	assert.Contains(t, datasetEvents, "my-service-a")
+	assert.Contains(t, datasetEvents, "my-service-b")
+	assert.Contains(t, datasetEvents, "override-service-a")
+	assert.Contains(t, datasetEvents, "override-service-b")
+
+	assert.Len(t, datasetEvents["my-service-a"], 1)
+	assert.Len(t, datasetEvents["my-service-b"], 1)
+	assert.Len(t, datasetEvents["override-service-a"], 1)
+	assert.Len(t, datasetEvents["override-service-b"], 1)
 }
 
 func TestInvalidContentTypeReturnsError(t *testing.T) {
@@ -1328,4 +1516,12 @@ func TestOtlpAttributesRecordsAttribueType(t *testing.T) {
 			assert.Equal(t, tc.telemetryFields, telemetryFields)
 		})
 	}
+}
+
+func batchesToDatasetEvents(batches []Batch) map[string][]Event {
+	datasetEvents := map[string][]Event{}
+	for _, batch := range batches {
+		datasetEvents[batch.Dataset] = batch.Events
+	}
+	return datasetEvents
 }
