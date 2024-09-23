@@ -60,7 +60,6 @@ func TestTranslateLogsRequest(t *testing.T) {
 			assert.Equal(t, 1, len(result.Batches))
 			batch := result.Batches[0]
 			assert.Equal(t, tC.expectedDataset, batch.Dataset)
-			assert.Equal(t, proto.Size(req.ResourceLogs[0]), batch.SizeBytes)
 			events := batch.Events
 			assert.Equal(t, 1, len(events))
 
@@ -132,7 +131,6 @@ func TestTranslateHttpLogsRequest(t *testing.T) {
 							assert.Equal(t, 1, len(result.Batches))
 							batch := result.Batches[0]
 							assert.Equal(t, tC.expectedDataset, batch.Dataset)
-							assert.Equal(t, proto.Size(req.ResourceLogs[0]), batch.SizeBytes)
 							events := batch.Events
 							assert.Equal(t, 1, len(events))
 
@@ -491,7 +489,6 @@ func TestLogsWithoutTraceIdDoesNotGetAnnotationType(t *testing.T) {
 	assert.Equal(t, 1, len(result.Batches))
 	batch := result.Batches[0]
 	assert.Equal(t, "my-service", batch.Dataset)
-	assert.Equal(t, proto.Size(req.ResourceLogs[0]), batch.SizeBytes)
 	events := batch.Events
 	assert.Equal(t, 1, len(events))
 

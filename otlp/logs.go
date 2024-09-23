@@ -91,7 +91,6 @@ func TranslateLogsRequest(ctx context.Context, request *collectorLogs.ExportLogs
 		}
 		batches = append(batches, Batch{
 			Dataset:   dataset,
-			SizeBytes: proto.Size(resourceLog),
 			Events:    events,
 		})
 	}
