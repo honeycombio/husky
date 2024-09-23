@@ -40,6 +40,7 @@ const (
 	gRPCAcceptEncodingHeader = "grpc-accept-encoding"
 	defaultServiceName       = "unknown_service"
 	unknownLogSource         = "unknown_log_source"
+	libraryNameKey           = "telemetry.instrumentation_library"
 
 	defaultSampleRate = int32(1)
 
@@ -306,7 +307,7 @@ func getScopeAttributes(ctx context.Context, scope *common.InstrumentationScope)
 		if scope.Name != "" {
 			attrs["library.name"] = scope.Name
 			if isInstrumentationLibrary(scope.Name) {
-				attrs["telemetry.instrumentation_library"] = true
+				attrs[libraryNameKey] = true
 			}
 		}
 		if scope.Version != "" {
