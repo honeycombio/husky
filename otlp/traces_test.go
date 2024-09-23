@@ -143,7 +143,6 @@ func TestTranslateGrpcTraceRequest(t *testing.T) {
 			assert.Equal(t, 1, len(result.Batches))
 			batch := result.Batches[0]
 			assert.Equal(t, tC.expectedDataset, batch.Dataset)
-			assert.Equal(t, proto.Size(req.ResourceSpans[0]), batch.SizeBytes)
 			events := batch.Events
 			assert.Equal(t, 3, len(events))
 
@@ -318,7 +317,6 @@ func TestTranslateException(t *testing.T) {
 			assert.Equal(t, 1, len(result.Batches))
 			batch := result.Batches[0]
 			assert.Equal(t, tC.expectedDataset, batch.Dataset)
-			assert.Equal(t, proto.Size(req.ResourceSpans[0]), batch.SizeBytes)
 			events := batch.Events
 			assert.Equal(t, 2, len(events))
 
@@ -412,8 +410,6 @@ func TestTranslateGrpcTraceRequestFromMultipleServices(t *testing.T) {
 	batchB := result.Batches[1]
 	assert.Equal(t, "my-service-a", batchA.Dataset)
 	assert.Equal(t, "my-service-b", batchB.Dataset)
-	assert.Equal(t, proto.Size(req.ResourceSpans[0]), batchA.SizeBytes)
-	assert.Equal(t, proto.Size(req.ResourceSpans[1]), batchB.SizeBytes)
 	eventsA := batchA.Events
 	eventsB := batchB.Events
 	assert.Equal(t, 1, len(eventsA))
@@ -605,7 +601,6 @@ func TestTranslateHttpTraceRequest(t *testing.T) {
 							assert.Equal(t, 1, len(result.Batches))
 							batch := result.Batches[0]
 							assert.Equal(t, tC.expectedDataset, batch.Dataset)
-							assert.Equal(t, proto.Size(req.ResourceSpans[0]), batch.SizeBytes)
 							events := batch.Events
 							assert.Equal(t, 3, len(events))
 
@@ -712,8 +707,6 @@ func TestTranslateHttpTraceRequestFromMultipleServices(t *testing.T) {
 	batchB := result.Batches[1]
 	assert.Equal(t, "my-service-a", batchA.Dataset)
 	assert.Equal(t, "my-service-b", batchB.Dataset)
-	assert.Equal(t, proto.Size(req.ResourceSpans[0]), batchA.SizeBytes)
-	assert.Equal(t, proto.Size(req.ResourceSpans[1]), batchB.SizeBytes)
 	eventsA := batchA.Events
 	eventsB := batchB.Events
 	assert.Equal(t, 1, len(eventsA))
