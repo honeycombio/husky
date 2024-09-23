@@ -783,7 +783,7 @@ func TestNoSampleRateKeyReturnOne(t *testing.T) {
 	attrs := map[string]interface{}{
 		"not_a_sample_rate": 10,
 	}
-	sampleRate := GetSampleRate(attrs)
+	sampleRate := getSampleRate(attrs)
 	assert.Equal(t, int32(1), sampleRate)
 }
 
@@ -792,14 +792,14 @@ func TestCanDetectSampleRateCapitalizations(t *testing.T) {
 		attrs := map[string]interface{}{
 			"sampleRate": 10,
 		}
-		key := GetSampleRateKey(attrs)
+		key := getSampleRateKey(attrs)
 		assert.Equal(t, "sampleRate", key)
 	})
 	t.Run("uppercase", func(t *testing.T) {
 		attrs := map[string]interface{}{
 			"SampleRate": 10,
 		}
-		key := GetSampleRateKey(attrs)
+		key := getSampleRateKey(attrs)
 		assert.Equal(t, "SampleRate", key)
 	})
 }
@@ -839,7 +839,7 @@ func TestGetSampleRateConversions(t *testing.T) {
 		attrs := map[string]interface{}{
 			"sampleRate": tc.sampleRate,
 		}
-		assert.Equal(t, tc.expected, GetSampleRate(attrs))
+		assert.Equal(t, tc.expected, getSampleRate(attrs))
 		assert.Equal(t, 0, len(attrs))
 	}
 }

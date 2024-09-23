@@ -584,8 +584,8 @@ func shouldTrimTraceId(traceID []byte) bool {
 	return true
 }
 
-func GetSampleRate(attrs map[string]interface{}) int32 {
-	sampleRateKey := GetSampleRateKey(attrs)
+func getSampleRate(attrs map[string]interface{}) int32 {
+	sampleRateKey := getSampleRateKey(attrs)
 	if sampleRateKey == "" {
 		return defaultSampleRate
 	}
@@ -626,7 +626,7 @@ func GetSampleRate(attrs map[string]interface{}) int32 {
 	return sampleRate
 }
 
-func GetSampleRateKey(attrs map[string]interface{}) string {
+func getSampleRateKey(attrs map[string]interface{}) string {
 	if _, ok := attrs["sampleRate"]; ok {
 		return "sampleRate"
 	}
