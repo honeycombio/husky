@@ -5,8 +5,10 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"io"
+	"math"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -775,4 +777,84 @@ func Test_ReadOtlpBodyTooLarge(t *testing.T) {
 	request := &collectorlogs.ExportLogsServiceRequest{}
 	err = parseOtlpRequestBody(body, "application/protobuf", "other", request, 1)
 	require.Error(t, err)
+}
+
+func TestNoSampleRateKeyReturnOne(t *testing.T) {
+	attrs := map[string]interface{}{
+		"not_a_sample_rate": 10,
+	}
+	sampleRate := getSampleRate(attrs)
+	assert.Equal(t, int32(1), sampleRate)
+}
+
+func TestCanDetectSampleRateCapitalizations(t *testing.T) {
+	tests := []struct {
+		name  string
+		attrs map[string]interface{}
+	}{
+		{"lowercase", map[string]interface{}{"samplerate": 10}},
+		{"UPPERCASE", map[string]interface{}{"SAMPLERATE": 10}},
+		{"camelCase", map[string]interface{}{"sampleRate": 10}},
+		{"PascalCase", map[string]interface{}{"SampleRate": 10}},
+		{"MiXeDcAsE", map[string]interface{}{"SaMpLeRaTe": 10}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			key := getSampleRateKey(tt.attrs)
+			assert.Equal(t, "sampleRate", key)
+		})
+
+	}
+}
+
+func TestGetSampleRateConversions(t *testing.T) {
+	testCases := []struct {
+		sampleRate interface{}
+		expected   int32
+	}{
+		{sampleRate: nil, expected: 1},
+		{sampleRate: "0", expected: 1},
+		{sampleRate: "1", expected: 1},
+		{sampleRate: "100", expected: 100},
+		{sampleRate: "100.0", expected: 100},
+		{sampleRate: "100.4", expected: 100},
+		{sampleRate: "100.6", expected: 101},
+		{sampleRate: "-100", expected: 1},
+		{sampleRate: "-100.0", expected: 1},
+		{sampleRate: "-100.6", expected: 1},
+		{sampleRate: "invalid", expected: 1},
+		{sampleRate: strconv.Itoa(math.MaxInt32), expected: math.MaxInt32},
+		{sampleRate: strconv.Itoa(math.MaxInt64), expected: math.MaxInt32},
+
+		{sampleRate: 0, expected: 1},
+		{sampleRate: 1, expected: 1},
+		{sampleRate: 100, expected: 100},
+		{sampleRate: 100.0, expected: 100},
+		{sampleRate: 100.4, expected: 100},
+		{sampleRate: 100.6, expected: 101},
+		{sampleRate: -100, expected: 1},
+		{sampleRate: -100.0, expected: 1},
+		{sampleRate: -100.6, expected: 1},
+		{sampleRate: math.MaxInt32, expected: math.MaxInt32},
+		{sampleRate: math.MaxInt64, expected: math.MaxInt32},
+
+		{sampleRate: int32(0), expected: 1},
+		{sampleRate: int32(1), expected: 1},
+		{sampleRate: int32(100), expected: 100},
+		{sampleRate: int32(math.MaxInt32), expected: math.MaxInt32},
+
+		{sampleRate: int64(0), expected: 1},
+		{sampleRate: int64(1), expected: 1},
+		{sampleRate: int64(100), expected: 100},
+		{sampleRate: int64(math.MaxInt32), expected: math.MaxInt32},
+		{sampleRate: int64(math.MaxInt64), expected: math.MaxInt32},
+	}
+
+	for _, tc := range testCases {
+		attrs := map[string]interface{}{
+			"sampleRate": tc.sampleRate,
+		}
+		assert.Equal(t, tc.expected, getSampleRate(attrs))
+		assert.Equal(t, 0, len(attrs))
+	}
 }

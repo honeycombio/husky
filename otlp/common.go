@@ -11,6 +11,7 @@ import (
 	"math"
 	"net/http"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -39,6 +40,8 @@ const (
 	gRPCAcceptEncodingHeader = "grpc-accept-encoding"
 	defaultServiceName       = "unknown_service"
 	unknownLogSource         = "unknown_log_source"
+
+	defaultSampleRate = int32(1)
 
 	// maxDepth is the maximum depth of a nested kvlist attribute that will be flattened.
 	// If the depth is exceeded, the attribute should be added as a JSON string instead.
@@ -577,4 +580,69 @@ func shouldTrimTraceId(traceID []byte) bool {
 		}
 	}
 	return true
+}
+
+// Sample Rate must be a whole positive integer
+func getSampleRate(attrs map[string]interface{}) int32 {
+	sampleRateKey := getSampleRateKey(attrs)
+	if sampleRateKey == "" {
+		return defaultSampleRate
+	}
+
+	sampleRate := defaultSampleRate
+	sampleRateVal := attrs[sampleRateKey]
+	switch v := sampleRateVal.(type) {
+	case string:
+		if i, err := strconv.ParseFloat(v, 64); err == nil {
+			if i >= float64(math.MaxInt32) {
+				sampleRate = math.MaxInt32
+			} else {
+				j := int(i + 0.5)
+				sampleRate = int32(j)
+			}
+		}
+	case int32:
+		sampleRate = v
+	case int:
+		if v < math.MaxInt32 {
+			sampleRate = int32(v)
+		} else {
+			sampleRate = math.MaxInt32
+		}
+	case int64:
+		if v < math.MaxInt32 {
+			sampleRate = int32(v)
+		} else {
+			sampleRate = math.MaxInt32
+		}
+		// Floats get rounded and converted to ints
+	case float32:
+		if v < math.MaxInt32 {
+			sampleRate = int32(v + 0.5)
+		} else {
+			sampleRate = math.MaxInt32
+		}
+	case float64:
+		if v < math.MaxInt32 {
+			sampleRate = int32(v + 0.5)
+		} else {
+			sampleRate = math.MaxInt32
+		}
+	}
+	// To make sampleRate consistent between Otel and Honeycomb, we coerce all 0 values to 1 here.
+	// Negative values are also invalid and so we convert to 1
+	if sampleRate <= 0 {
+		sampleRate = defaultSampleRate
+	}
+	delete(attrs, sampleRateKey) // remove attr
+	return sampleRate
+}
+
+func getSampleRateKey(attrs map[string]interface{}) string {
+	for key := range attrs {
+		if strings.EqualFold(key, "sampleRate") {
+			return "sampleRate"
+		}
+	}
+	return ""
 }
