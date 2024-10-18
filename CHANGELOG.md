@@ -1,5 +1,15 @@
 # Husky Changelog
 
+## 0.31.0 2024-10-18
+
+- feat: add PHP to list of telemetry libraries (#278) | [Jamie Danielson](https://github.com/JamieDanielson)
+- feat: add sample rate to logs if set (#275) | [Jamie Danielson](https://github.com/JamieDanielson)
+- chore: Remove SizeBytes from Batch struct (#276) | [Mike Goldsmith](https://github.com/MikeGoldsmith)
+- docs: update vulnerability reporting process (#269) | [Robb Kidd](https://github.com/robbkidd)
+- maint: appease codeql warning (#270) | [Alex Boten](https://github.com/codeboten)
+- maint(deps): bump google.golang.org/grpc from 1.64.0 to 1.64.1 (#271) | @dependabot
+- maint(deps): bump the minor-patch group with 2 updates (#268) | @dependabot
+
 ## 0.30.0 2024-06-05
 
 - fix: Ensure a limited reader is used when decompressing payloads (#265) | @codeboten
