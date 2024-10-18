@@ -7,6 +7,7 @@
 - chore: Remove SizeBytes from Batch struct (#276) | [Mike Goldsmith](https://github.com/MikeGoldsmith)
 - docs: update vulnerability reporting process (#269) | [Robb Kidd](https://github.com/robbkidd)
 - maint: appease codeql warning (#270) | [Alex Boten](https://github.com/codeboten)
+- maint(deps): bump the minor-patch group across 1 directory with 2 updates (#279) | @dependabot
 - maint(deps): bump google.golang.org/grpc from 1.64.0 to 1.64.1 (#271) | @dependabot
 - maint(deps): bump the minor-patch group with 2 updates (#268) | @dependabot
 
