@@ -791,17 +791,19 @@ func TestCanDetectSampleRateCapitalizations(t *testing.T) {
 	tests := []struct {
 		name  string
 		attrs map[string]interface{}
+		want  string
 	}{
-		{"lowercase", map[string]interface{}{"samplerate": 10}},
-		{"UPPERCASE", map[string]interface{}{"SAMPLERATE": 10}},
-		{"camelCase", map[string]interface{}{"sampleRate": 10}},
-		{"PascalCase", map[string]interface{}{"SampleRate": 10}},
-		{"MiXeDcAsE", map[string]interface{}{"SaMpLeRaTe": 10}},
+		{"lowercase", map[string]interface{}{"samplerate": 10}, "samplerate"},
+		{"UPPERCASE", map[string]interface{}{"SAMPLERATE": 10}, "SAMPLERATE"},
+		{"camelCase", map[string]interface{}{"sampleRate": 10}, "sampleRate"},
+		{"PascalCase", map[string]interface{}{"SampleRate": 10}, "SampleRate"},
+		{"MiXeDcAsE", map[string]interface{}{"SaMpLeRaTe": 10}, "SaMpLeRaTe"},
+		{"bad", map[string]interface{}{"sample_rate": 10}, ""},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			key := getSampleRateKey(tt.attrs)
-			assert.Equal(t, "sampleRate", key)
+			assert.Equal(t, tt.want, key)
 		})
 
 	}
