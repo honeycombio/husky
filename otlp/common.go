@@ -642,7 +642,7 @@ func getSampleRate(attrs map[string]interface{}) int32 {
 func getSampleRateKey(attrs map[string]interface{}) string {
 	for key := range attrs {
 		if strings.EqualFold(key, "sampleRate") {
-			return "sampleRate"
+			return key
 		}
 	}
 	return ""
