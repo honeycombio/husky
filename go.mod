@@ -4,12 +4,12 @@ go 1.21.0
 
 require (
 	github.com/json-iterator/go v1.1.12
-	github.com/klauspost/compress v1.17.10
+	github.com/klauspost/compress v1.17.11
 	github.com/stretchr/testify v1.9.0
 	go.opentelemetry.io/proto/otlp v0.19.0
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20240814211410-ddb44dafa142
 	google.golang.org/grpc v1.67.1
-	google.golang.org/protobuf v1.34.2
+	google.golang.org/protobuf v1.35.1
 )
 
 require (
