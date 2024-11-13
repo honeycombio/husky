@@ -1,5 +1,10 @@
 # Husky Changelog
 
+## 0.32.0 2024-11-13
+
+- fix: Return the actual key from getSampleRateKey (#282) | [Kent Quirk](https://github.com/kentquirk)
+- maint(deps): bump the minor-patch group with 2 updates (#281) | [dependabot[bot]](https://github.com/dependabot[bot])
+
 ## 0.31.0 2024-10-18
 
 - feat: add PHP to list of telemetry libraries (#278) | [Jamie Danielson](https://github.com/JamieDanielson)
