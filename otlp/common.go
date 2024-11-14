@@ -639,11 +639,26 @@ func getSampleRate(attrs map[string]interface{}) int32 {
 	return sampleRate
 }
 
+// getSampleRateKey determines if a map of attributes includes
+// one of the two recognized variations of the sample rate key name:
+//   - sampleRate (preferred)
+//   - SampleRate
+//
+// Returns the key name if found, or an empty string if not.
 func getSampleRateKey(attrs map[string]interface{}) string {
-	for key := range attrs {
-		if strings.EqualFold(key, "sampleRate") {
-			return key
-		}
+	// Why only two keys?
+	//  1. 1-2 map lookups is faster than looping over the keys.
+	//  2. An explicit order of precedence.
+	//
+	// Limiting to two variations with an order of precedence
+	// dramatically simplifies troubleshooting unexpected sample
+	// rate behavior if somehow data were to have multiple sampleRate
+	// keys with different capitalization variations.
+	if _, ok := attrs["sampleRate"]; ok {
+		return "sampleRate"
+	}
+	if _, ok := attrs["SampleRate"]; ok {
+		return "SampleRate"
 	}
 	return ""
 }
