@@ -787,18 +787,20 @@ func TestNoSampleRateKeyReturnOne(t *testing.T) {
 	assert.Equal(t, int32(1), sampleRate)
 }
 
-func TestCanDetectSampleRateCapitalizations(t *testing.T) {
+func TestSampleRateKeyVariations(t *testing.T) {
 	tests := []struct {
 		name  string
 		attrs map[string]interface{}
 		want  string
 	}{
-		{"lowercase", map[string]interface{}{"samplerate": 10}, "samplerate"},
-		{"UPPERCASE", map[string]interface{}{"SAMPLERATE": 10}, "SAMPLERATE"},
-		{"camelCase", map[string]interface{}{"sampleRate": 10}, "sampleRate"},
-		{"PascalCase", map[string]interface{}{"SampleRate": 10}, "SampleRate"},
-		{"MiXeDcAsE", map[string]interface{}{"SaMpLeRaTe": 10}, "SaMpLeRaTe"},
-		{"bad", map[string]interface{}{"sample_rate": 10}, ""},
+		// ACCEPTED - only accept the two variations we've done in the past
+		{"ACCEPTED/camelCase", map[string]interface{}{"sampleRate": 10}, "sampleRate"},
+		{"ACCEPTED/PascalCase", map[string]interface{}{"SampleRate": 10}, "SampleRate"},
+		// IGNORED - other variations will be ignored
+		{"INGORED/lowercase", map[string]interface{}{"samplerate": 10}, ""},
+		{"INGORED/UPPERCASE", map[string]interface{}{"SAMPLERATE": 10}, ""},
+		{"INGORED/MiXeDcAsE", map[string]interface{}{"SaMpLeRaTe": 10}, ""},
+		{"INGORED/snake_case", map[string]interface{}{"sample_rate": 10}, ""},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
