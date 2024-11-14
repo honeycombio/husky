@@ -1,5 +1,9 @@
 # Husky Changelog
 
+## 0.33.0 2024-11-14
+
+- fix: revert back to recognize only "sampleRate" or "SampleRate" attributes (#284) | [Robb Kidd](https://github.com/robbkidd)
+
 ## 0.32.0 2024-11-13
 
 - fix: Return the actual key from getSampleRateKey (#282) | [Kent Quirk](https://github.com/kentquirk)
