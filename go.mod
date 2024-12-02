@@ -1,6 +1,8 @@
 module github.com/honeycombio/husky
 
-go 1.22.7
+go 1.21.0
+
+toolchain go1.22.9
 
 require (
 	github.com/json-iterator/go v1.1.12
@@ -8,7 +10,7 @@ require (
 	github.com/stretchr/testify v1.10.0
 	go.opentelemetry.io/proto/otlp v0.19.0
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20241118233622-e639e219e697
-	google.golang.org/grpc v1.68.0
+	google.golang.org/grpc v1.67.1
 	google.golang.org/protobuf v1.35.2
 )
 
