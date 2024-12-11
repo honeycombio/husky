@@ -862,3 +862,11 @@ func TestGetSampleRateConversions(t *testing.T) {
 		assert.Equal(t, 0, len(attrs))
 	}
 }
+
+func TestAddAttributesToMapAreNotHTMLEncoded(t *testing.T) {
+	key := "my-html"
+	val := "<html><body><h1>hello</h1></body></html>"
+	attrs := map[string]interface{}{}
+	addAttributeToMapAsJson(attrs, key, &common.AnyValue{Value: &common.AnyValue_StringValue{StringValue: val}})
+	assert.Equal(t, "\"<html><body><h1>hello</h1></body></html>\"\n", attrs[key])
+}

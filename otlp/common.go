@@ -460,12 +460,16 @@ func addAttributeToMap(ctx context.Context, result map[string]interface{}, key s
 // addAttributeToMapAsJson adds an attribute to a map as a JSON string.
 // Uses limitedWriter to ensure that the string can't be bigger than the maximum field size and
 // helps reduce allocation and copying.
-// Note that an Encoder emits JSON with a trailing newline because it's intended for use
+// Notes:
+// - The Encoder emits JSON with a trailing newline because it's intended for use
 // in streaming. This is correct but sometimes surprising and the tests need to expect it.
+// - The encoder has HTML escaping disabled.
 func addAttributeToMapAsJson(attrs map[string]interface{}, key string, value *common.AnyValue) int {
 	val := getMarshallableValue(value)
 	w := newLimitedWriter(fieldSizeMax)
-	if err := json.NewEncoder(w).Encode(val); err != nil {
+	e := json.NewEncoder(w)
+	e.SetEscapeHTML(false)
+	if err := e.Encode(val); err != nil {
 		// TODO: log error or report error when we have a way to do so
 		return 0
 	}
