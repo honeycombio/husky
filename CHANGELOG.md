@@ -1,5 +1,10 @@
 # Husky Changelog
 
+## 0.34.0 2024-12-11
+
+- fix: Disable HTML escaping when JSON encoding values (#288) | @MikeGoldsmith
+- maint(deps): bump the minor-patch group with 3 updates (#287) | @dependabot
+
 ## 0.33.0 2024-11-14
 
 - fix: revert back to recognize only "sampleRate" or "SampleRate" attributes (#284) | [Robb Kidd](https://github.com/robbkidd)
