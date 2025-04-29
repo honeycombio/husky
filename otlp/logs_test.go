@@ -465,19 +465,14 @@ func TestTranslateLogsRequestFromReaderSized(t *testing.T) {
 		ContentType: "application/protobuf",
 	}
 
+	result, err := TranslateLogsRequestFromReaderSized(context.Background(), bodyValid, ri, int64(len(bodyBytes)*2))
+	assert.Nil(t, err)
+	assert.Equal(t, proto.Size(req), result.RequestSize)
+
 	bufTooLarge := new(bytes.Buffer)
 	bufTooLarge.Write(bodyBytes)
 
 	bodyTooLarge := io.NopCloser(strings.NewReader(bufTooLarge.String()))
-	ri = RequestInfo{
-		ApiKey:      "abc123DEF456ghi789jklm",
-		Dataset:     "legacy-dataset",
-		ContentType: "application/protobuf",
-	}
-
-	result, err := TranslateLogsRequestFromReaderSized(context.Background(), bodyValid, ri, int64(len(bodyBytes)*2))
-	assert.Nil(t, err)
-	assert.Equal(t, proto.Size(req), result.RequestSize)
 
 	_, err = TranslateLogsRequestFromReaderSized(context.Background(), bodyTooLarge, ri, int64(len(bodyBytes)/10))
 	assert.NotNil(t, err)
