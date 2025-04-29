@@ -2,7 +2,6 @@ package otlp
 
 import (
 	"context"
-	"encoding/hex"
 	"io"
 	"time"
 
@@ -169,7 +168,7 @@ func TranslateTraceRequest(ctx context.Context, request *collectorTrace.ExportTr
 						"trace.trace_id":       traceID,
 						"trace.parent_id":      spanID,
 						"trace.link.trace_id":  BytesToTraceID(slink.TraceId),
-						"trace.link.span_id":   hex.EncodeToString(slink.SpanId),
+						"trace.link.span_id":   BytesToSpanID(slink.SpanId),
 						"parent_name":          span.Name,
 						"meta.annotation_type": "link",
 						"meta.signal_type":     "trace",
