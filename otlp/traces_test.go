@@ -714,6 +714,70 @@ func TestTranslateHttpTraceRequestFromMultipleServices(t *testing.T) {
 	assert.Equal(t, "test_span_b", eventsB[0].Attributes["name"])
 }
 
+func TestTranslateTraceRequestFromReaderSized(t *testing.T) {
+	req := &collectortrace.ExportTraceServiceRequest{
+		ResourceSpans: []*trace.ResourceSpans{{
+			Resource: &resource.Resource{
+				Attributes: []*common.KeyValue{{
+					Key: "service.name",
+					Value: &common.AnyValue{
+						Value: &common.AnyValue_StringValue{StringValue: "my-service-a"},
+					},
+				}},
+			},
+			ScopeSpans: []*trace.ScopeSpans{{
+				Spans: []*trace.Span{{
+					TraceId: test.RandomBytes(16),
+					SpanId:  test.RandomBytes(8),
+					Name:    "test_span_a",
+				}},
+			}},
+		}, {
+			Resource: &resource.Resource{
+				Attributes: []*common.KeyValue{{
+					Key: "service.name",
+					Value: &common.AnyValue{
+						Value: &common.AnyValue_StringValue{StringValue: "my-service-b"},
+					},
+				}},
+			},
+			ScopeSpans: []*trace.ScopeSpans{{
+				Spans: []*trace.Span{{
+					TraceId: test.RandomBytes(16),
+					SpanId:  test.RandomBytes(8),
+					Name:    "test_span_b",
+				}},
+			}},
+		}},
+	}
+
+	bodyBytes, err := proto.Marshal(req)
+	assert.Nil(t, err)
+
+	bufValid := new(bytes.Buffer)
+	bufValid.Write(bodyBytes)
+
+	bodyValid := io.NopCloser(strings.NewReader(bufValid.String()))
+	ri := RequestInfo{
+		ApiKey:      "abc123DEF456ghi789jklm",
+		Dataset:     "legacy-dataset",
+		ContentType: "application/protobuf",
+	}
+
+	result, err := TranslateTraceRequestFromReaderSized(context.Background(), bodyValid, ri, int64(len(bodyBytes)*2))
+	assert.Nil(t, err)
+	assert.Equal(t, proto.Size(req), result.RequestSize)
+
+	bufTooLarge := new(bytes.Buffer)
+	bufTooLarge.Write(bodyBytes)
+
+	bodyTooLarge := io.NopCloser(strings.NewReader(bufTooLarge.String()))
+
+	_, err = TranslateTraceRequestFromReaderSized(context.Background(), bodyTooLarge, ri, int64(len(bodyBytes)/10))
+	assert.NotNil(t, err)
+	assert.Equal(t, ErrFailedParseBody, err)
+}
+
 func TestInvalidContentTypeReturnsError(t *testing.T) {
 	bodyBytes, _ := proto.Marshal(&collectortrace.ExportTraceServiceRequest{})
 	body := io.NopCloser(bytes.NewReader(bodyBytes))

@@ -430,6 +430,55 @@ func TestCanExtractBody(t *testing.T) {
 	}
 }
 
+func TestTranslateLogsRequestFromReaderSized(t *testing.T) {
+	startTimestamp := time.Now()
+	req := &collectorlogs.ExportLogsServiceRequest{
+		ResourceLogs: []*logs.ResourceLogs{{
+			Resource: &resource.Resource{
+				Attributes: []*common.KeyValue{{
+					Key: "service.name",
+					Value: &common.AnyValue{
+						Value: &common.AnyValue_StringValue{StringValue: "my-service"},
+					},
+				}},
+			},
+			ScopeLogs: []*logs.ScopeLogs{{
+				LogRecords: []*logs.LogRecord{{
+					TimeUnixNano:   uint64(startTimestamp.Nanosecond()),
+					SeverityText:   "test_severity_text",
+					SeverityNumber: logs.SeverityNumber_SEVERITY_NUMBER_DEBUG,
+				}},
+			}},
+		}},
+	}
+
+	bodyBytes, err := proto.Marshal(req)
+	assert.Nil(t, err)
+
+	bufValid := new(bytes.Buffer)
+	bufValid.Write(bodyBytes)
+
+	bodyValid := io.NopCloser(strings.NewReader(bufValid.String()))
+	ri := RequestInfo{
+		ApiKey:      "abc123DEF456ghi789jklm",
+		Dataset:     "legacy-dataset",
+		ContentType: "application/protobuf",
+	}
+
+	result, err := TranslateLogsRequestFromReaderSized(context.Background(), bodyValid, ri, int64(len(bodyBytes)*2))
+	assert.Nil(t, err)
+	assert.Equal(t, proto.Size(req), result.RequestSize)
+
+	bufTooLarge := new(bytes.Buffer)
+	bufTooLarge.Write(bodyBytes)
+
+	bodyTooLarge := io.NopCloser(strings.NewReader(bufTooLarge.String()))
+
+	_, err = TranslateLogsRequestFromReaderSized(context.Background(), bodyTooLarge, ri, int64(len(bodyBytes)/10))
+	assert.NotNil(t, err)
+	assert.Equal(t, ErrFailedParseBody, err)
+}
+
 func TestLogsRequestWithInvalidContentTypeReturnsError(t *testing.T) {
 	req := &collectorlogs.ExportLogsServiceRequest{}
 	ri := RequestInfo{

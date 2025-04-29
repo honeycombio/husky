@@ -21,11 +21,18 @@ const (
 // TranslateTraceRequestFromReader translates an OTLP/HTTP request into Honeycomb-friendly structure
 // RequestInfo is the parsed information from the HTTP headers
 func TranslateTraceRequestFromReader(ctx context.Context, body io.ReadCloser, ri RequestInfo) (*TranslateOTLPRequestResult, error) {
+	return TranslateTraceRequestFromReaderSized(ctx, body, ri, defaultMaxRequestBodySize)
+}
+
+// TranslateTraceRequestFromReaderSized translates an OTLP/HTTP request into Honeycomb-friendly structure
+// RequestInfo is the parsed information from the HTTP headers
+// maxSize is the maximum size of the request body in bytes
+func TranslateTraceRequestFromReaderSized(ctx context.Context, body io.ReadCloser, ri RequestInfo, maxSize int64) (*TranslateOTLPRequestResult, error) {
 	if err := ri.ValidateTracesHeaders(); err != nil {
 		return nil, err
 	}
 	request := &collectorTrace.ExportTraceServiceRequest{}
-	if err := parseOtlpRequestBody(body, ri.ContentType, ri.ContentEncoding, request, defaultMaxRequestBodySize); err != nil {
+	if err := parseOtlpRequestBody(body, ri.ContentType, ri.ContentEncoding, request, maxSize); err != nil {
 		return nil, ErrFailedParseBody
 	}
 	return TranslateTraceRequest(ctx, request, ri)
