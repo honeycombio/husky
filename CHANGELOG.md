@@ -1,5 +1,12 @@
 # Husky Changelog
 
+## 0.35.0 2025-05-01
+
+- feat: Allow OTLP/HTTP request translation to be provided max request body size (#297) | [Josh Parsons](https://github.com/JoshParsons)
+- maint(deps): bump the minor-patch group across 1 directory with 3 updates (#295) | [dependabot[bot]](https://github.com/dependabot[bot])
+- maint(deps): bump golang.org/x/net from 0.30.0 to 0.33.0 (#291) | [dependabot[bot]](https://github.com/dependabot[bot])
+- maint(deps): bump the minor-patch group with 2 updates (#290) | [dependabot[bot]](https://github.com/dependabot[bot])
+
 ## 0.34.0 2024-12-11
 
 - fix: Disable HTML escaping when JSON encoding values (#288) | @MikeGoldsmith
