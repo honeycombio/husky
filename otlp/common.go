@@ -683,12 +683,12 @@ func getSampleRateFromOTelSamplingThreshold(traceState string) (int32, bool) {
 	// get the tvalue from the trace state pairs
 	th, ok := pairs["th"]
 	if !ok {
-		return 0, false
+		return defaultSampleRate, false
 	}
 	// get the sampling threshold
 	t, err := sampling.TValueToThreshold(th)
 	if err != nil {
-		return 0, false
+		return defaultSampleRate, false
 	}
 
 	// randomly sample between the celling and floor values of the adjusted count
