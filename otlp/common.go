@@ -691,15 +691,35 @@ func getSampleRateFromOTelSamplingThreshold(traceState string) (int32, bool) {
 		return defaultSampleRate, false
 	}
 
-	// randomly sample between the celling and floor values of the adjusted count
-	// this helps to resolve rounding issues for numbers that aren't easily
-	// represented as a float
-	min := int32(math.Floor(t.AdjustedCount()))
-	max := int32(math.Ceil(t.AdjustedCount()))
-	sampleRate := rand.Int32N(max-min+1) + min
+	// It's possible that the adjusted count is not an integer, but Honeycomb
+	// requires a whole number. So we randomly return either the floor or
+	// ceiling based on the actual value of the adjusted count.
+	// So if the adjusted count is 10.8, we will return either 10 (with 20% probability)
+	// or 11 (with 80% probability).
+	// The net effect is that effective sample rate over a large number of samples will approximate
+	// the adjusted count.
+	locount := int32(math.Floor(t.AdjustedCount()))
+	// if we're over 100, we're within 1% of the adjusted count so don't bother
+	// doing the randomization. This is a performance optimization.
+	if locount > 100 {
+		return locount, true
+	}
+	hicount := int32(math.Ceil(t.AdjustedCount()))
+	// if hicount == locount, then we don't need to randomize
+	if hicount == locount {
+		return locount, true
+	}
 
-	// return the adjusted count as sample rate
-	return sampleRate, true
+	// Calculate the probability of getting the higher count based on the adjusted count
+	prob := t.AdjustedCount() - float64(locount)
+	// Generate a random number between 0 and 1
+	if rand.Float64() < prob {
+		// return the higher count
+		return hicount, true
+	} else {
+		// return the lower count
+		return locount, true
+	}
 }
 
 // getSampleRateKey determines if a map of attributes includes
