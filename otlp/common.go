@@ -592,7 +592,7 @@ func shouldTrimTraceId(traceID []byte) bool {
 // Sample Rate must be a whole positive integer
 func getSampleRate(attrs map[string]any, traceState string) int32 {
 	// Use Honeycomb's sampleRate attribute if it exists
-	sampleRate, ok := getSampleRateFromHoneycombAttribue(attrs)
+	sampleRate, ok := getSampleRateFromHoneycombAttribute(attrs)
 	if ok {
 		return sampleRate
 	}
@@ -605,10 +605,10 @@ func getSampleRate(attrs map[string]any, traceState string) int32 {
 	return defaultSampleRate
 }
 
-// getSampleRateFromHoneycombAttribue returns the sample rate from the attributes map.
+// getSampleRateFromHoneycombAttribute returns the sample rate from the attributes map.
 // The sample rate is an int32 that is used to determine the sampling rate
 // for the event.
-func getSampleRateFromHoneycombAttribue(attrs map[string]any) (int32, bool) {
+func getSampleRateFromHoneycombAttribute(attrs map[string]any) (int32, bool) {
 	sampleRateKey := getSampleRateKey(attrs)
 	if sampleRateKey == "" {
 		return defaultSampleRate, false
