@@ -12,6 +12,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/sampling"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	collectorlogs "go.opentelemetry.io/proto/otlp/collector/logs/v1"
@@ -783,7 +784,7 @@ func TestNoSampleRateKeyReturnOne(t *testing.T) {
 	attrs := map[string]interface{}{
 		"not_a_sample_rate": 10,
 	}
-	sampleRate := getSampleRate(attrs)
+	sampleRate := getSampleRate(attrs, "")
 	assert.Equal(t, int32(1), sampleRate)
 }
 
@@ -858,7 +859,7 @@ func TestGetSampleRateConversions(t *testing.T) {
 		attrs := map[string]interface{}{
 			"sampleRate": tc.sampleRate,
 		}
-		assert.Equal(t, tc.expected, getSampleRate(attrs))
+		assert.Equal(t, tc.expected, getSampleRate(attrs, ""))
 		assert.Equal(t, 0, len(attrs))
 	}
 }
@@ -869,4 +870,36 @@ func TestAddAttributesToMapAreNotHTMLEncoded(t *testing.T) {
 	attrs := map[string]interface{}{}
 	addAttributeToMapAsJson(attrs, key, &common.AnyValue{Value: &common.AnyValue_StringValue{StringValue: val}})
 	assert.Equal(t, "\"<html><body><h1>hello</h1></body></html>\"\n", attrs[key])
+}
+
+func TestOTelSamplingThreshold(t *testing.T) {
+	tests := []struct {
+		name        string
+		probability float64
+		expected    int32
+	}{
+		{"100% - always sample", 1, 1},
+		{"25% - 1/4", 0.25, 4},
+		{"10% - 1/10", 0.1, 10},
+		{"1% - 1/100", 0.01, 100},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			threshold, err := sampling.ProbabilityToThreshold(tt.probability)
+			assert.NoError(t, err)
+			traceState := "th=" + threshold.TValue()
+			sampleRate, ok := getSampleRateFromOTelSamplingThreshold(traceState)
+			assert.True(t, ok)
+			assert.Equal(t, tt.expected, sampleRate)
+		})
+	}
+}
+
+func TestSampleRatePrefersHoneycombAttribute(t *testing.T) {
+	attrs := map[string]interface{}{
+		"sampleRate": 10,
+	}
+	sampleRate := getSampleRate(attrs, "th=c") // "th=c" is a sampling threshold of 1/4 or 25%
+	assert.Equal(t, int32(10), sampleRate)
 }

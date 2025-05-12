@@ -29,6 +29,8 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
+
+	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/sampling"
 )
 
 const (
@@ -588,10 +590,28 @@ func shouldTrimTraceId(traceID []byte) bool {
 }
 
 // Sample Rate must be a whole positive integer
-func getSampleRate(attrs map[string]interface{}) int32 {
+func getSampleRate(attrs map[string]any, traceState string) int32 {
+	// Use Honeycomb's sampleRate attribute if it exists
+	sampleRate, ok := getSampleRateFromHoneycombAttribue(attrs)
+	if ok {
+		return sampleRate
+	}
+	// Use OpenTelemetry's sampling probability if it exists
+	sampleRate, ok = getSampleRateFromOTelSamplingThreshold(traceState)
+	if ok {
+		return sampleRate
+	}
+	// Otherwise, use the default sample rate
+	return defaultSampleRate
+}
+
+// getSampleRateFromHoneycombAttribue returns the sample rate from the attributes map.
+// The sample rate is an int32 that is used to determine the sampling rate
+// for the event.
+func getSampleRateFromHoneycombAttribue(attrs map[string]any) (int32, bool) {
 	sampleRateKey := getSampleRateKey(attrs)
 	if sampleRateKey == "" {
-		return defaultSampleRate
+		return defaultSampleRate, false
 	}
 
 	sampleRate := defaultSampleRate
@@ -640,7 +660,37 @@ func getSampleRate(attrs map[string]interface{}) int32 {
 		sampleRate = defaultSampleRate
 	}
 	delete(attrs, sampleRateKey) // remove attr
-	return sampleRate
+	return sampleRate, true
+}
+
+// getSampleRateFromOTelSamplingThreshold returns the sampling threshold from the OpenTelemetry
+// trace state. Sampling threshold is a string that represents the sampling
+// probability using the OpenTelemetry sampling probability format.
+//
+// See https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/trace/tracestate-probability-sampling.md
+func getSampleRateFromOTelSamplingThreshold(traceState string) (int32, bool) {
+	// split the trace state into key-value pairs
+	kvPairs := strings.Split(traceState, ",")
+	pairs := make(map[string]string, len(kvPairs))
+	for _, kv := range kvPairs {
+		kvPair := strings.Split(kv, "=")
+		if len(kvPair) != 2 {
+			continue
+		}
+		pairs[kvPair[0]] = kvPair[1]
+	}
+	// get the tvalue from the trace state pairs
+	th, ok := pairs["th"]
+	if !ok {
+		return 0, false
+	}
+	// get the sampling threshold
+	t, err := sampling.TValueToThreshold(th)
+	if err != nil {
+		return 0, false
+	}
+	// return the adjusted count as sample rate
+	return int32(t.AdjustedCount()), true
 }
 
 // getSampleRateKey determines if a map of attributes includes

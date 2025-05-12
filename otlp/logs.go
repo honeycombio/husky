@@ -84,7 +84,7 @@ func TranslateLogsRequest(ctx context.Context, request *collectorLogs.ExportLogs
 				}
 
 				// get sample rate after resource and scope attributes have been added
-				sampleRate := getSampleRate(attrs)
+				sampleRate := getSampleRate(attrs, "")
 
 				// Now we need to wrap the eventAttrs in an event so we can specify the timestamp
 				// which is the StartTime as a time.Time object
