@@ -670,7 +670,7 @@ func getSampleRateFromHoneycombAttribute(attrs map[string]any) (int32, bool) {
 // See https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/trace/tracestate-probability-sampling.md
 func getSampleRateFromOTelSamplingThreshold(traceState string) (int32, bool) {
 	// split the trace state into key-value pairs
-	kvPairs := strings.Split(traceState, ",")
+	kvPairs := strings.Split(traceState, ";")
 	pairs := make(map[string]string, len(kvPairs))
 	for _, kv := range kvPairs {
 		kvPair := strings.Split(kv, "=")
