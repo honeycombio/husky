@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"math/rand/v2"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -689,8 +690,16 @@ func getSampleRateFromOTelSamplingThreshold(traceState string) (int32, bool) {
 	if err != nil {
 		return 0, false
 	}
+
+	// randomly sample between the celling and floor values of the adjusted count
+	// this helps to resolve rounding issues for numbers that aren't easily
+	// represented as a float
+	min := int32(math.Floor(t.AdjustedCount()))
+	max := int32(math.Ceil(t.AdjustedCount()))
+	sampleRate := rand.Int32N(max-min+1) + min
+
 	// return the adjusted count as sample rate
-	return int32(t.AdjustedCount()), true
+	return sampleRate, true
 }
 
 // getSampleRateKey determines if a map of attributes includes
