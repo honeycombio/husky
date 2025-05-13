@@ -12,6 +12,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/sampling"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	collectorlogs "go.opentelemetry.io/proto/otlp/collector/logs/v1"
@@ -783,7 +784,7 @@ func TestNoSampleRateKeyReturnOne(t *testing.T) {
 	attrs := map[string]interface{}{
 		"not_a_sample_rate": 10,
 	}
-	sampleRate := getSampleRate(attrs)
+	sampleRate := getSampleRate(attrs, "")
 	assert.Equal(t, int32(1), sampleRate)
 }
 
@@ -858,7 +859,7 @@ func TestGetSampleRateConversions(t *testing.T) {
 		attrs := map[string]interface{}{
 			"sampleRate": tc.sampleRate,
 		}
-		assert.Equal(t, tc.expected, getSampleRate(attrs))
+		assert.Equal(t, tc.expected, getSampleRate(attrs, ""))
 		assert.Equal(t, 0, len(attrs))
 	}
 }
@@ -869,4 +870,55 @@ func TestAddAttributesToMapAreNotHTMLEncoded(t *testing.T) {
 	attrs := map[string]interface{}{}
 	addAttributeToMapAsJson(attrs, key, &common.AnyValue{Value: &common.AnyValue_StringValue{StringValue: val}})
 	assert.Equal(t, "\"<html><body><h1>hello</h1></body></html>\"\n", attrs[key])
+}
+
+func TestOTelSamplingThreshold(t *testing.T) {
+	// the min and max values are to compensate for variations in the
+	// sampling probability to sample rate conversion where a float
+	// value is rounded to the nearest integer
+	tests := []struct {
+		name                     string
+		probability              float64
+		expectedMin, expectedMax int32
+	}{
+		{"100% - 1/1", 1, 1, 1},
+		{"75% - 1/2", 0.75, 1, 2},
+		{"50% - 1/2", 0.5, 2, 2},
+		{"30% - 1/3", 0.3, 3, 4},
+		{"25% - 1/4", 0.25, 4, 4},
+		{"20% - 1/5", 0.2, 5, 5},
+		{"10% - 1/10", 0.1, 10, 10},
+		{"5% - 1/20", 0.05, 20, 20},
+		{"1% - 1/100", 0.01, 100, 100},
+		{"0.1% - 1/1000", 0.001, 999, 999},
+		{"0.01% - 1/10000", 0.0001, 9999, 9999},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			threshold, err := sampling.ProbabilityToThreshold(tt.probability)
+			assert.NoError(t, err)
+
+			traceState := "th=" + threshold.TValue()
+
+			results := map[int32]int{}
+			for range 100 {
+				sampleRate, ok := getSampleRateFromOTelSamplingThreshold(traceState)
+				assert.True(t, ok)
+				assert.GreaterOrEqual(t, sampleRate, tt.expectedMin)
+				assert.LessOrEqual(t, sampleRate, tt.expectedMax)
+				results[sampleRate]++
+			}
+			assert.Greater(t, results[tt.expectedMin], 0)
+			assert.Greater(t, results[tt.expectedMax], 0)
+		})
+	}
+}
+
+func TestSampleRatePrefersHoneycombAttribute(t *testing.T) {
+	attrs := map[string]interface{}{
+		"sampleRate": 10,
+	}
+	sampleRate := getSampleRate(attrs, "th=c") // "th=c" is a sampling threshold of 1/4 or 25%
+	assert.Equal(t, int32(10), sampleRate)
 }

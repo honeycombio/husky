@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"math/rand/v2"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -29,6 +30,8 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
+
+	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/sampling"
 )
 
 const (
@@ -588,10 +591,28 @@ func shouldTrimTraceId(traceID []byte) bool {
 }
 
 // Sample Rate must be a whole positive integer
-func getSampleRate(attrs map[string]interface{}) int32 {
+func getSampleRate(attrs map[string]any, traceState string) int32 {
+	// Use Honeycomb's sampleRate attribute if it exists
+	sampleRate, ok := getSampleRateFromHoneycombAttribute(attrs)
+	if ok {
+		return sampleRate
+	}
+	// Use OpenTelemetry's sampling probability if it exists
+	sampleRate, ok = getSampleRateFromOTelSamplingThreshold(traceState)
+	if ok {
+		return sampleRate
+	}
+	// Otherwise, use the default sample rate
+	return defaultSampleRate
+}
+
+// getSampleRateFromHoneycombAttribute returns the sample rate from the attributes map.
+// The sample rate is an int32 that is used to determine the sampling rate
+// for the event.
+func getSampleRateFromHoneycombAttribute(attrs map[string]any) (int32, bool) {
 	sampleRateKey := getSampleRateKey(attrs)
 	if sampleRateKey == "" {
-		return defaultSampleRate
+		return defaultSampleRate, false
 	}
 
 	sampleRate := defaultSampleRate
@@ -640,7 +661,65 @@ func getSampleRate(attrs map[string]interface{}) int32 {
 		sampleRate = defaultSampleRate
 	}
 	delete(attrs, sampleRateKey) // remove attr
-	return sampleRate
+	return sampleRate, true
+}
+
+// getSampleRateFromOTelSamplingThreshold returns the sampling threshold from the OpenTelemetry
+// trace state. Sampling threshold is a string that represents the sampling
+// probability using the OpenTelemetry sampling probability format.
+//
+// See https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/trace/tracestate-probability-sampling.md
+func getSampleRateFromOTelSamplingThreshold(traceState string) (int32, bool) {
+	// split the trace state into key-value pairs
+	kvPairs := strings.Split(traceState, ";")
+	pairs := make(map[string]string, len(kvPairs))
+	for _, kv := range kvPairs {
+		kvPair := strings.Split(kv, "=")
+		if len(kvPair) != 2 {
+			continue
+		}
+		pairs[kvPair[0]] = kvPair[1]
+	}
+	// get the tvalue from the trace state pairs
+	th, ok := pairs["th"]
+	if !ok {
+		return defaultSampleRate, false
+	}
+	// get the sampling threshold
+	t, err := sampling.TValueToThreshold(th)
+	if err != nil {
+		return defaultSampleRate, false
+	}
+
+	// It's possible that the adjusted count is not an integer, but Honeycomb
+	// requires a whole number. So we randomly return either the floor or
+	// ceiling based on the actual value of the adjusted count.
+	// So if the adjusted count is 10.8, we will return either 10 (with 20% probability)
+	// or 11 (with 80% probability).
+	// The net effect is that effective sample rate over a large number of samples will approximate
+	// the adjusted count.
+	locount := int32(math.Floor(t.AdjustedCount()))
+	// if we're over 100, we're within 1% of the adjusted count so don't bother
+	// doing the randomization. This is a performance optimization.
+	if locount > 100 {
+		return locount, true
+	}
+	hicount := int32(math.Ceil(t.AdjustedCount()))
+	// if hicount == locount, then we don't need to randomize
+	if hicount == locount {
+		return locount, true
+	}
+
+	// Calculate the probability of getting the higher count based on the adjusted count
+	prob := t.AdjustedCount() - float64(locount)
+	// Generate a random number between 0 and 1
+	if rand.Float64() < prob {
+		// return the higher count
+		return hicount, true
+	} else {
+		// return the lower count
+		return locount, true
+	}
 }
 
 // getSampleRateKey determines if a map of attributes includes
