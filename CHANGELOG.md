@@ -1,5 +1,9 @@
 # Husky Changelog
 
+## 0.36.0 2025-05-13
+
+- feat: Add support for OTel sampling probability (#301) | @MikeGoldsmith
+
 ## 0.35.0 2025-05-01
 
 - feat: Allow OTLP/HTTP request translation to be provided max request body size (#297) | [Josh Parsons](https://github.com/JoshParsons)
