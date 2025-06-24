@@ -1,5 +1,10 @@
 # Husky Changelog
 
+## 0.37.0 2025-06-24
+
+- feat: Add the JS honeycomb prefix (#304) | @martin308
+- maint(deps): bump the minor-patch group with 2 updates (#303) | [dependabot[bot]](https://github.com/dependabot[bot])
+
 ## 0.36.0 2025-05-13
 
 - feat: Add support for OTel sampling probability (#301) | @MikeGoldsmith
