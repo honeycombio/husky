@@ -81,6 +81,7 @@ var (
 		"go.opentelemetry.io/contrib/instrumentation", // Go
 		"@opentelemetry/instrumentation",              // JS
 		"io.opentelemetry.contrib.php",                // PHP
+		"@honeycombio/",                               // Honeycomb's own JS instrumentation libraries
 	}
 )
 
