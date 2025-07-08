@@ -1,11 +1,14 @@
 package otlp
 
 import (
+	"bytes"
+	"compress/gzip"
 	"context"
 	"encoding/hex"
 	"io"
 	"time"
 
+	"github.com/klauspost/compress/zstd"
 	collectorTrace "go.opentelemetry.io/proto/otlp/collector/trace/v1"
 	trace "go.opentelemetry.io/proto/otlp/trace/v1"
 	"google.golang.org/protobuf/proto"
@@ -36,6 +39,81 @@ func TranslateTraceRequestFromReaderSized(ctx context.Context, body io.ReadClose
 		return nil, ErrFailedParseBody
 	}
 	return TranslateTraceRequest(ctx, request, ri)
+}
+
+// TranslateTraceRequestFromReaderDirect translates an OTLP/HTTP request into Honeycomb-friendly structure
+// using direct unmarshaling to avoid creating intermediate proto structs.
+// This is a performance optimization that processes the serialized data directly.
+// RequestInfo is the parsed information from the HTTP headers
+func TranslateTraceRequestFromReaderDirect(ctx context.Context, body io.ReadCloser, ri RequestInfo) (*TranslateOTLPRequestResult, error) {
+	return TranslateTraceRequestFromReaderSizedDirect(ctx, body, ri, defaultMaxRequestBodySize)
+}
+
+// TranslateTraceRequestFromReaderSizedDirect translates an OTLP/HTTP request into Honeycomb-friendly structure
+// using direct unmarshaling to avoid creating intermediate proto structs.
+// This is a performance optimization that processes the serialized data directly.
+// RequestInfo is the parsed information from the HTTP headers
+// maxSize is the maximum size of the request body in bytes
+func TranslateTraceRequestFromReaderSizedDirect(ctx context.Context, body io.ReadCloser, ri RequestInfo, maxSize int64) (*TranslateOTLPRequestResult, error) {
+	if err := ri.ValidateTracesHeaders(); err != nil {
+		return nil, err
+	}
+	
+	// For JSON content type, fall back to the regular implementation
+	// as it's not an optimized path
+	if ri.ContentType == "application/json" {
+		// Re-wrap the body since we haven't consumed it yet
+		request := &collectorTrace.ExportTraceServiceRequest{}
+		if err := parseOtlpRequestBody(body, ri.ContentType, ri.ContentEncoding, request, maxSize); err != nil {
+			return nil, ErrFailedParseBody
+		}
+		return TranslateTraceRequest(ctx, request, ri)
+	}
+	
+	// For protobuf, use the optimized direct unmarshaling path
+	defer body.Close()
+	bodyBytes, err := io.ReadAll(body)
+	if err != nil {
+		return nil, ErrFailedParseBody
+	}
+	bodyReader := io.LimitReader(bytes.NewReader(bodyBytes), maxSize)
+	
+	// Handle decompression
+	var reader io.Reader
+	switch ri.ContentEncoding {
+	case "gzip":
+		gzipReader, err := gzip.NewReader(bodyReader)
+		if err != nil {
+			return nil, ErrFailedParseBody
+		}
+		defer gzipReader.Close()
+		reader = gzipReader
+	case "zstd":
+		zstdReader, err := zstd.NewReader(bodyReader)
+		if err != nil {
+			return nil, ErrFailedParseBody
+		}
+		defer zstdReader.Close()
+		reader = zstdReader
+	case "", "identity":
+		reader = bodyReader
+	default:
+		return nil, ErrFailedParseBody
+	}
+	
+	// Read the decompressed data
+	data, err := io.ReadAll(reader)
+	if err != nil {
+		return nil, ErrFailedParseBody
+	}
+	
+	// Direct unmarshaling only supports protobuf
+	switch ri.ContentType {
+	case "application/protobuf", "application/x-protobuf":
+		return UnmarshalTraceRequestDirect(ctx, data, ri)
+	default:
+		return nil, ErrInvalidContentType
+	}
 }
 
 // TranslateTraceRequest translates an OTLP/gRPC request into Honeycomb-friendly structure
