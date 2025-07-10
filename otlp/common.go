@@ -332,20 +332,15 @@ func isInstrumentationLibrary(libraryName string) bool {
 }
 
 func getDataset(ri RequestInfo, attrs map[string]interface{}) string {
-	var dataset string
 	if ri.hasClassicKey() {
-		dataset = ri.Dataset
-	} else {
-		serviceName, ok := attrs["service.name"].(string)
-		if !ok ||
-			strings.TrimSpace(serviceName) == "" ||
-			strings.HasPrefix(serviceName, "unknown_service") {
-			dataset = defaultServiceName
-		} else {
-			dataset = strings.TrimSpace(serviceName)
-		}
+		return ri.Dataset
 	}
-	return dataset
+
+	serviceName, ok := attrs["service.name"].(string)
+	if !ok || strings.TrimSpace(serviceName) == "" || strings.HasPrefix(serviceName, defaultServiceName) {
+		return defaultServiceName
+	}
+	return strings.TrimSpace(serviceName)
 }
 
 func getLogsDataset(ri RequestInfo, attrs map[string]interface{}) string {
@@ -616,8 +611,14 @@ func getSampleRateFromHoneycombAttribute(attrs map[string]any) (int32, bool) {
 		return defaultSampleRate, false
 	}
 
+	rate := getSampleRateFromAnyValue(attrs[sampleRateKey])
+	delete(attrs, sampleRateKey) // remove attr
+
+	return rate, true
+}
+
+func getSampleRateFromAnyValue(sampleRateVal any) int32 {
 	sampleRate := defaultSampleRate
-	sampleRateVal := attrs[sampleRateKey]
 	switch v := sampleRateVal.(type) {
 	case string:
 		if i, err := strconv.ParseFloat(v, 64); err == nil {
@@ -661,8 +662,7 @@ func getSampleRateFromHoneycombAttribute(attrs map[string]any) (int32, bool) {
 	if sampleRate <= 0 {
 		sampleRate = defaultSampleRate
 	}
-	delete(attrs, sampleRateKey) // remove attr
-	return sampleRate, true
+	return sampleRate
 }
 
 // getSampleRateFromOTelSamplingThreshold returns the sampling threshold from the OpenTelemetry

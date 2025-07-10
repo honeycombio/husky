@@ -5,10 +5,12 @@ import (
 	"compress/gzip"
 	"context"
 	"encoding/hex"
+	"fmt"
 	"io"
 	"time"
 
 	"github.com/klauspost/compress/zstd"
+	"github.com/vmihailenco/msgpack"
 	collectorTrace "go.opentelemetry.io/proto/otlp/collector/trace/v1"
 	trace "go.opentelemetry.io/proto/otlp/trace/v1"
 	"google.golang.org/protobuf/proto"
@@ -110,7 +112,98 @@ func TranslateTraceRequestFromReaderSizedDirect(ctx context.Context, body io.Rea
 	// Direct unmarshaling only supports protobuf
 	switch ri.ContentType {
 	case "application/protobuf", "application/x-protobuf":
-		return UnmarshalTraceRequestDirect(ctx, data, ri)
+		// Call the msgpack version
+		msgpResult, err := UnmarshalTraceRequestDirectMsgp(ctx, data, ri)
+		if err != nil {
+			return nil, err
+		}
+
+		// Convert from msgpack format to regular format
+		result := &TranslateOTLPRequestResult{
+			RequestSize: msgpResult.RequestSize,
+			Batches:     make([]Batch, len(msgpResult.Batches)),
+		}
+
+		for i, msgpBatch := range msgpResult.Batches {
+			batch := Batch{
+				Dataset: msgpBatch.Dataset,
+				Events:  make([]Event, len(msgpBatch.Events)),
+			}
+
+			for j, msgpEvent := range msgpBatch.Events {
+				// Unmarshal the attributes from msgpack
+				var attrs map[string]any
+				err := msgpack.Unmarshal(msgpEvent.Attributes, &attrs)
+				if err != nil {
+					return nil, fmt.Errorf("failed to unmarshal attributes from msgpack: %w", err)
+				}
+
+				// Convert integer values back to expected types
+				// Handle status_code
+				switch v := attrs["status_code"].(type) {
+				case int8:
+					attrs["status_code"] = int(v)
+				case int16:
+					attrs["status_code"] = int(v)
+				case int32:
+					attrs["status_code"] = int(v)
+				case int64:
+					attrs["status_code"] = int(v)
+				}
+				
+				// Handle span.num_events
+				switch v := attrs["span.num_events"].(type) {
+				case int8:
+					attrs["span.num_events"] = int(v)
+				case int16:
+					attrs["span.num_events"] = int(v)
+				case int32:
+					attrs["span.num_events"] = int(v)
+				case int64:
+					attrs["span.num_events"] = int(v)
+				}
+				
+				// Handle span.num_links
+				switch v := attrs["span.num_links"].(type) {
+				case int8:
+					attrs["span.num_links"] = int(v)
+				case int16:
+					attrs["span.num_links"] = int(v)
+				case int32:
+					attrs["span.num_links"] = int(v)
+				case int64:
+					attrs["span.num_links"] = int(v)
+				}
+				
+				// Convert all other integer types to int64 for consistency
+				for k, v := range attrs {
+					switch val := v.(type) {
+					case int8:
+						if k != "status_code" && k != "span.num_events" && k != "span.num_links" {
+							attrs[k] = int64(val)
+						}
+					case int16:
+						if k != "status_code" && k != "span.num_events" && k != "span.num_links" {
+							attrs[k] = int64(val)
+						}
+					case int32:
+						if k != "status_code" && k != "span.num_events" && k != "span.num_links" {
+							attrs[k] = int64(val)
+						}
+					}
+				}
+
+				batch.Events[j] = Event{
+					Attributes: attrs,
+					Timestamp:  msgpEvent.Timestamp,
+					SampleRate: msgpEvent.SampleRate,
+				}
+			}
+
+			result.Batches[i] = batch
+		}
+
+		return result, nil
 	default:
 		return nil, ErrInvalidContentType
 	}

@@ -67,15 +67,20 @@ package otlp
 //             (array_value and bytes_value are JSON-encoded, kvlist_value is flattened with dot notation)
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"math"
+	"strings"
 	"time"
 
 	"github.com/honeycombio/husky"
+	"github.com/tinylib/msgp/msgp"
+	trace "go.opentelemetry.io/proto/otlp/trace/v1"
 )
 
 var (
@@ -84,7 +89,108 @@ var (
 	ErrUnexpectedEndOfGroup = fmt.Errorf("proto: unexpected end of group")
 )
 
-// UnmarshalTraceRequestDirect translates a serialized OTLP trace request directly
+type TranslateOTLPRequestResultMsgp struct {
+	RequestSize int
+	Batches     []BatchMsgp
+}
+
+// BatchMsgp represents Honeycomb events grouped by their target dataset
+type BatchMsgp struct {
+	Dataset string
+	Events  []EventMsgp
+}
+
+// Event represents a single Honeycomb event
+type EventMsgp struct {
+	// Here, Attributes is a map[string]any which is messagepack-encoded.
+	Attributes []byte
+	Timestamp  time.Time
+	SampleRate int32
+}
+
+// Holds messagepack-encode keyvalues, without a header.
+type msgpAttributes struct {
+	buf   []byte
+	count int
+
+	// memoized metadata fields we'll need internally
+	serviceName string
+	sampleRate  int32
+	isError     bool
+}
+
+func (b *msgpAttributes) addAny(key []byte, value any) error {
+	var err error
+	b.count++
+	b.buf = msgp.AppendStringFromBytes(b.buf, key)
+	b.buf, err = msgp.AppendIntf(b.buf, value)
+	return err
+}
+
+func (b *msgpAttributes) addString(key []byte, value []byte) {
+	b.buf = msgp.AppendStringFromBytes(b.buf, key)
+	b.buf = msgp.AppendStringFromBytes(b.buf, value)
+	b.count++
+}
+
+// addInt64 adds a string key with int64 value
+func (b *msgpAttributes) addInt64(key []byte, value int64) {
+	b.buf = msgp.AppendStringFromBytes(b.buf, key)
+	b.buf = msgp.AppendInt64(b.buf, value)
+	b.count++
+}
+
+// addFloat64 adds a string key with float64 value
+func (b *msgpAttributes) addFloat64(key []byte, value float64) {
+	b.buf = msgp.AppendStringFromBytes(b.buf, key)
+	b.buf = msgp.AppendFloat64(b.buf, value)
+	b.count++
+}
+
+// addBool adds a string key with bool value
+func (b *msgpAttributes) addBool(key []byte, value bool) {
+	b.buf = msgp.AppendStringFromBytes(b.buf, key)
+	b.buf = msgp.AppendBool(b.buf, value)
+	b.count++
+}
+
+// Wraps a msgpAttributes, but includes a map header indicating the value count.
+// Used to produce complete Attributes payloads.
+type msgpAttributesMap struct {
+	msgpAttributes
+}
+
+func newMsgpMap() msgpAttributesMap {
+	var m msgpAttributesMap
+	m.buf = append(m.buf, 0xde, 0, 0)
+	return m
+}
+
+func (m *msgpAttributesMap) addAttributes(add *msgpAttributes) {
+	m.buf = append(m.buf, add.buf...)
+	m.count += add.count
+	if !m.isError {
+		m.isError = add.isError
+	}
+	if m.serviceName == "" {
+		m.serviceName = add.serviceName
+	}
+	if m.sampleRate == 0 {
+		m.sampleRate = add.sampleRate
+	}
+}
+
+// Returns serialized msgp map including the header, suitable for transmission.
+func (m *msgpAttributesMap) finalize() ([]byte, error) {
+	if m.count > 65536 {
+		return nil, errors.New("too many attributes")
+	}
+	m.buf[1] = byte(m.count >> 8)
+	m.buf[2] = byte(m.count)
+	return m.buf, nil
+}
+
+// UnmarshalTraceRequestDirectMsgp translates a serialized OTLP trace request directly
 // into Honeycomb-friendly structure without creating intermediate proto structs.
 // This is a performance optimization that avoids the overhead of unmarshaling
 // into proto structs first.
@@ -92,14 +198,14 @@ var (
 // code, and carries over some of the style conventions so that it will hopefully
 // be relatively easy to update it in future, should that be necessary.
 // Fortunately this part of OTLP is marked as "stable" so we don't expect changes.
-func UnmarshalTraceRequestDirect(ctx context.Context, data []byte, ri RequestInfo) (*TranslateOTLPRequestResult, error) {
+func UnmarshalTraceRequestDirectMsgp(ctx context.Context, data []byte, ri RequestInfo) (*TranslateOTLPRequestResultMsgp, error) {
 	if err := ri.ValidateTracesHeaders(); err != nil {
 		return nil, err
 	}
 
-	result := &TranslateOTLPRequestResult{
+	result := &TranslateOTLPRequestResultMsgp{
 		RequestSize: len(data),
-		Batches:     []Batch{},
+		Batches:     []BatchMsgp{},
 	}
 
 	// Parse the protobuf wire format
@@ -131,7 +237,7 @@ func UnmarshalTraceRequestDirect(ctx context.Context, data []byte, ri RequestInf
 
 		default:
 			// Skip unknown fields
-			if err := skipUnknownField(data, &iNdEx, preIndex, l); err != nil {
+			if err := skipField(data, &iNdEx, preIndex, l); err != nil {
 				return nil, err
 			}
 		}
@@ -145,14 +251,21 @@ func UnmarshalTraceRequestDirect(ctx context.Context, data []byte, ri RequestInf
 }
 
 // unmarshalResourceSpans parses a ResourceSpans message
-func unmarshalResourceSpans(ctx context.Context, data []byte, ri RequestInfo, result *TranslateOTLPRequestResult) error {
-	resourceAttrs := make(map[string]any)
-	dataset := ""
-	var scopeSpansData [][]byte
+func unmarshalResourceSpans(
+	ctx context.Context,
+	data []byte,
+	ri RequestInfo,
+	result *TranslateOTLPRequestResultMsgp,
+) error {
+	var resourceAttrs msgpAttributes
+	var dataset string
 
 	l := len(data)
 	iNdEx := 0
 
+	// We need to parse the resource before the spans, but they're not gauranteed
+	// to arrive in this order. So, walk the data twice to get each field.
+loop:
 	for iNdEx < l {
 		preIndex := iNdEx
 		fieldNum, wireType, err := decodeField(data, &iNdEx)
@@ -168,43 +281,47 @@ func unmarshalResourceSpans(ctx context.Context, data []byte, ri RequestInfo, re
 			}
 
 			// Parse resource
-			err = unmarshalResource(ctx, slice, resourceAttrs)
+			err = unmarshalResource(ctx, slice, &resourceAttrs)
 			if err != nil {
 				return err
 			}
-
-		case 2: // scope_spans
-			slice, err := decodeWireType2(data, &iNdEx, l, wireType)
-			if err != nil {
-				return err
-			}
-
-			// Collect ScopeSpans data to process later
-			scopeSpansData = append(scopeSpansData, slice)
-
-		case 3: // schema_url
-			_, err := decodeWireType2(data, &iNdEx, l, wireType)
-			if err != nil {
-				return err
-			}
-			// Skip the string value
-
+			break loop
 		default:
-			// Skip unknown fields
-			if err := skipUnknownField(data, &iNdEx, preIndex, l); err != nil {
+			if err := skipField(data, &iNdEx, preIndex, l); err != nil {
 				return err
 			}
 		}
 	}
 
 	// Determine dataset from resource attributes
-	dataset = getDataset(ri, resourceAttrs)
+	dataset = getDatasetFromMsgpAttr(ri, &resourceAttrs)
 
-	// Now process the collected ScopeSpans with the determined dataset
-	for _, scopeSpansBytes := range scopeSpansData {
-		err := unmarshalScopeSpans(ctx, scopeSpansBytes, ri, resourceAttrs, dataset, result)
+	// Now parse the spans.
+	iNdEx = 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		fieldNum, wireType, err := decodeField(data, &iNdEx)
 		if err != nil {
 			return err
+		}
+
+		switch fieldNum {
+		case 2: // scope_spans, repeated
+			slice, err := decodeWireType2(data, &iNdEx, l, wireType)
+			if err != nil {
+				return err
+			}
+
+			err = unmarshalScopeSpans(ctx, slice, ri, &resourceAttrs, dataset, result)
+			if err != nil {
+				return err
+			}
+
+		default:
+			// Note field 3 is schema_url, but we don't use it.
+			if err := skipField(data, &iNdEx, preIndex, l); err != nil {
+				return err
+			}
 		}
 	}
 
@@ -212,7 +329,7 @@ func unmarshalResourceSpans(ctx context.Context, data []byte, ri RequestInfo, re
 }
 
 // unmarshalResource parses a Resource message
-func unmarshalResource(ctx context.Context, data []byte, attrs map[string]any) error {
+func unmarshalResource(ctx context.Context, data []byte, attrs *msgpAttributes) error {
 	l := len(data)
 	iNdEx := 0
 
@@ -238,7 +355,7 @@ func unmarshalResource(ctx context.Context, data []byte, attrs map[string]any) e
 
 		default:
 			// Skip unknown fields
-			if err := skipUnknownField(data, &iNdEx, preIndex, l); err != nil {
+			if err := skipField(data, &iNdEx, preIndex, l); err != nil {
 				return err
 			}
 		}
@@ -247,9 +364,9 @@ func unmarshalResource(ctx context.Context, data []byte, attrs map[string]any) e
 	return nil
 }
 
-// unmarshalKeyValue parses a KeyValue message
-func unmarshalKeyValue(ctx context.Context, data []byte, attrs map[string]any, depth int) error {
-	var key string
+// parseKeyValue parses a KeyValue message and returns the key and value
+func parseKeyValue(ctx context.Context, data []byte) ([]byte, any, error) {
+	var key []byte
 	var value any
 
 	l := len(data)
@@ -259,50 +376,81 @@ func unmarshalKeyValue(ctx context.Context, data []byte, attrs map[string]any, d
 		preIndex := iNdEx
 		fieldNum, wireType, err := decodeField(data, &iNdEx)
 		if err != nil {
-			return err
+			return nil, nil, err
 		}
 
 		switch fieldNum {
 		case 1: // key
-			slice, err := decodeWireType2(data, &iNdEx, l, wireType)
+			key, err = decodeWireType2(data, &iNdEx, l, wireType)
 			if err != nil {
-				return err
+				return nil, nil, err
 			}
-			key = string(slice)
 
 		case 2: // value
 			slice, err := decodeWireType2(data, &iNdEx, l, wireType)
 			if err != nil {
-				return err
+				return nil, nil, err
 			}
 
 			// Parse AnyValue
 			val, err := unmarshalAnyValue(ctx, slice)
 			if err != nil {
-				return err
+				return nil, nil, err
 			}
 			value = val
 
 		default:
 			// Skip unknown fields
-			if err := skipUnknownField(data, &iNdEx, preIndex, l); err != nil {
-				return err
+			if err := skipField(data, &iNdEx, preIndex, l); err != nil {
+				return nil, nil, err
 			}
 		}
 	}
 
+	return key, value, nil
+}
+
+// unmarshalKeyValue parses a KeyValue message and adds it to msgpAttributes
+func unmarshalKeyValue(ctx context.Context, data []byte, attrs *msgpAttributes, depth int) error {
+	key, value, err := parseKeyValue(ctx, data)
+	if err != nil {
+		return err
+	}
+
 	// KeyValue messages should have both key and value
-	if key != "" && value != nil {
+	if len(key) > 0 && value != nil {
+		// We don't include sample rates in the attribute payload, so use the value
+		// and then return here.
+		if bytes.Equal(key, []byte("sampleRate")) {
+			attrs.sampleRate = getSampleRateFromAnyValue(value)
+			return nil
+		}
+		if bytes.Equal(key, []byte("SampleRate")) {
+			// if both sample rate keys exist, "sampleRate" should win. So this
+			// one defers to any existing value.
+			if attrs.sampleRate == 0 {
+				attrs.sampleRate = getSampleRateFromAnyValue(value)
+			}
+			return nil
+		}
+
 		// Handle different value types to match legacy behavior
 		switch v := value.(type) {
 		case []byte:
 			// Bytes are JSON encoded - match the legacy behavior
+			// This telemetry attribute tracks when we receive byte array attributes
 			husky.AddTelemetryAttribute(ctx, "received_bytes_attr_type", true)
-			attrs[key] = addAttributeToMapAsJsonDirect(v)
+			err = attrs.addAny(key, addAttributeToMapAsJsonDirect(v))
+			if err != nil {
+				return err
+			}
 		case []any:
 			// Arrays are JSON encoded
 			husky.AddTelemetryAttribute(ctx, "received_array_attr_type", true)
-			attrs[key] = addAttributeToMapAsJsonDirect(v)
+			err = attrs.addAny(key, addAttributeToMapAsJsonDirect(v))
+			if err != nil {
+				return err
+			}
 		case map[string]any:
 			// Kvlists are flattened with dot notation
 			husky.AddTelemetryAttributes(ctx, map[string]any{
@@ -312,27 +460,38 @@ func unmarshalKeyValue(ctx context.Context, data []byte, attrs map[string]any, d
 			if depth < maxDepth {
 				// Flatten the kvlist
 				for k, v := range v {
-					flatKey := key + "." + k
-					switch vv := v.(type) {
-					case []byte:
-						attrs[flatKey] = addAttributeToMapAsJsonDirect(vv)
-					case []any:
-						attrs[flatKey] = addAttributeToMapAsJsonDirect(vv)
-					case map[string]any:
-						// Nested kvlist - would need recursive flattening
-						// For now, JSON encode it if we hit max depth
-						attrs[flatKey] = addAttributeToMapAsJsonDirect(vv)
+					flatKey := append(key, '.')
+					flatKey = append(flatKey, k...)
+
+					// Nested complex types (arrays, bytes, nested kvlists) are JSON encoded
+					switch v.(type) {
+					case []byte, []any, map[string]any:
+						err = attrs.addAny(flatKey, addAttributeToMapAsJsonDirect(v))
+						if err != nil {
+							return err
+						}
 					default:
-						attrs[flatKey] = vv
+						err = attrs.addAny(flatKey, v)
+						if err != nil {
+							return err
+						}
 					}
 				}
 			} else {
 				// Max depth exceeded, JSON encode the whole thing
-				attrs[key] = addAttributeToMapAsJsonDirect(v)
+				err = attrs.addAny(key, addAttributeToMapAsJsonDirect(v))
+				if err != nil {
+					return err
+				}
 			}
 		default:
-			// Simple types - just assign directly
-			attrs[key] = value
+			// Simple types - just encode directly
+			err = attrs.addAny(key, v)
+		}
+
+		// If this is the service name, note it.
+		if asStr, ok := value.(string); ok && bytes.Equal(key, []byte("service.name")) {
+			attrs.serviceName = asStr
 		}
 	}
 
@@ -423,7 +582,7 @@ func unmarshalAnyValue(ctx context.Context, data []byte) (any, error) {
 
 		default:
 			// Skip unknown fields
-			if err := skipUnknownField(data, &iNdEx, preIndex, l); err != nil {
+			if err := skipField(data, &iNdEx, preIndex, l); err != nil {
 				return nil, err
 			}
 		}
@@ -466,13 +625,28 @@ func unmarshalArrayValue(ctx context.Context, data []byte) ([]any, error) {
 
 		default:
 			// Skip unknown fields
-			if err := skipUnknownField(data, &iNdEx, preIndex, l); err != nil {
+			if err := skipField(data, &iNdEx, preIndex, l); err != nil {
 				return nil, err
 			}
 		}
 	}
 
 	return values, nil
+}
+
+// unmarshalKeyValueToMap parses a KeyValue message and adds it to a map
+func unmarshalKeyValueToMap(ctx context.Context, data []byte, result map[string]any) error {
+	key, value, err := parseKeyValue(ctx, data)
+	if err != nil {
+		return err
+	}
+
+	// KeyValue messages should have both key and value
+	if len(key) > 0 && value != nil {
+		result[string(key)] = value
+	}
+
+	return nil
 }
 
 // unmarshalKvlistValue parses a KeyValueList message and returns map[string]any
@@ -499,13 +673,13 @@ func unmarshalKvlistValue(ctx context.Context, data []byte) (map[string]any, err
 				return nil, err
 			}
 			// Parse KeyValue and add to map
-			if err := unmarshalKeyValue(ctx, slice, result, 0); err != nil {
+			if err := unmarshalKeyValueToMap(ctx, slice, result); err != nil {
 				return nil, err
 			}
 
 		default:
 			// Skip unknown fields
-			if err := skipUnknownField(data, &iNdEx, preIndex, l); err != nil {
+			if err := skipField(data, &iNdEx, preIndex, l); err != nil {
 				return nil, err
 			}
 		}
@@ -515,12 +689,18 @@ func unmarshalKvlistValue(ctx context.Context, data []byte) (map[string]any, err
 }
 
 // unmarshalScopeSpans parses a ScopeSpans message
-func unmarshalScopeSpans(ctx context.Context, data []byte, ri RequestInfo, resourceAttrs map[string]any, dataset string, result *TranslateOTLPRequestResult) error {
-	scopeAttrs := make(map[string]any)
-
+func unmarshalScopeSpans(
+	ctx context.Context,
+	data []byte,
+	ri RequestInfo,
+	resourceAttrs *msgpAttributes,
+	dataset string,
+	result *TranslateOTLPRequestResultMsgp,
+) error {
+	// Get the instrumentation scope first
+	var scopeAttrs msgpAttributes
 	l := len(data)
 	iNdEx := 0
-
 	for iNdEx < l {
 		preIndex := iNdEx
 		fieldNum, wireType, err := decodeField(data, &iNdEx)
@@ -536,11 +716,26 @@ func unmarshalScopeSpans(ctx context.Context, data []byte, ri RequestInfo, resou
 			}
 
 			// Parse InstrumentationScope
-			err = unmarshalInstrumentationScope(ctx, slice, scopeAttrs)
+			err = unmarshalInstrumentationScope(ctx, slice, &scopeAttrs)
 			if err != nil {
 				return err
 			}
+		default:
+			if err := skipField(data, &iNdEx, preIndex, l); err != nil {
+				return err
+			}
+		}
+	}
 
+	iNdEx = 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		fieldNum, wireType, err := decodeField(data, &iNdEx)
+		if err != nil {
+			return err
+		}
+
+		switch fieldNum {
 		case 2: // spans
 			slice, err := decodeWireType2(data, &iNdEx, l, wireType)
 			if err != nil {
@@ -548,21 +743,13 @@ func unmarshalScopeSpans(ctx context.Context, data []byte, ri RequestInfo, resou
 			}
 
 			// Parse Span
-			err = unmarshalSpan(ctx, slice, ri, resourceAttrs, scopeAttrs, dataset, result)
+			err = unmarshalSpan(ctx, slice, ri, resourceAttrs, &scopeAttrs, dataset, result)
 			if err != nil {
 				return err
 			}
-
-		case 3: // schema_url
-			_, err := decodeWireType2(data, &iNdEx, l, wireType)
-			if err != nil {
-				return err
-			}
-			// Skip the string value
 
 		default:
-			// Skip unknown fields
-			if err := skipUnknownField(data, &iNdEx, preIndex, l); err != nil {
+			if err := skipField(data, &iNdEx, preIndex, l); err != nil {
 				return err
 			}
 		}
@@ -572,7 +759,7 @@ func unmarshalScopeSpans(ctx context.Context, data []byte, ri RequestInfo, resou
 }
 
 // unmarshalInstrumentationScope parses an InstrumentationScope message
-func unmarshalInstrumentationScope(ctx context.Context, data []byte, attrs map[string]any) error {
+func unmarshalInstrumentationScope(ctx context.Context, data []byte, attrs *msgpAttributes) error {
 	l := len(data)
 	iNdEx := 0
 
@@ -589,11 +776,10 @@ func unmarshalInstrumentationScope(ctx context.Context, data []byte, attrs map[s
 			if err != nil {
 				return err
 			}
-			name := string(slice)
-			if name != "" {
-				attrs["library.name"] = name
-				if isInstrumentationLibrary(name) {
-					attrs["telemetry.instrumentation_library"] = true
+			if len(slice) > 0 {
+				attrs.addString([]byte("library.name"), slice)
+				if isInstrumentationLibrary(string(slice)) {
+					attrs.addBool([]byte("telemetry.instrumentation_library"), true)
 				}
 			}
 
@@ -602,9 +788,8 @@ func unmarshalInstrumentationScope(ctx context.Context, data []byte, attrs map[s
 			if err != nil {
 				return err
 			}
-			version := string(slice)
-			if version != "" {
-				attrs["library.version"] = version
+			if len(slice) > 0 {
+				attrs.addString([]byte("library.version"), slice)
 			}
 
 		case 3: // attributes
@@ -621,7 +806,7 @@ func unmarshalInstrumentationScope(ctx context.Context, data []byte, attrs map[s
 
 		default:
 			// Skip unknown fields
-			if err := skipUnknownField(data, &iNdEx, preIndex, l); err != nil {
+			if err := skipField(data, &iNdEx, preIndex, l); err != nil {
 				return err
 			}
 		}
@@ -631,9 +816,17 @@ func unmarshalInstrumentationScope(ctx context.Context, data []byte, attrs map[s
 }
 
 // unmarshalSpan parses a Span message and creates an event
-func unmarshalSpan(ctx context.Context, data []byte, ri RequestInfo, resourceAttrs, scopeAttrs map[string]any, dataset string, result *TranslateOTLPRequestResult) error {
+func unmarshalSpan(
+	ctx context.Context,
+	data []byte,
+	ri RequestInfo,
+	resourceAttrs,
+	scopeAttrs *msgpAttributes,
+	dataset string,
+	result *TranslateOTLPRequestResultMsgp,
+) error {
 	// Find or create the batch for this dataset
-	var batch *Batch
+	var batch *BatchMsgp
 	for i := range result.Batches {
 		if result.Batches[i].Dataset == dataset {
 			batch = &result.Batches[i]
@@ -641,42 +834,23 @@ func unmarshalSpan(ctx context.Context, data []byte, ri RequestInfo, resourceAtt
 		}
 	}
 	if batch == nil {
-		newBatch := Batch{
+		result.Batches = append(result.Batches, BatchMsgp{
 			Dataset: dataset,
-			Events:  []Event{},
-		}
-		result.Batches = append(result.Batches, newBatch)
+			Events:  []EventMsgp{},
+		})
 		batch = &result.Batches[len(result.Batches)-1]
 	}
 
-	// Create event with resource and scope attributes
-	event := Event{
-		Attributes: make(map[string]any),
-		SampleRate: defaultSampleRate,
-	}
+	eventAttr := newMsgpMap()
 
-	// Add resource attributes
-	for k, v := range resourceAttrs {
-		event.Attributes[k] = v
-	}
-
-	// Add scope attributes
-	for k, v := range scopeAttrs {
-		event.Attributes[k] = v
-	}
-
-	// Parse span fields
-	var traceID, spanID, parentSpanID []byte
-	var name, traceState string
-	var kind int32
+	var eventsData, linksData [][]byte
+	var name, traceID, spanID []byte
+	var statusCode int64
 	var startTimeUnixNano, endTimeUnixNano uint64
-	var eventsData [][]byte // Collect event data to process later
-	var linksData [][]byte  // Collect link data to process later
-	var statusCode int      // Default to 0
+	sampleRate := defaultSampleRate
 
 	l := len(data)
 	iNdEx := 0
-
 	for iNdEx < l {
 		preIndex := iNdEx
 		fieldNum, wireType, err := decodeField(data, &iNdEx)
@@ -686,45 +860,61 @@ func unmarshalSpan(ctx context.Context, data []byte, ri RequestInfo, resourceAtt
 
 		switch fieldNum {
 		case 1: // trace_id
-			var err error
 			traceID, err = decodeWireType2(data, &iNdEx, l, wireType)
 			if err != nil {
 				return err
 			}
+			if len(traceID) > 0 {
+				eventAttr.addString([]byte("trace.trace_id"), []byte(BytesToTraceID(traceID)))
+			}
 
 		case 2: // span_id
-			var err error
 			spanID, err = decodeWireType2(data, &iNdEx, l, wireType)
 			if err != nil {
 				return err
 			}
+			if len(spanID) > 0 {
+				eventAttr.addString([]byte("trace.span_id"), []byte(BytesToSpanID(spanID)))
+			}
 
 		case 3: // trace_state
-			slice, err := decodeWireType2(data, &iNdEx, l, wireType)
+			traceState, err := decodeWireType2(data, &iNdEx, l, wireType)
 			if err != nil {
 				return err
 			}
-			traceState = string(slice)
+			if len(traceState) > 0 {
+				eventAttr.addString([]byte("trace.trace_state"), traceState)
+
+				rate, ok := getSampleRateFromOTelSamplingThreshold(string(traceState))
+				if ok {
+					sampleRate = rate
+				}
+			}
 
 		case 4: // parent_span_id
-			var err error
-			parentSpanID, err = decodeWireType2(data, &iNdEx, l, wireType)
+			parentSpanID, err := decodeWireType2(data, &iNdEx, l, wireType)
 			if err != nil {
 				return err
+			}
+			if len(parentSpanID) > 0 {
+				eventAttr.addString([]byte("trace.parent_id"), []byte(BytesToSpanID(parentSpanID)))
 			}
 
 		case 5: // name
-			slice, err := decodeWireType2(data, &iNdEx, l, wireType)
+			name, err = decodeWireType2(data, &iNdEx, l, wireType)
 			if err != nil {
 				return err
 			}
-			name = string(slice)
+			// Will add name below, to make sure it's always added.
 
 		case 6: // kind
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Kind", wireType)
 			}
-			kind = int32(decodeVarint(data, &iNdEx))
+			kind := trace.Span_SpanKind(decodeVarint(data, &iNdEx))
+			kindStr := getSpanKind(kind)
+			eventAttr.addString([]byte("span.kind"), []byte(kindStr))
+			eventAttr.addString([]byte("type"), []byte(kindStr)) // Also add "type" for backward compatibility
 
 		case 7: // start_time_unix_nano
 			v, err := decodeWireType1(data, &iNdEx, l, wireType)
@@ -746,7 +936,7 @@ func unmarshalSpan(ctx context.Context, data []byte, ri RequestInfo, resourceAtt
 				return err
 			}
 			// Parse KeyValue attribute
-			err = unmarshalKeyValue(ctx, slice, event.Attributes, 0)
+			err = unmarshalKeyValue(ctx, slice, &eventAttr.msgpAttributes, 0)
 			if err != nil {
 				return err
 			}
@@ -772,144 +962,160 @@ func unmarshalSpan(ctx context.Context, data []byte, ri RequestInfo, resourceAtt
 			if err != nil {
 				return err
 			}
-			// Parse status
-			status, err := unmarshalStatus(ctx, slice)
-			if err != nil {
-				return err
-			}
-			// Parse status and update statusCode
-			if status != nil {
-				statusCode = int(status.code)
-				if status.message != "" {
-					event.Attributes["status_message"] = status.message
+			// Parse status inline
+			sl := len(slice)
+			siNdEx := 0
+			for siNdEx < sl {
+				sPreIndex := siNdEx
+				sfieldNum, swireType, serr := decodeField(slice, &siNdEx)
+				if serr != nil {
+					return serr
 				}
-				// Check if this is an error status
-				if status.code == 2 { // STATUS_CODE_ERROR
-					event.Attributes["error"] = true
+
+				switch sfieldNum {
+				case 2: // message
+					messageSlice, err := decodeWireType2(slice, &siNdEx, sl, swireType)
+					if err != nil {
+						return err
+					}
+					if len(messageSlice) > 0 {
+						eventAttr.addString([]byte("status_message"), messageSlice)
+					}
+
+				case 3: // code
+					if swireType != 0 {
+						return fmt.Errorf("proto: wrong wireType = %d for field Code", swireType)
+					}
+					statusCode = int64(decodeVarint(slice, &siNdEx))
+					// Check if this is an error status
+					// Error is only set here for the span, then propagated to child events
+					if statusCode == 2 { // STATUS_CODE_ERROR
+						eventAttr.addBool([]byte("error"), true)
+						eventAttr.isError = true
+					}
+
+				default:
+					// Skip unknown fields
+					if err := skipField(slice, &siNdEx, sPreIndex, sl); err != nil {
+						return err
+					}
 				}
 			}
 
 		default:
 			// Skip unknown fields and other fields we don't process yet
-			if err := skipUnknownField(data, &iNdEx, preIndex, l); err != nil {
+			if err := skipField(data, &iNdEx, preIndex, l); err != nil {
 				return err
 			}
 		}
 	}
 
-	// Set span fields in the event
-	if len(traceID) > 0 {
-		event.Attributes["trace.trace_id"] = BytesToTraceID(traceID)
-	}
-	if len(spanID) > 0 {
-		event.Attributes["trace.span_id"] = BytesToSpanID(spanID)
-	}
-	if len(parentSpanID) > 0 {
-		event.Attributes["trace.parent_id"] = BytesToSpanID(parentSpanID)
-	}
-	event.Attributes["name"] = name
-	if traceState != "" {
-		event.Attributes["trace.trace_state"] = traceState
-	}
+	// Add fields which are always expected, even when they have no encoded value.
+	eventAttr.addString([]byte("name"), name)
+	eventAttr.addString([]byte("meta.signal_type"), []byte("trace"))
+	eventAttr.addInt64([]byte("status_code"), statusCode)
+	eventAttr.addInt64([]byte("span.num_events"), int64(len(eventsData)))
+	eventAttr.addInt64([]byte("span.num_links"), int64(len(linksData)))
 
-	// Convert span kind
-	kindStr := spanKindToString(kind)
-	event.Attributes["span.kind"] = kindStr
-	event.Attributes["type"] = kindStr // Also add "type" for backward compatibility
-
-	// Add meta fields
-	event.Attributes["meta.signal_type"] = "trace"
-
-	// Add status code (always present, default 0)
-	event.Attributes["status_code"] = statusCode
-
-	// Add span event/link counts
-	event.Attributes["span.num_events"] = len(eventsData)
-	event.Attributes["span.num_links"] = len(linksData)
-
-	// Set timestamp to start time (default to epoch if not set)
-	event.Timestamp = timestampFromUnixNano(startTimeUnixNano)
+	eventAttr.addAttributes(resourceAttrs)
+	eventAttr.addAttributes(scopeAttrs)
 
 	// Calculate duration
 	duration := float64(0)
 	if startTimeUnixNano > 0 && endTimeUnixNano > 0 {
-		durationNs := float64(endTimeUnixNano - startTimeUnixNano)
-		duration = durationNs / float64(time.Millisecond)
-		if duration < 0 {
+		if endTimeUnixNano >= startTimeUnixNano {
+			durationNs := float64(endTimeUnixNano - startTimeUnixNano)
+			duration = durationNs / float64(time.Millisecond)
+		} else {
+			// Negative duration - endTime is before startTime
 			duration = 0
-			event.Attributes["meta.invalid_duration"] = true
+			eventAttr.addBool([]byte("meta.invalid_duration"), true)
 		}
 	}
-	event.Attributes["duration_ms"] = duration
+	eventAttr.addFloat64([]byte("duration_ms"), duration)
 
-	// Get sample rate from trace state
-	event.SampleRate = getSampleRate(event.Attributes, traceState)
+	timestamp := timestampFromUnixNano(startTimeUnixNano)
 
-	// Check if span has error status for propagation to events/links
-	isError := false
-	if errorVal, ok := event.Attributes["error"]; ok {
-		isError, _ = errorVal.(bool)
+	// Get the final sample rate and isError state
+	if eventAttr.sampleRate != 0 {
+		// Prefer Honeycomb's sampleRate attribute if it exists
+		sampleRate = eventAttr.sampleRate
 	}
 
 	// Process span events first (before the main span)
+	var firstExceptionAttrs *msgpAttributes
 	for _, eventData := range eventsData {
-		err := unmarshalSpanEvent(ctx, eventData, traceID, spanID, name, startTimeUnixNano, resourceAttrs, scopeAttrs, event.SampleRate, isError, batch, event)
+		exceptionAttrs, err := unmarshalSpanEvent(ctx, eventData, traceID, spanID, name, startTimeUnixNano, resourceAttrs, scopeAttrs, sampleRate, eventAttr.isError, batch)
 		if err != nil {
 			return err
 		}
+		// Only keep the first exception's attributes
+		if exceptionAttrs != nil && firstExceptionAttrs == nil {
+			firstExceptionAttrs = exceptionAttrs
+		}
+	}
+
+	// Add exception attributes from the first exception event to the parent span
+	if firstExceptionAttrs != nil {
+		eventAttr.addAttributes(firstExceptionAttrs)
 	}
 
 	// Process span links next
 	for _, linkData := range linksData {
-		err := unmarshalSpanLink(ctx, linkData, traceID, spanID, name, event.Timestamp, resourceAttrs, scopeAttrs, event.SampleRate, isError, batch)
+		err := unmarshalSpanLink(ctx, linkData, traceID, spanID, name, timestamp, resourceAttrs, scopeAttrs, sampleRate, eventAttr.isError, batch)
 		if err != nil {
 			return err
 		}
 	}
 
 	// Add the span event last (matching the order of regular unmarshaling)
+	attrBuf, err := eventAttr.finalize()
+	if err != nil {
+		return err
+	}
+	event := EventMsgp{
+		Attributes: attrBuf,
+		SampleRate: sampleRate,
+		Timestamp:  timestamp,
+	}
 	batch.Events = append(batch.Events, event)
 
 	return nil
 }
 
 // unmarshalSpanEvent parses a Span.Event message and creates an event
-func unmarshalSpanEvent(ctx context.Context, data []byte, traceID, parentSpanID []byte, parentName string, spanStartTime uint64, resourceAttrs, scopeAttrs map[string]any, sampleRate int32, isError bool, batch *Batch, parentSpan Event) error {
-	// Create event with resource and scope attributes
-	event := Event{
-		Attributes: make(map[string]any),
-		SampleRate: sampleRate,
-	}
-
-	// Add resource attributes
-	for k, v := range resourceAttrs {
-		event.Attributes[k] = v
-	}
-
-	// Add scope attributes
-	for k, v := range scopeAttrs {
-		event.Attributes[k] = v
-	}
+// Returns exception attributes if this is an exception event, nil otherwise
+func unmarshalSpanEvent(
+	ctx context.Context,
+	data []byte,
+	traceID, parentSpanID, parentName []byte,
+	spanStartTime uint64,
+	resourceAttrs, scopeAttrs *msgpAttributes,
+	sampleRate int32,
+	isError bool,
+	batch *BatchMsgp,
+) (*msgpAttributes, error) {
+	eventAttr := newMsgpMap()
 
 	// Set trace info
 	if len(traceID) > 0 {
-		event.Attributes["trace.trace_id"] = BytesToTraceID(traceID)
+		eventAttr.addString([]byte("trace.trace_id"), []byte(BytesToTraceID(traceID)))
 	}
 	if len(parentSpanID) > 0 {
-		event.Attributes["trace.parent_id"] = BytesToSpanID(parentSpanID)
+		eventAttr.addString([]byte("trace.parent_id"), []byte(BytesToSpanID(parentSpanID)))
 	}
 
 	// Don't generate a span ID for span events - they only have parent_id
 
 	// Mark as span event
-	event.Attributes["meta.annotation_type"] = "span_event"
-	event.Attributes["meta.signal_type"] = "trace"
-	if parentName != "" {
-		event.Attributes["parent_name"] = parentName
+	eventAttr.addString([]byte("meta.annotation_type"), []byte("span_event"))
+	eventAttr.addString([]byte("meta.signal_type"), []byte("trace"))
+	if len(parentName) > 0 {
+		eventAttr.addString([]byte("parent_name"), parentName)
 	}
 
 	// Parse event fields
-	var name string
+	var name []byte
 	var timeUnixNano uint64
 
 	l := len(data)
@@ -919,118 +1125,169 @@ func unmarshalSpanEvent(ctx context.Context, data []byte, traceID, parentSpanID 
 		preIndex := iNdEx
 		fieldNum, wireType, err := decodeField(data, &iNdEx)
 		if err != nil {
-			return err
+			return nil, err
 		}
 
 		switch fieldNum {
 		case 1: // time_unix_nano
 			v, err := decodeWireType1(data, &iNdEx, l, wireType)
 			if err != nil {
-				return err
+				return nil, err
 			}
 			timeUnixNano = v
 
 		case 2: // name
 			slice, err := decodeWireType2(data, &iNdEx, l, wireType)
 			if err != nil {
-				return err
+				return nil, err
 			}
-			name = string(slice)
+			name = slice
 
 		case 3: // attributes
 			slice, err := decodeWireType2(data, &iNdEx, l, wireType)
 			if err != nil {
-				return err
+				return nil, err
 			}
 			// Parse KeyValue attribute
-			err = unmarshalKeyValue(ctx, slice, event.Attributes, 0)
+			err = unmarshalKeyValue(ctx, slice, &eventAttr.msgpAttributes, 0)
 			if err != nil {
-				return err
+				return nil, err
 			}
 
 		default:
 			// Skip unknown fields
-			if err := skipUnknownField(data, &iNdEx, preIndex, l); err != nil {
-				return err
+			if err := skipField(data, &iNdEx, preIndex, l); err != nil {
+				return nil, err
 			}
 		}
 	}
 
 	// Set event name
-	event.Attributes["name"] = name
-
-	// Set timestamp
-	if timeUnixNano > 0 {
-		event.Timestamp = timestampFromUnixNano(timeUnixNano)
-	}
+	eventAttr.addString([]byte("name"), name)
 
 	// Calculate duration relative to span start
 	if timeUnixNano > 0 && spanStartTime > 0 {
-		timeSinceSpanStart := float64(timeUnixNano-spanStartTime) / float64(time.Millisecond)
-		if timeSinceSpanStart < 0 {
-			timeSinceSpanStart = 0
-			event.Attributes["meta.invalid_time_since_span_start"] = true
+		if timeUnixNano >= spanStartTime {
+			timeSinceSpanStart := float64(timeUnixNano-spanStartTime) / float64(time.Millisecond)
+			eventAttr.addFloat64([]byte("meta.time_since_span_start_ms"), timeSinceSpanStart)
+		} else {
+			// Event time is before span start time
+			eventAttr.addFloat64([]byte("meta.time_since_span_start_ms"), float64(0))
+			eventAttr.addBool([]byte("meta.invalid_time_since_span_start"), true)
 		}
-		event.Attributes["meta.time_since_span_start_ms"] = timeSinceSpanStart
 	}
 
 	// Add error status from parent span if applicable
 	if isError {
-		event.Attributes["error"] = true
+		eventAttr.addBool([]byte("error"), true)
 	}
 
-	// Handle exception events specially
-	if name == "exception" {
-		// Copy exception attributes to parent span
-		for k, v := range event.Attributes {
-			switch k {
-			case "exception.message", "exception.type", "exception.stacktrace", "exception.escaped":
-				// Don't overwrite if the value is already on the span
-				if _, present := parentSpan.Attributes[k]; !present {
-					parentSpan.Attributes[k] = v
+	// Add resource and scope attributes
+	eventAttr.addAttributes(resourceAttrs)
+	eventAttr.addAttributes(scopeAttrs)
+
+	// Set timestamp
+	timestamp := timestampFromUnixNano(timeUnixNano)
+
+	// Create exception attributes to return if this is an exception event
+	var exceptionAttrs *msgpAttributes
+	if bytes.Equal(name, []byte("exception")) {
+		exceptionAttrs = &msgpAttributes{}
+		// We need to parse attributes again to extract exception-specific ones
+		l := len(data)
+		iNdEx := 0
+		for iNdEx < l {
+			preIndex := iNdEx
+			fieldNum, wireType, err := decodeField(data, &iNdEx)
+			if err != nil {
+				return nil, err
+			}
+
+			switch fieldNum {
+			case 3: // attributes
+				slice, err := decodeWireType2(data, &iNdEx, l, wireType)
+				if err != nil {
+					return nil, err
+				}
+				// Parse each attribute to check if it's an exception attribute
+				err = parseExceptionAttributesForReturn(ctx, slice, exceptionAttrs)
+				if err != nil {
+					return nil, err
+				}
+			default:
+				// Skip other fields
+				if err := skipField(data, &iNdEx, preIndex, l); err != nil {
+					return nil, err
 				}
 			}
 		}
 	}
 
+	attrBuf, err := eventAttr.finalize()
+	if err != nil {
+		return nil, err
+	}
+	event := EventMsgp{
+		Attributes: attrBuf,
+		SampleRate: sampleRate,
+		Timestamp:  timestamp,
+	}
 	batch.Events = append(batch.Events, event)
+	return exceptionAttrs, nil
+}
+
+// parseExceptionAttributesForReturn parses KeyValue attributes and adds exception-specific ones to msgpAttributes
+func parseExceptionAttributesForReturn(ctx context.Context, data []byte, exceptionAttrs *msgpAttributes) error {
+	key, value, err := parseKeyValue(ctx, data)
+	if err != nil {
+		return err
+	}
+
+	if len(key) > 0 && value != nil {
+		// Check if this is an exception attribute we want to copy
+		switch string(key) {
+		case "exception.message", "exception.type", "exception.stacktrace":
+			if str, ok := value.(string); ok {
+				exceptionAttrs.addString(key, []byte(str))
+			}
+		case "exception.escaped":
+			if b, ok := value.(bool); ok {
+				exceptionAttrs.addBool(key, b)
+			}
+		}
+	}
+
 	return nil
 }
 
 // unmarshalSpanLink parses a Span.Link message and creates an event
-func unmarshalSpanLink(ctx context.Context, data []byte, traceID, parentSpanID []byte, parentName string, parentTimestamp time.Time, resourceAttrs, scopeAttrs map[string]any, sampleRate int32, isError bool, batch *Batch) error {
-	// Create event with resource and scope attributes
-	event := Event{
-		Attributes: make(map[string]any),
-		SampleRate: sampleRate,
-		Timestamp:  parentTimestamp, // use timestamp from parent span
-	}
-
-	// Add resource attributes
-	for k, v := range resourceAttrs {
-		event.Attributes[k] = v
-	}
-
-	// Add scope attributes
-	for k, v := range scopeAttrs {
-		event.Attributes[k] = v
-	}
+func unmarshalSpanLink(
+	ctx context.Context,
+	data []byte,
+	traceID, parentSpanID, parentName []byte,
+	parentTimestamp time.Time,
+	resourceAttrs, scopeAttrs *msgpAttributes,
+	sampleRate int32,
+	isError bool,
+	batch *BatchMsgp,
+) error {
+	eventAttr := newMsgpMap()
 
 	// Set trace info
 	if len(traceID) > 0 {
-		event.Attributes["trace.trace_id"] = BytesToTraceID(traceID)
+		eventAttr.addString([]byte("trace.trace_id"), []byte(BytesToTraceID(traceID)))
 	}
 	if len(parentSpanID) > 0 {
-		event.Attributes["trace.parent_id"] = BytesToSpanID(parentSpanID)
+		eventAttr.addString([]byte("trace.parent_id"), []byte(BytesToSpanID(parentSpanID)))
 	}
 
 	// Don't generate a span ID for span links - they only have parent_id
 
 	// Mark as link
-	event.Attributes["meta.annotation_type"] = "link"
-	event.Attributes["meta.signal_type"] = "trace"
-	if parentName != "" {
-		event.Attributes["parent_name"] = parentName
+	eventAttr.addString([]byte("meta.annotation_type"), []byte("link"))
+	eventAttr.addString([]byte("meta.signal_type"), []byte("trace"))
+	if len(parentName) > 0 {
+		eventAttr.addString([]byte("parent_name"), parentName)
 	}
 
 	// Parse link fields
@@ -1074,14 +1331,14 @@ func unmarshalSpanLink(ctx context.Context, data []byte, traceID, parentSpanID [
 				return err
 			}
 			// Parse KeyValue attribute
-			err = unmarshalKeyValue(ctx, slice, event.Attributes, 0)
+			err = unmarshalKeyValue(ctx, slice, &eventAttr.msgpAttributes, 0)
 			if err != nil {
 				return err
 			}
 
 		default:
 			// Skip unknown fields
-			if err := skipUnknownField(data, &iNdEx, preIndex, l); err != nil {
+			if err := skipField(data, &iNdEx, preIndex, l); err != nil {
 				return err
 			}
 		}
@@ -1089,106 +1346,34 @@ func unmarshalSpanLink(ctx context.Context, data []byte, traceID, parentSpanID [
 
 	// Set link fields
 	if len(linkedTraceID) > 0 {
-		event.Attributes["trace.link.trace_id"] = BytesToTraceID(linkedTraceID)
+		eventAttr.addString([]byte("trace.link.trace_id"), []byte(BytesToTraceID(linkedTraceID)))
 	}
 	if len(linkedSpanID) > 0 {
-		event.Attributes["trace.link.span_id"] = hex.EncodeToString(linkedSpanID)
+		eventAttr.addString([]byte("trace.link.span_id"), []byte(hex.EncodeToString(linkedSpanID)))
 	}
 	// Note: The original implementation doesn't add trace.link.trace_state
 	// even though it's part of the OTLP spec, so we skip it for compatibility
 
 	// Add error status from parent span if applicable
 	if isError {
-		event.Attributes["error"] = true
+		eventAttr.addBool([]byte("error"), true)
 	}
 
+	// Add resource and scope attributes
+	eventAttr.addAttributes(resourceAttrs)
+	eventAttr.addAttributes(scopeAttrs)
+
+	attrBuf, err := eventAttr.finalize()
+	if err != nil {
+		return err
+	}
+	event := EventMsgp{
+		Attributes: attrBuf,
+		SampleRate: sampleRate,
+		Timestamp:  parentTimestamp, // use timestamp from parent span
+	}
 	batch.Events = append(batch.Events, event)
 	return nil
-}
-
-var eventCounter uint64
-
-// generateSpanID generates a unique 8-byte span ID for events
-func generateSpanID() []byte {
-	eventCounter++
-	spanID := make([]byte, 8)
-	// Simple deterministic ID based on counter
-	spanID[0] = 0xff // Marker to distinguish from regular span IDs
-	spanID[1] = byte(eventCounter >> 40)
-	spanID[2] = byte(eventCounter >> 32)
-	spanID[3] = byte(eventCounter >> 24)
-	spanID[4] = byte(eventCounter >> 16)
-	spanID[5] = byte(eventCounter >> 8)
-	spanID[6] = byte(eventCounter)
-	spanID[7] = 0x00
-	return spanID
-}
-
-// spanStatus represents the status of a span
-type spanStatus struct {
-	code    int32
-	message string
-}
-
-// spanKindToString converts a span kind enum to string
-func spanKindToString(kind int32) string {
-	switch kind {
-	case 0:
-		return "unspecified" // SPAN_KIND_UNSPECIFIED
-	case 1:
-		return "internal"
-	case 2:
-		return "server"
-	case 3:
-		return "client"
-	case 4:
-		return "producer"
-	case 5:
-		return "consumer"
-	default:
-		return "unspecified"
-	}
-}
-
-// unmarshalStatus parses a Status message
-func unmarshalStatus(ctx context.Context, data []byte) (*spanStatus, error) {
-	var status spanStatus
-
-	l := len(data)
-	iNdEx := 0
-
-	for iNdEx < l {
-		preIndex := iNdEx
-		wire := decodeVarint(data, &iNdEx)
-		if iNdEx == preIndex {
-			return nil, io.ErrUnexpectedEOF
-		}
-		fieldNum := int32(wire >> 3)
-		wireType := int(wire & 0x7)
-
-		switch fieldNum {
-		case 2: // message
-			slice, err := decodeWireType2(data, &iNdEx, l, wireType)
-			if err != nil {
-				return nil, err
-			}
-			status.message = string(slice)
-
-		case 3: // code
-			if wireType != 0 {
-				return nil, fmt.Errorf("proto: wrong wireType = %d for field Code", wireType)
-			}
-			status.code = int32(decodeVarint(data, &iNdEx))
-
-		default:
-			// Skip unknown fields
-			if err := skipUnknownField(data, &iNdEx, preIndex, l); err != nil {
-				return nil, err
-			}
-		}
-	}
-
-	return &status, nil
 }
 
 // timestampFromUnixNano converts unix nano timestamp to time.Time
@@ -1241,9 +1426,8 @@ func decodeWireType1(data []byte, iNdEx *int, l int, wireType int) (uint64, erro
 	return v, nil
 }
 
-// skipUnknownField skips an unknown field in the protobuf wire format.
-// TODO we need a test which actually contains serialized unknown fields.
-func skipUnknownField(data []byte, iNdEx *int, preIndex int, l int) error {
+// skipField skips an unknown field in the protobuf wire format.
+func skipField(data []byte, iNdEx *int, preIndex int, l int) error {
 	*iNdEx = preIndex
 	depth := 0
 	for *iNdEx < l {
@@ -1337,4 +1521,16 @@ func addAttributeToMapAsJsonDirect(val any) string {
 		return ""
 	}
 	return w.String()
+}
+
+func getDatasetFromMsgpAttr(ri RequestInfo, attrs *msgpAttributes) string {
+	if ri.hasClassicKey() {
+		return ri.Dataset
+	}
+
+	serviceName := strings.TrimSpace(attrs.serviceName)
+	if serviceName == "" || strings.HasPrefix(serviceName, defaultServiceName) {
+		return defaultServiceName
+	}
+	return serviceName
 }
