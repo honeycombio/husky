@@ -445,12 +445,14 @@ func addAttributeToMap(ctx context.Context, result map[string]interface{}, key s
 			"received_kvlist_attr_type": true,
 			"kvlist_max_depth":          depth,
 		})
-		for _, entry := range value.GetKvlistValue().Values {
-			k := key + "." + entry.Key
-			if depth < maxDepth {
+		if depth >= maxDepth {
+			// If we've reached max depth, encode the entire kvlist as JSON
+			addAttributeToMapAsJson(result, key, value)
+		} else {
+			// Otherwise, continue flattening
+			for _, entry := range value.GetKvlistValue().Values {
+				k := key + "." + entry.Key
 				addAttributeToMap(ctx, result, k, entry.Value, depth+1)
-			} else {
-				addAttributeToMapAsJson(result, k, entry.Value)
 			}
 		}
 	}

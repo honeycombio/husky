@@ -3,6 +3,7 @@ package otlp
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -775,4 +776,164 @@ func TestUnmarshalTraceRequestDirect_WithUnknownFields(t *testing.T) {
 	assert.Equal(t, "0102030405060708090a0b0c0d0e0f10", attrs["trace.trace_id"])
 	assert.Equal(t, "0102030405060708", attrs["trace.span_id"])
 	assert.Equal(t, "test-span", attrs["name"])
+}
+
+func TestUnmarshalTraceRequestDirect_NestedMapAttributes(t *testing.T) {
+	// Test nested map attribute flattening at various depths
+	// Expected behavior:
+	// - Maps are flattened with dot notation up to maxDepth (5)
+	// - When a kvlist is encountered at depth >= maxDepth, it's JSON encoded
+	// - This means we can have up to 6 segments in a flattened path (0-5 depth levels)
+	// - Example: map6.level6.level5.level4.level3.level2 is 6 segments (depths 0-5)
+	//   The value at level2 (a kvlist containing level1) is JSON encoded
+
+	traceID := []byte{0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10}
+	spanID := []byte{0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08}
+	startTime := uint64(1234567890123456789)
+	endTime := uint64(1234567890987654321)
+
+	// Helper to create nested kvlist attributes
+	var createNestedMap func(depth int, leafValue string) *common.AnyValue
+	createNestedMap = func(depth int, leafValue string) *common.AnyValue {
+		if depth == 0 {
+			return &common.AnyValue{
+				Value: &common.AnyValue_StringValue{StringValue: leafValue},
+			}
+		}
+
+		return &common.AnyValue{
+			Value: &common.AnyValue_KvlistValue{
+				KvlistValue: &common.KeyValueList{
+					Values: []*common.KeyValue{
+						{
+							Key:   fmt.Sprintf("level%d", depth),
+							Value: createNestedMap(depth-1, leafValue),
+						},
+					},
+				},
+			},
+		}
+	}
+
+	req := &collectortrace.ExportTraceServiceRequest{
+		ResourceSpans: []*trace.ResourceSpans{
+			{
+				Resource: &resource.Resource{
+					Attributes: []*common.KeyValue{
+						{
+							Key: "service.name",
+							Value: &common.AnyValue{
+								Value: &common.AnyValue_StringValue{StringValue: "nested-test"},
+							},
+						},
+					},
+				},
+				ScopeSpans: []*trace.ScopeSpans{
+					{
+						Spans: []*trace.Span{
+							{
+								TraceId:           traceID,
+								SpanId:            spanID,
+								Name:              "nested-test-span",
+								Kind:              trace.Span_SPAN_KIND_INTERNAL,
+								StartTimeUnixNano: startTime,
+								EndTimeUnixNano:   endTime,
+								Attributes: []*common.KeyValue{
+									// Depth 1: should be flattened
+									{
+										Key:   "map1",
+										Value: createNestedMap(1, "value1"),
+									},
+									// Depth 2: should be flattened
+									{
+										Key:   "map2",
+										Value: createNestedMap(2, "value2"),
+									},
+									// Depth 3: should be flattened
+									{
+										Key:   "map3",
+										Value: createNestedMap(3, "value3"),
+									},
+									// Depth 4: should be flattened
+									{
+										Key:   "map4",
+										Value: createNestedMap(4, "value4"),
+									},
+									// Depth 5: should be flattened
+									{
+										Key:   "map5",
+										Value: createNestedMap(5, "value5"),
+									},
+									// Depth 6: should be JSON encoded
+									{
+										Key:   "map6",
+										Value: createNestedMap(6, "value6"),
+									},
+									// Depth 7: should be JSON encoded
+									{
+										Key:   "map7",
+										Value: createNestedMap(7, "value7"),
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	ri := RequestInfo{
+		ApiKey:      "abc123DEF456ghi789jklm",
+		Dataset:     "test-dataset",
+		ContentType: "application/protobuf",
+	}
+
+	// First, get results from direct unmarshaling
+	data := serializeTraceRequest(t, req)
+	directResult, err := UnmarshalTraceRequestDirectMsgp(context.Background(), data, ri)
+	require.NoError(t, err)
+	require.Len(t, directResult.Batches, 1)
+	require.Len(t, directResult.Batches[0].Events, 1)
+
+	directEvent := directResult.Batches[0].Events[0]
+	directAttrs := decodeMessagePackAttributes(t, directEvent.Attributes)
+
+	// Then get results from regular unmarshaling
+	regularResult, err := TranslateTraceRequest(context.Background(), req, ri)
+	require.NoError(t, err)
+	require.Len(t, regularResult.Batches, 1)
+	require.Len(t, regularResult.Batches[0].Events, 1)
+
+	regularEvent := regularResult.Batches[0].Events[0]
+	regularAttrs := regularEvent.Attributes
+
+	// Verify depth 1-5 flattening behavior
+	t.Run("Depth1-5_Flattening", func(t *testing.T) {
+		assert.Equal(t, "value1", directAttrs["map1.level1"])
+		assert.Equal(t, "value1", regularAttrs["map1.level1"])
+
+		assert.Equal(t, "value2", directAttrs["map2.level2.level1"])
+		assert.Equal(t, "value2", regularAttrs["map2.level2.level1"])
+
+		assert.Equal(t, "value3", directAttrs["map3.level3.level2.level1"])
+		assert.Equal(t, "value3", regularAttrs["map3.level3.level2.level1"])
+
+		assert.Equal(t, "value4", directAttrs["map4.level4.level3.level2.level1"])
+		assert.Equal(t, "value4", regularAttrs["map4.level4.level3.level2.level1"])
+
+		assert.Equal(t, "value5", directAttrs["map5.level5.level4.level3.level2.level1"])
+		assert.Equal(t, "value5", regularAttrs["map5.level5.level4.level3.level2.level1"])
+	})
+
+	// Verify depth 6-7 JSON encoding behavior
+	t.Run("Depth6-7_JSONEncoding", func(t *testing.T) {
+		expectedMap6 := `{"level1":"value6"}` + "\n"
+		assert.Equal(t, expectedMap6, regularAttrs["map6.level6.level5.level4.level3.level2"])
+		assert.Equal(t, expectedMap6, directAttrs["map6.level6.level5.level4.level3.level2"])
+
+		expectedMap7 := `{"level2":{"level1":"value7"}}` + "\n"
+		assert.Equal(t, expectedMap7, regularAttrs["map7.level7.level6.level5.level4.level3"])
+		assert.Equal(t, expectedMap7, directAttrs["map7.level7.level6.level5.level4.level3"])
+	})
 }

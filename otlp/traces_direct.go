@@ -410,6 +410,67 @@ func parseKeyValue(ctx context.Context, data []byte) ([]byte, any, error) {
 	return key, value, nil
 }
 
+// processValueDirect handles a value recursively, tracking depth for proper flattening
+func processValueDirect(ctx context.Context, key []byte, value any, attrs *msgpAttributes, depth int) error {
+	var err error
+	
+	// Handle different value types to match legacy behavior
+	switch v := value.(type) {
+	case []byte:
+		// Bytes are JSON encoded - match the legacy behavior
+		husky.AddTelemetryAttribute(ctx, "received_bytes_attr_type", true)
+		err = attrs.addAny(key, addAttributeToMapAsJsonDirect(v))
+		if err != nil {
+			return err
+		}
+	case []any:
+		// Arrays are JSON encoded
+		husky.AddTelemetryAttribute(ctx, "received_array_attr_type", true)
+		err = attrs.addAny(key, addAttributeToMapAsJsonDirect(v))
+		if err != nil {
+			return err
+		}
+	case map[string]any:
+		// Kvlists are flattened with dot notation
+		husky.AddTelemetryAttributes(ctx, map[string]any{
+			"received_kvlist_attr_type": true,
+			"kvlist_max_depth":          depth,
+		})
+		if depth < maxDepth {
+			// Flatten the kvlist
+			for k, v := range v {
+				flatKey := append(key, '.')
+				flatKey = append(flatKey, k...)
+
+				// Process the nested value recursively
+				err = processValueDirect(ctx, flatKey, v, attrs, depth+1)
+				if err != nil {
+					return err
+				}
+			}
+		} else {
+			// Max depth exceeded, JSON encode the whole thing
+			err = attrs.addAny(key, addAttributeToMapAsJsonDirect(v))
+			if err != nil {
+				return err
+			}
+		}
+	default:
+		// Simple types - just encode directly
+		err = attrs.addAny(key, v)
+		if err != nil {
+			return err
+		}
+	}
+	
+	// If this is the service name, note it.
+	if asStr, ok := value.(string); ok && bytes.Equal(key, []byte("service.name")) {
+		attrs.serviceName = asStr
+	}
+	
+	return nil
+}
+
 // unmarshalKeyValue parses a KeyValue message and adds it to msgpAttributes
 func unmarshalKeyValue(ctx context.Context, data []byte, attrs *msgpAttributes, depth int) error {
 	key, value, err := parseKeyValue(ctx, data)
@@ -434,65 +495,8 @@ func unmarshalKeyValue(ctx context.Context, data []byte, attrs *msgpAttributes, 
 			return nil
 		}
 
-		// Handle different value types to match legacy behavior
-		switch v := value.(type) {
-		case []byte:
-			// Bytes are JSON encoded - match the legacy behavior
-			// This telemetry attribute tracks when we receive byte array attributes
-			husky.AddTelemetryAttribute(ctx, "received_bytes_attr_type", true)
-			err = attrs.addAny(key, addAttributeToMapAsJsonDirect(v))
-			if err != nil {
-				return err
-			}
-		case []any:
-			// Arrays are JSON encoded
-			husky.AddTelemetryAttribute(ctx, "received_array_attr_type", true)
-			err = attrs.addAny(key, addAttributeToMapAsJsonDirect(v))
-			if err != nil {
-				return err
-			}
-		case map[string]any:
-			// Kvlists are flattened with dot notation
-			husky.AddTelemetryAttributes(ctx, map[string]any{
-				"received_kvlist_attr_type": true,
-				"kvlist_max_depth":          depth,
-			})
-			if depth < maxDepth {
-				// Flatten the kvlist
-				for k, v := range v {
-					flatKey := append(key, '.')
-					flatKey = append(flatKey, k...)
-
-					// Nested complex types (arrays, bytes, nested kvlists) are JSON encoded
-					switch v.(type) {
-					case []byte, []any, map[string]any:
-						err = attrs.addAny(flatKey, addAttributeToMapAsJsonDirect(v))
-						if err != nil {
-							return err
-						}
-					default:
-						err = attrs.addAny(flatKey, v)
-						if err != nil {
-							return err
-						}
-					}
-				}
-			} else {
-				// Max depth exceeded, JSON encode the whole thing
-				err = attrs.addAny(key, addAttributeToMapAsJsonDirect(v))
-				if err != nil {
-					return err
-				}
-			}
-		default:
-			// Simple types - just encode directly
-			err = attrs.addAny(key, v)
-		}
-
-		// If this is the service name, note it.
-		if asStr, ok := value.(string); ok && bytes.Equal(key, []byte("service.name")) {
-			attrs.serviceName = asStr
-		}
+		// Process the value recursively with depth tracking
+		return processValueDirect(ctx, key, value, attrs, depth)
 	}
 
 	return nil
