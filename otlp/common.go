@@ -580,7 +580,10 @@ func BytesToSpanID(spanID []byte) string {
 }
 
 func shouldTrimTraceId(traceID []byte) bool {
-	for i := 0; i < 8; i++ {
+	if len(traceID) != traceIDLongLength {
+		return false
+	}
+	for i := 0; i < traceIDShortLength; i++ {
 		if traceID[i] != 0 {
 			return false
 		}

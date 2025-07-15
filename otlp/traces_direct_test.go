@@ -14,6 +14,7 @@ import (
 	common "go.opentelemetry.io/proto/otlp/common/v1"
 	resource "go.opentelemetry.io/proto/otlp/resource/v1"
 	trace "go.opentelemetry.io/proto/otlp/trace/v1"
+	"google.golang.org/protobuf/proto"
 )
 
 // decodeMessagePackAttributes unmarshals MessagePack data into a map for testing
@@ -69,7 +70,7 @@ func TestUnmarshalTraceRequestDirect_Complete(t *testing.T) {
 	spanID1 := []byte{0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08}
 	parentSpanID1 := []byte{0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18}
 
-	traceID2 := []byte{0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x28, 0x29, 0x2a, 0x2b, 0x2c, 0x2d, 0x2e, 0x2f, 0x20}
+	traceID2 := []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x29, 0x2a, 0x2b, 0x2c, 0x2d, 0x2e, 0x2f, 0x20}
 	spanID2 := []byte{0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x28}
 
 	linkedTraceID := []byte{0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39, 0x3a, 0x3b, 0x3c, 0x3d, 0x3e, 0x3f, 0x40}
@@ -613,7 +614,7 @@ func TestUnmarshalTraceRequestDirect_Complete(t *testing.T) {
 
 	producerEvent := batch2.Events[0]
 	producerAttrs := decodeMessagePackAttributes(t, producerEvent.Attributes)
-	assert.Equal(t, "2122232425262728292a2b2c2d2e2f20", producerAttrs["trace.trace_id"])
+	assert.Equal(t, "292a2b2c2d2e2f20", producerAttrs["trace.trace_id"]) // Leading zeros trimmed
 	assert.Equal(t, "2122232425262728", producerAttrs["trace.span_id"])
 	assert.Equal(t, "Publish Message", producerAttrs["name"])
 	assert.Equal(t, "producer", producerAttrs["span.kind"])
@@ -936,4 +937,110 @@ func TestUnmarshalTraceRequestDirect_NestedMapAttributes(t *testing.T) {
 		assert.Equal(t, expectedMap7, regularAttrs["map7.level7.level6.level5.level4.level3"])
 		assert.Equal(t, expectedMap7, directAttrs["map7.level7.level6.level5.level4.level3"])
 	})
+}
+
+// BenchmarkUnmarshalTraceRequestDirectMsgp benchmarks the direct unmarshaling with 100 scalar attributes
+func BenchmarkUnmarshalTraceRequestDirectMsgp(b *testing.B) {
+	// Create a trace request with a single span containing 100 scalar attributes
+	traceID := []byte{0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10}
+	spanID := []byte{0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08}
+	startTime := uint64(1234567890123456789)
+	endTime := uint64(1234567890987654321)
+
+	// Generate 100 attributes with mixed scalar types
+	attributes := make([]*common.KeyValue, 100)
+	for i := 0; i < 100; i++ {
+		var value *common.AnyValue
+
+		switch i % 4 {
+		case 0: // String
+			value = &common.AnyValue{
+				Value: &common.AnyValue_StringValue{
+					StringValue: fmt.Sprintf("string_value_%d_lorem_ipsum_dolor_sit_amet", i),
+				},
+			}
+		case 1: // Integer
+			value = &common.AnyValue{
+				Value: &common.AnyValue_IntValue{
+					IntValue: int64(i * 12345),
+				},
+			}
+		case 2: // Float
+			value = &common.AnyValue{
+				Value: &common.AnyValue_DoubleValue{
+					DoubleValue: float64(i) * 3.14159,
+				},
+			}
+		case 3: // Boolean
+			value = &common.AnyValue{
+				Value: &common.AnyValue_BoolValue{
+					BoolValue: i%2 == 0,
+				},
+			}
+		}
+
+		attributes[i] = &common.KeyValue{
+			Key:   fmt.Sprintf("attribute_%03d", i),
+			Value: value,
+		}
+	}
+
+	req := &collectortrace.ExportTraceServiceRequest{
+		ResourceSpans: []*trace.ResourceSpans{
+			{
+				Resource: &resource.Resource{
+					Attributes: []*common.KeyValue{
+						{
+							Key: "service.name",
+							Value: &common.AnyValue{
+								Value: &common.AnyValue_StringValue{StringValue: "benchmark-service"},
+							},
+						},
+					},
+				},
+				ScopeSpans: []*trace.ScopeSpans{
+					{
+						Spans: []*trace.Span{
+							{
+								TraceId:           traceID,
+								SpanId:            spanID,
+								Name:              "benchmark-span",
+								Kind:              trace.Span_SPAN_KIND_INTERNAL,
+								StartTimeUnixNano: startTime,
+								EndTimeUnixNano:   endTime,
+								Attributes:        attributes,
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	ri := RequestInfo{
+		ApiKey:      "abc123DEF456ghi789jklm",
+		Dataset:     "benchmark-dataset",
+		ContentType: "application/protobuf",
+	}
+
+	// Serialize the request once before benchmarking
+	data, err := proto.Marshal(req)
+	if err != nil {
+		b.Fatal("Failed to serialize trace request:", err)
+	}
+	ctx := context.Background()
+
+	// Reset timer to exclude setup time
+	b.ResetTimer()
+
+	// Run the benchmark
+	for i := 0; i < b.N; i++ {
+		result, err := UnmarshalTraceRequestDirectMsgp(ctx, data, ri)
+		if err != nil {
+			b.Fatal(err)
+		}
+		if len(result.Batches) != 1 || len(result.Batches[0].Events) != 1 {
+			b.Fatal("unexpected result structure")
+		}
+	}
 }
