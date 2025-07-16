@@ -5,8 +5,11 @@ import (
 	"compress/gzip"
 	"errors"
 	"strings"
+	"testing"
 
 	"github.com/klauspost/compress/zstd"
+	"github.com/stretchr/testify/require"
+	"github.com/vmihailenco/msgpack"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
@@ -83,4 +86,15 @@ func testCaseNameForEncoding(encoding string) string {
 	} else {
 		return encoding
 	}
+}
+
+// decodeMessagePackAttributes unmarshals MessagePack data into a map for testing
+func decodeMessagePackAttributes(t testing.TB, data []byte) map[string]any {
+	decoder := msgpack.NewDecoder(bytes.NewReader(data))
+	decoder.UseDecodeInterfaceLoose(true)
+
+	var attrs map[string]any
+	err := decoder.Decode(&attrs)
+	require.NoError(t, err, "Failed to unmarshal MessagePack attributes")
+	return attrs
 }

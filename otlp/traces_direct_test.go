@@ -1,15 +1,14 @@
 package otlp
 
 import (
-	"bytes"
 	"context"
+	"encoding/hex"
 	"fmt"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/vmihailenco/msgpack"
 	collectortrace "go.opentelemetry.io/proto/otlp/collector/trace/v1"
 	common "go.opentelemetry.io/proto/otlp/common/v1"
 	resource "go.opentelemetry.io/proto/otlp/resource/v1"
@@ -17,16 +16,6 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// decodeMessagePackAttributes unmarshals MessagePack data into a map for testing
-func decodeMessagePackAttributes(t testing.TB, data []byte) map[string]any {
-	decoder := msgpack.NewDecoder(bytes.NewReader(data))
-	decoder.UseDecodeInterfaceLoose(true)
-
-	var attrs map[string]any
-	err := decoder.Decode(&attrs)
-	require.NoError(t, err, "Failed to unmarshal MessagePack attributes")
-	return attrs
-}
 
 // convertBatchMsgpToBatch converts a BatchMsgp to a Batch by deserializing the msgpack attributes
 func convertBatchMsgpToBatch(t testing.TB, msgpBatch BatchMsgp) Batch {
@@ -64,17 +53,26 @@ func normalizeIntegerTypes(attrs map[string]any) {
 	}
 }
 
+func hexToBin(s string) []byte {
+	bin, _ := hex.DecodeString(s)
+	return bin
+}
+
 func TestUnmarshalTraceRequestDirect_Complete(t *testing.T) {
 	// Create a comprehensive test request with all supported features
-	traceID1 := []byte{0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10}
-	spanID1 := []byte{0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08}
-	parentSpanID1 := []byte{0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18}
+	// Using human-readable hex strings for clarity
+	traceID1 := "0102030405060708090a0b0c0d0e0f10"
+	spanID1 := "0102030405060708"
+	parentSpanID1 := "1112131415161718"
 
-	traceID2 := []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x29, 0x2a, 0x2b, 0x2c, 0x2d, 0x2e, 0x2f, 0x20}
-	spanID2 := []byte{0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x28}
+	// Create a trace ID with leading zeros to test trimming
+	traceID2 := "00000000000000001a2b3c4d5e6f7089"
+	spanID2 := "2122232425262728"
 
-	linkedTraceID := []byte{0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39, 0x3a, 0x3b, 0x3c, 0x3d, 0x3e, 0x3f, 0x40}
-	linkedSpanID := []byte{0x41, 0x42, 0x43, 0x44, 0x45, 0x46, 0x47, 0x48}
+	linkedTraceID := "3132333435363738393a3b3c3d3e3f40"
+	linkedSpanID := "4142434445464748"
+
+	errorSpanID := "5152535455565758"
 
 	startTime := uint64(1234567890123456789)
 	endTime := uint64(1234567890987654321)
@@ -179,9 +177,9 @@ func TestUnmarshalTraceRequestDirect_Complete(t *testing.T) {
 						Spans: []*trace.Span{
 							// Span 1: Server span with all features
 							{
-								TraceId:           traceID1,
-								SpanId:            spanID1,
-								ParentSpanId:      parentSpanID1,
+								TraceId:           hexToBin(traceID1),
+								SpanId:            hexToBin(spanID1),
+								ParentSpanId:      hexToBin(parentSpanID1),
 								TraceState:        "w3c=true;th=8",
 								Name:              "HTTP GET /api/users",
 								Kind:              trace.Span_SPAN_KIND_SERVER,
@@ -281,8 +279,8 @@ func TestUnmarshalTraceRequestDirect_Complete(t *testing.T) {
 								},
 								Links: []*trace.Span_Link{
 									{
-										TraceId:    linkedTraceID,
-										SpanId:     linkedSpanID,
+										TraceId:    hexToBin(linkedTraceID),
+										SpanId:     hexToBin(linkedSpanID),
 										TraceState: "vendor=value",
 										Attributes: []*common.KeyValue{
 											{
@@ -297,9 +295,9 @@ func TestUnmarshalTraceRequestDirect_Complete(t *testing.T) {
 							},
 							// Span 2: Client span
 							{
-								TraceId:           traceID1,
-								SpanId:            spanID2,
-								ParentSpanId:      spanID1,
+								TraceId:           hexToBin(traceID1),
+								SpanId:            hexToBin(spanID2),
+								ParentSpanId:      hexToBin(spanID1),
 								Name:              "DB Query",
 								Kind:              trace.Span_SPAN_KIND_CLIENT,
 								StartTimeUnixNano: startTime + 50_000_000,
@@ -327,8 +325,8 @@ func TestUnmarshalTraceRequestDirect_Complete(t *testing.T) {
 						Spans: []*trace.Span{
 							// Span 3: Error span with negative duration
 							{
-								TraceId:           traceID1,
-								SpanId:            []byte{0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38},
+								TraceId:           hexToBin(traceID1),
+								SpanId:            hexToBin(errorSpanID),
 								Name:              "Error Operation",
 								Kind:              trace.Span_SPAN_KIND_INTERNAL,
 								StartTimeUnixNano: errorStartTime,
@@ -376,6 +374,21 @@ func TestUnmarshalTraceRequestDirect_Complete(t *testing.T) {
 										},
 									},
 								},
+								Links: []*trace.Span_Link{
+									{
+										TraceId:    hexToBin(linkedTraceID),
+										SpanId:     hexToBin(linkedSpanID),
+										TraceState: "ignored=state",
+										Attributes: []*common.KeyValue{
+											{
+												Key: "link.from",
+												Value: &common.AnyValue{
+													Value: &common.AnyValue_StringValue{StringValue: "error_span"},
+												},
+											},
+										},
+									},
+								},
 							},
 						},
 					},
@@ -398,8 +411,8 @@ func TestUnmarshalTraceRequestDirect_Complete(t *testing.T) {
 						Spans: []*trace.Span{
 							// Span 4: Producer span
 							{
-								TraceId:           traceID2,
-								SpanId:            spanID2,
+								TraceId:           hexToBin(traceID2),
+								SpanId:            hexToBin(spanID2),
 								Name:              "Publish Message",
 								Kind:              trace.Span_SPAN_KIND_PRODUCER,
 								StartTimeUnixNano: startTime,
@@ -420,7 +433,7 @@ func TestUnmarshalTraceRequestDirect_Complete(t *testing.T) {
 		ContentType: "application/protobuf",
 	}
 
-	result, err := UnmarshalTraceRequestDirectMsgp(context.Background(), data, ri)
+	result, err := unmarshalTraceRequestDirectMsgp(context.Background(), data, ri)
 	require.NoError(t, err)
 	assert.NotNil(t, result)
 	assert.Equal(t, len(data), result.RequestSize)
@@ -429,8 +442,8 @@ func TestUnmarshalTraceRequestDirect_Complete(t *testing.T) {
 	// Batch 1: service1
 	batch1 := result.Batches[0]
 	assert.Equal(t, "service1", batch1.Dataset)
-	// 3 spans + 2 events from span1 + 2 events from error span + 1 link = 8 events
-	assert.Len(t, batch1.Events, 8)
+	// 3 spans + 2 events from span1 + 2 events from error span + 1 link from span1 + 1 link from error span = 9 events
+	assert.Len(t, batch1.Events, 9)
 
 	// Events are in deterministic order:
 	// 0: cache_miss event (from span1)
@@ -440,7 +453,8 @@ func TestUnmarshalTraceRequestDirect_Complete(t *testing.T) {
 	// 4: DB Query span (span2)
 	// 5: First exception event (from error span)
 	// 6: Second exception event (from error span)
-	// 7: Error Operation span (error span itself)
+	// 7: link (from error span)
+	// 8: Error Operation span (error span itself)
 
 	// Verify the main span (HTTP GET /api/users) at index 3
 	mainSpan := &batch1.Events[3]
@@ -448,9 +462,9 @@ func TestUnmarshalTraceRequestDirect_Complete(t *testing.T) {
 	mainAttrs := decodeMessagePackAttributes(t, mainSpan.Attributes)
 
 	// Core attributes
-	assert.Equal(t, "0102030405060708090a0b0c0d0e0f10", mainAttrs["trace.trace_id"])
-	assert.Equal(t, "0102030405060708", mainAttrs["trace.span_id"])
-	assert.Equal(t, "1112131415161718", mainAttrs["trace.parent_id"])
+	assert.Equal(t, traceID1, mainAttrs["trace.trace_id"])
+	assert.Equal(t, spanID1, mainAttrs["trace.span_id"])
+	assert.Equal(t, parentSpanID1, mainAttrs["trace.parent_id"])
 	assert.Equal(t, "w3c=true;th=8", mainAttrs["trace.trace_state"])
 	assert.Equal(t, "HTTP GET /api/users", mainAttrs["name"])
 	assert.Equal(t, "server", mainAttrs["span.kind"])
@@ -511,13 +525,14 @@ func TestUnmarshalTraceRequestDirect_Complete(t *testing.T) {
 	cacheEvent := &batch1.Events[0]
 	cacheAttrs := decodeMessagePackAttributes(t, cacheEvent.Attributes)
 	assert.Equal(t, "cache_miss", cacheAttrs["name"])
-	assert.Equal(t, "0102030405060708090a0b0c0d0e0f10", cacheAttrs["trace.trace_id"])
-	assert.Equal(t, "0102030405060708", cacheAttrs["trace.parent_id"])
+	assert.Equal(t, traceID1, cacheAttrs["trace.trace_id"])
+	assert.Equal(t, spanID1, cacheAttrs["trace.parent_id"])
 	assert.Equal(t, "HTTP GET /api/users", cacheAttrs["parent_name"])
 	assert.Equal(t, "user:123", cacheAttrs["cache.key"])
 	assert.Equal(t, int64(3600), cacheAttrs["cache.ttl"])
 	assert.Equal(t, float64(100), cacheAttrs["meta.time_since_span_start_ms"])
 	assert.Equal(t, "span_event", cacheAttrs["meta.annotation_type"])
+	assert.Equal(t, "trace", cacheAttrs["meta.signal_type"])
 	assert.Nil(t, cacheAttrs["error"]) // Parent span is not error
 	assert.Equal(t, int32(10), cacheEvent.SampleRate)
 	assert.Equal(t, time.Unix(0, int64(event1Time)).UTC(), cacheEvent.Timestamp)
@@ -526,8 +541,8 @@ func TestUnmarshalTraceRequestDirect_Complete(t *testing.T) {
 	exceptionEvent := &batch1.Events[1]
 	exceptionAttrs := decodeMessagePackAttributes(t, exceptionEvent.Attributes)
 	assert.Equal(t, "exception", exceptionAttrs["name"])
-	assert.Equal(t, "0102030405060708090a0b0c0d0e0f10", exceptionAttrs["trace.trace_id"])
-	assert.Equal(t, "0102030405060708", exceptionAttrs["trace.parent_id"])
+	assert.Equal(t, traceID1, exceptionAttrs["trace.trace_id"])
+	assert.Equal(t, spanID1, exceptionAttrs["trace.parent_id"])
 	assert.Equal(t, "span_event", exceptionAttrs["meta.annotation_type"])
 	assert.Equal(t, int32(10), exceptionEvent.SampleRate)
 	assert.Equal(t, time.Unix(0, int64(event2Time)).UTC(), exceptionEvent.Timestamp)
@@ -535,12 +550,14 @@ func TestUnmarshalTraceRequestDirect_Complete(t *testing.T) {
 	// Link at index 2
 	linkEvent := &batch1.Events[2]
 	linkAttrs := decodeMessagePackAttributes(t, linkEvent.Attributes)
-	assert.Equal(t, "0102030405060708090a0b0c0d0e0f10", linkAttrs["trace.trace_id"])
-	assert.Equal(t, "0102030405060708", linkAttrs["trace.parent_id"])
-	assert.Equal(t, "3132333435363738393a3b3c3d3e3f40", linkAttrs["trace.link.trace_id"])
-	assert.Equal(t, "4142434445464748", linkAttrs["trace.link.span_id"])
+	assert.Equal(t, traceID1, linkAttrs["trace.trace_id"])
+	assert.Equal(t, spanID1, linkAttrs["trace.parent_id"])
+	assert.Equal(t, linkedTraceID, linkAttrs["trace.link.trace_id"])
+	assert.Equal(t, linkedSpanID, linkAttrs["trace.link.span_id"])
 	assert.Equal(t, "parent", linkAttrs["link.type"])
 	assert.Equal(t, "link", linkAttrs["meta.annotation_type"])
+	assert.Equal(t, "trace", linkAttrs["meta.signal_type"])
+	assert.Equal(t, "HTTP GET /api/users", linkAttrs["parent_name"])
 	assert.Equal(t, int32(10), linkEvent.SampleRate)
 	assert.Equal(t, time.Unix(0, int64(startTime)).UTC(), linkEvent.Timestamp) // Links use parent span timestamp
 
@@ -548,20 +565,35 @@ func TestUnmarshalTraceRequestDirect_Complete(t *testing.T) {
 	dbSpan := &batch1.Events[4]
 	dbAttrs := decodeMessagePackAttributes(t, dbSpan.Attributes)
 	assert.Equal(t, "DB Query", dbAttrs["name"])
-	assert.Equal(t, "0102030405060708090a0b0c0d0e0f10", dbAttrs["trace.trace_id"])
-	assert.Equal(t, "2122232425262728", dbAttrs["trace.span_id"])
-	assert.Equal(t, "0102030405060708", dbAttrs["trace.parent_id"])
+	assert.Equal(t, traceID1, dbAttrs["trace.trace_id"])
+	assert.Equal(t, spanID2, dbAttrs["trace.span_id"])
+	assert.Equal(t, spanID1, dbAttrs["trace.parent_id"])
 	assert.Equal(t, "client", dbAttrs["span.kind"])
 	assert.Equal(t, "SELECT * FROM users WHERE id = ?", dbAttrs["db.statement"])
 	assert.Equal(t, int32(1), dbSpan.SampleRate) // DB Query span has no explicit sampleRate, gets default
 	assert.Equal(t, time.Unix(0, int64(startTime+50_000_000)).UTC(), dbSpan.Timestamp)
 
-	// Error span at index 7
-	errorSpan := &batch1.Events[7]
+	// Error span's link at index 7
+	errorLinkEvent := &batch1.Events[7]
+	errorLinkAttrs := decodeMessagePackAttributes(t, errorLinkEvent.Attributes)
+	assert.Equal(t, traceID1, errorLinkAttrs["trace.trace_id"])
+	assert.Equal(t, errorSpanID, errorLinkAttrs["trace.parent_id"])
+	assert.Equal(t, linkedTraceID, errorLinkAttrs["trace.link.trace_id"])
+	assert.Equal(t, linkedSpanID, errorLinkAttrs["trace.link.span_id"])
+	assert.Equal(t, "error_span", errorLinkAttrs["link.from"])
+	assert.Equal(t, "link", errorLinkAttrs["meta.annotation_type"])
+	assert.Equal(t, "trace", errorLinkAttrs["meta.signal_type"])
+	assert.Equal(t, "Error Operation", errorLinkAttrs["parent_name"])
+	assert.Equal(t, true, errorLinkAttrs["error"]) // Parent span has error status
+	assert.Equal(t, int32(1), errorLinkEvent.SampleRate)
+	assert.Equal(t, time.Unix(0, int64(errorStartTime)).UTC(), errorLinkEvent.Timestamp) // Links use parent span timestamp
+
+	// Error span at index 8
+	errorSpan := &batch1.Events[8]
 	errorAttrs := decodeMessagePackAttributes(t, errorSpan.Attributes)
 	assert.Equal(t, "Error Operation", errorAttrs["name"])
-	assert.Equal(t, "0102030405060708090a0b0c0d0e0f10", errorAttrs["trace.trace_id"])
-	assert.Equal(t, "3132333435363738", errorAttrs["trace.span_id"])
+	assert.Equal(t, traceID1, errorAttrs["trace.trace_id"])
+	assert.Equal(t, errorSpanID, errorAttrs["trace.span_id"])
 	assert.Equal(t, true, errorAttrs["error"])
 	assert.Equal(t, int64(2), errorAttrs["status_code"]) // STATUS_CODE_ERROR = 2
 	assert.Equal(t, "Operation failed", errorAttrs["status_message"])
@@ -579,8 +611,8 @@ func TestUnmarshalTraceRequestDirect_Complete(t *testing.T) {
 	firstExceptionEvent := &batch1.Events[5]
 	firstExceptionAttrs := decodeMessagePackAttributes(t, firstExceptionEvent.Attributes)
 	assert.Equal(t, "exception", firstExceptionAttrs["name"])
-	assert.Equal(t, "0102030405060708090a0b0c0d0e0f10", firstExceptionAttrs["trace.trace_id"])
-	assert.Equal(t, "3132333435363738", firstExceptionAttrs["trace.parent_id"])
+	assert.Equal(t, traceID1, firstExceptionAttrs["trace.trace_id"])
+	assert.Equal(t, errorSpanID, firstExceptionAttrs["trace.parent_id"])
 	assert.Equal(t, "Error Operation", firstExceptionAttrs["parent_name"])
 	assert.Equal(t, "RuntimeError", firstExceptionAttrs["exception.type"])
 	assert.Equal(t, "First exception", firstExceptionAttrs["exception.message"])
@@ -596,8 +628,8 @@ func TestUnmarshalTraceRequestDirect_Complete(t *testing.T) {
 	secondExceptionEvent := &batch1.Events[6]
 	secondExceptionAttrs := decodeMessagePackAttributes(t, secondExceptionEvent.Attributes)
 	assert.Equal(t, "exception", secondExceptionAttrs["name"])
-	assert.Equal(t, "0102030405060708090a0b0c0d0e0f10", secondExceptionAttrs["trace.trace_id"])
-	assert.Equal(t, "3132333435363738", secondExceptionAttrs["trace.parent_id"])
+	assert.Equal(t, traceID1, secondExceptionAttrs["trace.trace_id"])
+	assert.Equal(t, errorSpanID, secondExceptionAttrs["trace.parent_id"])
 	assert.Equal(t, "Error Operation", secondExceptionAttrs["parent_name"])
 	assert.Equal(t, "IOError", secondExceptionAttrs["exception.type"])
 	assert.Equal(t, "Second exception", secondExceptionAttrs["exception.message"])
@@ -614,8 +646,8 @@ func TestUnmarshalTraceRequestDirect_Complete(t *testing.T) {
 
 	producerEvent := batch2.Events[0]
 	producerAttrs := decodeMessagePackAttributes(t, producerEvent.Attributes)
-	assert.Equal(t, "292a2b2c2d2e2f20", producerAttrs["trace.trace_id"]) // Leading zeros trimmed
-	assert.Equal(t, "2122232425262728", producerAttrs["trace.span_id"])
+	assert.Equal(t, "1a2b3c4d5e6f7089", producerAttrs["trace.trace_id"]) // Leading zeros trimmed
+	assert.Equal(t, spanID2, producerAttrs["trace.span_id"])
 	assert.Equal(t, "Publish Message", producerAttrs["name"])
 	assert.Equal(t, "producer", producerAttrs["span.kind"])
 	assert.Equal(t, "producer", producerAttrs["type"])
@@ -678,7 +710,7 @@ func TestUnmarshalTraceRequestDirect_Complete(t *testing.T) {
 					delete(directEvent.Attributes, "meta.time_since_span_start_ms")
 					delete(directEvent.Attributes, "meta.invalid_time_since_span_start")
 				}
-				if i == 0 && j == 7 { // Error span with negative duration
+				if i == 0 && j == 8 { // Error span with negative duration
 					// The direct implementation correctly handles negative duration
 					// Regular: duration_ms = 1.8446744072845355e+13 (overflow)
 					// Direct: duration_ms = 0 + meta.invalid_duration = true
@@ -705,8 +737,8 @@ func TestUnmarshalTraceRequestDirect_WithUnknownFields(t *testing.T) {
 	// Field 25 in Span (unknown field)
 
 	// Start with a basic valid request
-	traceID := []byte{0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10}
-	spanID := []byte{0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08}
+	traceID := "0102030405060708090a0b0c0d0e0f10"
+	spanID := "0102030405060708"
 	startTime := uint64(1234567890123456789)
 	endTime := uint64(1234567890987654321)
 
@@ -727,8 +759,8 @@ func TestUnmarshalTraceRequestDirect_WithUnknownFields(t *testing.T) {
 					{
 						Spans: []*trace.Span{
 							{
-								TraceId:           traceID,
-								SpanId:            spanID,
+								TraceId:           hexToBin(traceID),
+								SpanId:            hexToBin(spanID),
 								Name:              "test-span",
 								Kind:              trace.Span_SPAN_KIND_SERVER,
 								StartTimeUnixNano: startTime,
@@ -763,7 +795,7 @@ func TestUnmarshalTraceRequestDirect_WithUnknownFields(t *testing.T) {
 	}
 
 	// The direct unmarshaling should skip unknown fields gracefully
-	result, err := UnmarshalTraceRequestDirectMsgp(context.Background(), data, ri)
+	result, err := unmarshalTraceRequestDirectMsgp(context.Background(), data, ri)
 	require.NoError(t, err)
 	assert.NotNil(t, result)
 	assert.Len(t, result.Batches, 1)
@@ -774,8 +806,8 @@ func TestUnmarshalTraceRequestDirect_WithUnknownFields(t *testing.T) {
 
 	event := batch.Events[0]
 	attrs := decodeMessagePackAttributes(t, event.Attributes)
-	assert.Equal(t, "0102030405060708090a0b0c0d0e0f10", attrs["trace.trace_id"])
-	assert.Equal(t, "0102030405060708", attrs["trace.span_id"])
+	assert.Equal(t, traceID, attrs["trace.trace_id"])
+	assert.Equal(t, spanID, attrs["trace.span_id"])
 	assert.Equal(t, "test-span", attrs["name"])
 }
 
@@ -788,8 +820,8 @@ func TestUnmarshalTraceRequestDirect_NestedMapAttributes(t *testing.T) {
 	// - Example: map6.level6.level5.level4.level3.level2 is 6 segments (depths 0-5)
 	//   The value at level2 (a kvlist containing level1) is JSON encoded
 
-	traceID := []byte{0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10}
-	spanID := []byte{0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08}
+	traceID := "0102030405060708090a0b0c0d0e0f10"
+	spanID := "0102030405060708"
 	startTime := uint64(1234567890123456789)
 	endTime := uint64(1234567890987654321)
 
@@ -833,8 +865,8 @@ func TestUnmarshalTraceRequestDirect_NestedMapAttributes(t *testing.T) {
 					{
 						Spans: []*trace.Span{
 							{
-								TraceId:           traceID,
-								SpanId:            spanID,
+								TraceId:           hexToBin(traceID),
+								SpanId:            hexToBin(spanID),
 								Name:              "nested-test-span",
 								Kind:              trace.Span_SPAN_KIND_INTERNAL,
 								StartTimeUnixNano: startTime,
@@ -892,7 +924,7 @@ func TestUnmarshalTraceRequestDirect_NestedMapAttributes(t *testing.T) {
 
 	// First, get results from direct unmarshaling
 	data := serializeTraceRequest(t, req)
-	directResult, err := UnmarshalTraceRequestDirectMsgp(context.Background(), data, ri)
+	directResult, err := unmarshalTraceRequestDirectMsgp(context.Background(), data, ri)
 	require.NoError(t, err)
 	require.Len(t, directResult.Batches, 1)
 	require.Len(t, directResult.Batches[0].Events, 1)
@@ -942,8 +974,8 @@ func TestUnmarshalTraceRequestDirect_NestedMapAttributes(t *testing.T) {
 // BenchmarkUnmarshalTraceRequestDirectMsgp benchmarks the direct unmarshaling with 100 scalar attributes
 func BenchmarkUnmarshalTraceRequestDirectMsgp(b *testing.B) {
 	// Create a trace request with a single span containing 100 scalar attributes
-	traceID := []byte{0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10}
-	spanID := []byte{0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08}
+	traceID := "0102030405060708090a0b0c0d0e0f10"
+	spanID := "0102030405060708"
 	startTime := uint64(1234567890123456789)
 	endTime := uint64(1234567890987654321)
 
@@ -1002,8 +1034,8 @@ func BenchmarkUnmarshalTraceRequestDirectMsgp(b *testing.B) {
 					{
 						Spans: []*trace.Span{
 							{
-								TraceId:           traceID,
-								SpanId:            spanID,
+								TraceId:           hexToBin(traceID),
+								SpanId:            hexToBin(spanID),
 								Name:              "benchmark-span",
 								Kind:              trace.Span_SPAN_KIND_INTERNAL,
 								StartTimeUnixNano: startTime,
@@ -1035,7 +1067,7 @@ func BenchmarkUnmarshalTraceRequestDirectMsgp(b *testing.B) {
 
 	// Run the benchmark
 	for i := 0; i < b.N; i++ {
-		result, err := UnmarshalTraceRequestDirectMsgp(ctx, data, ri)
+		result, err := unmarshalTraceRequestDirectMsgp(ctx, data, ri)
 		if err != nil {
 			b.Fatal(err)
 		}

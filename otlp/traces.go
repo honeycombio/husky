@@ -5,12 +5,11 @@ import (
 	"compress/gzip"
 	"context"
 	"encoding/hex"
-	"fmt"
 	"io"
+	"sync"
 	"time"
 
 	"github.com/klauspost/compress/zstd"
-	"github.com/vmihailenco/msgpack"
 	collectorTrace "go.opentelemetry.io/proto/otlp/collector/trace/v1"
 	trace "go.opentelemetry.io/proto/otlp/trace/v1"
 	"google.golang.org/protobuf/proto"
@@ -43,170 +42,88 @@ func TranslateTraceRequestFromReaderSized(ctx context.Context, body io.ReadClose
 	return TranslateTraceRequest(ctx, request, ri)
 }
 
-// TranslateTraceRequestFromReaderDirect translates an OTLP/HTTP request into Honeycomb-friendly structure
-// using direct unmarshaling to avoid creating intermediate proto structs.
-// This is a performance optimization that processes the serialized data directly.
-// RequestInfo is the parsed information from the HTTP headers
-func TranslateTraceRequestFromReaderDirect(ctx context.Context, body io.ReadCloser, ri RequestInfo) (*TranslateOTLPRequestResult, error) {
-	return TranslateTraceRequestFromReaderSizedDirect(ctx, body, ri, defaultMaxRequestBodySize)
+var httpBodyBufferPool = sync.Pool{
+	New: func() any {
+		return new(bytes.Buffer)
+	},
 }
 
-// TranslateTraceRequestFromReaderSizedDirect translates an OTLP/HTTP request into Honeycomb-friendly structure
-// using direct unmarshaling to avoid creating intermediate proto structs.
+var zstdDecoderPool = sync.Pool{
+	New: func() any {
+		reader, _ := zstd.NewReader(nil, zstd.WithDecoderConcurrency(1))
+		return reader
+	},
+}
+
+// TranslateTraceRequestFromReaderSizedWithMsgp translates an OTLP/HTTP
+// request into the Honeycomb-friendly structure using direct unmarshaling
+// to avoid creating intermediate proto structs.
+// Note the returned data is shiny new heap memory and is safe for callers to keep.
 // This is a performance optimization that processes the serialized data directly.
-// RequestInfo is the parsed information from the HTTP headers
-// maxSize is the maximum size of the request body in bytes
-func TranslateTraceRequestFromReaderSizedDirect(ctx context.Context, body io.ReadCloser, ri RequestInfo, maxSize int64) (*TranslateOTLPRequestResult, error) {
+// RequestInfo is the parsed information from the HTTP headers.
+// maxSize is the maximum size of the request body in bytes.
+func TranslateTraceRequestFromReaderSizedWithMsgp(
+	ctx context.Context,
+	body io.ReadCloser,
+	ri RequestInfo,
+	maxSize int64,
+) (*TranslateOTLPRequestResultMsgp, error) {
+	defer body.Close()
+
 	if err := ri.ValidateTracesHeaders(); err != nil {
 		return nil, err
 	}
-	
-	// For JSON content type, fall back to the regular implementation
-	// as it's not an optimized path
-	if ri.ContentType == "application/json" {
-		// Re-wrap the body since we haven't consumed it yet
-		request := &collectorTrace.ExportTraceServiceRequest{}
-		if err := parseOtlpRequestBody(body, ri.ContentType, ri.ContentEncoding, request, maxSize); err != nil {
-			return nil, ErrFailedParseBody
-		}
-		return TranslateTraceRequest(ctx, request, ri)
+
+	if ri.ContentType != "application/protobuf" && ri.ContentType != "application/x-protobuf" {
+		return nil, ErrInvalidContentType
 	}
-	
-	// For protobuf, use the optimized direct unmarshaling path
-	defer body.Close()
-	bodyBytes, err := io.ReadAll(body)
-	if err != nil {
-		return nil, ErrFailedParseBody
-	}
-	bodyReader := io.LimitReader(bytes.NewReader(bodyBytes), maxSize)
-	
+
+	reader := io.LimitReader(body, maxSize)
+
 	// Handle decompression
-	var reader io.Reader
 	switch ri.ContentEncoding {
 	case "gzip":
-		gzipReader, err := gzip.NewReader(bodyReader)
+		gzipReader, err := gzip.NewReader(reader)
 		if err != nil {
 			return nil, ErrFailedParseBody
 		}
 		defer gzipReader.Close()
 		reader = gzipReader
 	case "zstd":
-		zstdReader, err := zstd.NewReader(bodyReader)
+		// zstd decoders are extremely expensive to set up (big internal buffers),
+		// so use a pool for them.
+		zstdReader := zstdDecoderPool.Get().(*zstd.Decoder)
+		defer func() {
+			zstdReader.Reset(nil)
+			zstdDecoderPool.Put(zstdReader)
+		}()
+
+		err := zstdReader.Reset(reader)
 		if err != nil {
 			return nil, ErrFailedParseBody
 		}
-		defer zstdReader.Close()
+
 		reader = zstdReader
 	case "", "identity":
-		reader = bodyReader
+		// cool
 	default:
 		return nil, ErrFailedParseBody
 	}
-	
+
+	bodyBuffer := httpBodyBufferPool.Get().(*bytes.Buffer)
+	defer func() {
+		bodyBuffer.Reset()
+		httpBodyBufferPool.Put(bodyBuffer)
+	}()
+
 	// Read the decompressed data
-	data, err := io.ReadAll(reader)
+	_, err := bodyBuffer.ReadFrom(reader)
 	if err != nil {
 		return nil, ErrFailedParseBody
 	}
-	
-	// Direct unmarshaling only supports protobuf
-	switch ri.ContentType {
-	case "application/protobuf", "application/x-protobuf":
-		// Call the msgpack version
-		msgpResult, err := UnmarshalTraceRequestDirectMsgp(ctx, data, ri)
-		if err != nil {
-			return nil, err
-		}
 
-		// Convert from msgpack format to regular format
-		result := &TranslateOTLPRequestResult{
-			RequestSize: msgpResult.RequestSize,
-			Batches:     make([]Batch, len(msgpResult.Batches)),
-		}
-
-		for i, msgpBatch := range msgpResult.Batches {
-			batch := Batch{
-				Dataset: msgpBatch.Dataset,
-				Events:  make([]Event, len(msgpBatch.Events)),
-			}
-
-			for j, msgpEvent := range msgpBatch.Events {
-				// Unmarshal the attributes from msgpack
-				var attrs map[string]any
-				err := msgpack.Unmarshal(msgpEvent.Attributes, &attrs)
-				if err != nil {
-					return nil, fmt.Errorf("failed to unmarshal attributes from msgpack: %w", err)
-				}
-
-				// Convert integer values back to expected types
-				// Handle status_code
-				switch v := attrs["status_code"].(type) {
-				case int8:
-					attrs["status_code"] = int(v)
-				case int16:
-					attrs["status_code"] = int(v)
-				case int32:
-					attrs["status_code"] = int(v)
-				case int64:
-					attrs["status_code"] = int(v)
-				}
-				
-				// Handle span.num_events
-				switch v := attrs["span.num_events"].(type) {
-				case int8:
-					attrs["span.num_events"] = int(v)
-				case int16:
-					attrs["span.num_events"] = int(v)
-				case int32:
-					attrs["span.num_events"] = int(v)
-				case int64:
-					attrs["span.num_events"] = int(v)
-				}
-				
-				// Handle span.num_links
-				switch v := attrs["span.num_links"].(type) {
-				case int8:
-					attrs["span.num_links"] = int(v)
-				case int16:
-					attrs["span.num_links"] = int(v)
-				case int32:
-					attrs["span.num_links"] = int(v)
-				case int64:
-					attrs["span.num_links"] = int(v)
-				}
-				
-				// Convert all other integer types to int64 for consistency
-				for k, v := range attrs {
-					switch val := v.(type) {
-					case int8:
-						if k != "status_code" && k != "span.num_events" && k != "span.num_links" {
-							attrs[k] = int64(val)
-						}
-					case int16:
-						if k != "status_code" && k != "span.num_events" && k != "span.num_links" {
-							attrs[k] = int64(val)
-						}
-					case int32:
-						if k != "status_code" && k != "span.num_events" && k != "span.num_links" {
-							attrs[k] = int64(val)
-						}
-					}
-				}
-
-				batch.Events[j] = Event{
-					Attributes: attrs,
-					Timestamp:  msgpEvent.Timestamp,
-					SampleRate: msgpEvent.SampleRate,
-				}
-			}
-
-			result.Batches[i] = batch
-		}
-
-		return result, nil
-	default:
-		return nil, ErrInvalidContentType
-	}
+	// Call the msgpack version
+	return unmarshalTraceRequestDirectMsgp(ctx, bodyBuffer.Bytes(), ri)
 }
 
 // TranslateTraceRequest translates an OTLP/gRPC request into Honeycomb-friendly structure

@@ -1,5 +1,8 @@
 package otlp
 
+// Translates OTLP traces into honeycomb's event format, including a serialized
+// messagepack attribute map per event, instead of a fully deserialized one.
+
 // OTLP Trace Protobuf Structure:
 //
 // ExportTraceServiceRequest
@@ -257,14 +260,14 @@ func (m *msgpAttributesMap) finalize() ([]byte, error) {
 	return slices.Clone(m.buf), nil
 }
 
-// UnmarshalTraceRequestDirectMsgp translates a serialized OTLP trace request directly
+// unmarshalTraceRequestDirectMsgp translates a serialized OTLP trace request directly
 // into a Honeycomb-friendly structure without creating intermediate proto structs,
 // which is EXTREMELY expensive.
 // Why does the code look like this? Because it's derived from gogo's generated
 // code, and carries over some of the style conventions so that it will hopefully
 // be relatively easy to update it in future, should that be necessary.
 // Fortunately this part of OTLP is marked as "stable" so we don't expect changes.
-func UnmarshalTraceRequestDirectMsgp(ctx context.Context, data []byte, ri RequestInfo) (*TranslateOTLPRequestResultMsgp, error) {
+func unmarshalTraceRequestDirectMsgp(ctx context.Context, data []byte, ri RequestInfo) (*TranslateOTLPRequestResultMsgp, error) {
 	if err := ri.ValidateTracesHeaders(); err != nil {
 		return nil, err
 	}

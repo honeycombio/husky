@@ -10,8 +10,8 @@ import (
 	"time"
 
 	"github.com/honeycombio/husky"
-
 	"github.com/honeycombio/husky/test"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	collectortrace "go.opentelemetry.io/proto/otlp/collector/trace/v1"
@@ -235,10 +235,7 @@ func TestTranslateGrpcTraceRequest(t *testing.T) {
 
 			// Check bytes attribute - should be JSON encoded
 			bytesAttr, ok := ev.Attributes["bytes_attr"].(string)
-			assert.True(t, ok, "bytes_attr should be a string")
-			if !ok {
-				t.Logf("bytes_attr type: %T, value: %v", ev.Attributes["bytes_attr"], ev.Attributes["bytes_attr"])
-			}
+			assert.Truef(t, ok, "bytes_attr should be a string", "bytes_attr type: %T, value: %v", ev.Attributes["bytes_attr"], ev.Attributes["bytes_attr"])
 			assert.Equal(t, "\"AQIDBA==\"\n", bytesAttr) // base64 encoded with JSON encoding and newline
 
 			// Check array attribute - should be JSON encoded
@@ -1396,241 +1393,88 @@ func TestOtlpAttributesRecordsAttribueType(t *testing.T) {
 	}
 }
 
-// TestTranslateSerializedTraceRequest tests direct unmarshaling with different compression methods
-func TestTranslateSerializedTraceRequest(t *testing.T) {
+func TestCompressedTraceRequests(t *testing.T) {
+	// Create a simple trace request
 	traceID := test.RandomBytes(16)
 	spanID := test.RandomBytes(8)
-	parentSpanID := test.RandomBytes(8)
-	startTimestamp := time.Now()
-	endTimestamp := startTimestamp.Add(time.Millisecond * 5)
-
-	linkedTraceID := test.RandomBytes(16)
-	linkedSpanID := test.RandomBytes(8)
-
-	testServiceName := "my-service"
+	startTime := time.Now()
+	endTime := startTime.Add(time.Millisecond * 5)
 
 	req := &collectortrace.ExportTraceServiceRequest{
 		ResourceSpans: []*trace.ResourceSpans{{
 			Resource: &resource.Resource{
 				Attributes: []*common.KeyValue{{
-					Key: "resource_attr",
-					Value: &common.AnyValue{
-						Value: &common.AnyValue_StringValue{StringValue: "resource_attr_val"},
-					},
-				}, {
 					Key: "service.name",
 					Value: &common.AnyValue{
-						Value: &common.AnyValue_StringValue{StringValue: testServiceName},
-					},
-				}, {
-					Key: "bytes_attr",
-					Value: &common.AnyValue{
-						Value: &common.AnyValue_BytesValue{BytesValue: []byte{0x01, 0x02, 0x03, 0x04}},
-					},
-				}, {
-					Key: "array_attr",
-					Value: &common.AnyValue{
-						Value: &common.AnyValue_ArrayValue{
-							ArrayValue: &common.ArrayValue{
-								Values: []*common.AnyValue{
-									{Value: &common.AnyValue_StringValue{StringValue: "item1"}},
-									{Value: &common.AnyValue_IntValue{IntValue: 42}},
-									{Value: &common.AnyValue_BoolValue{BoolValue: true}},
-								},
-							},
-						},
-					},
-				}, {
-					Key: "kvlist_attr",
-					Value: &common.AnyValue{
-						Value: &common.AnyValue_KvlistValue{
-							KvlistValue: &common.KeyValueList{
-								Values: []*common.KeyValue{
-									{
-										Key: "nested_string",
-										Value: &common.AnyValue{
-											Value: &common.AnyValue_StringValue{StringValue: "nested_value"},
-										},
-									},
-									{
-										Key: "nested_int",
-										Value: &common.AnyValue{
-											Value: &common.AnyValue_IntValue{IntValue: 123},
-										},
-									},
-								},
-							},
-						},
+						Value: &common.AnyValue_StringValue{StringValue: "test-service"},
 					},
 				}},
 			},
 			ScopeSpans: []*trace.ScopeSpans{{
-				Scope: &common.InstrumentationScope{
-					Name:    "library-name",
-					Version: "library-version",
-					Attributes: []*common.KeyValue{
-						{
-							Key: "scope_attr",
-							Value: &common.AnyValue{
-								Value: &common.AnyValue_StringValue{StringValue: "scope_attr_val"},
-							},
-						},
-					},
-				},
 				Spans: []*trace.Span{{
 					TraceId:           traceID,
 					SpanId:            spanID,
-					ParentSpanId:      parentSpanID,
-					TraceState:        "tracestate",
-					Name:              "test_span",
-					Kind:              trace.Span_SPAN_KIND_CLIENT,
-					Status:            &trace.Status{Code: trace.Status_STATUS_CODE_OK},
-					StartTimeUnixNano: uint64(startTimestamp.UnixNano()),
-					EndTimeUnixNano:   uint64(endTimestamp.UnixNano()),
-					Attributes: []*common.KeyValue{
-						{
-							Key: "span_attr",
-							Value: &common.AnyValue{
-								Value: &common.AnyValue_StringValue{StringValue: "span_attr_val"},
-							},
-						},
-						{
-							Key: "sampleRate",
-							Value: &common.AnyValue{
-								Value: &common.AnyValue_IntValue{IntValue: 100},
-							},
-						},
-					},
-					Events: []*trace.Span_Event{{
-						Name:         "span_event",
-						TimeUnixNano: uint64(startTimestamp.Add(time.Millisecond * 1).UnixNano()),
-						Attributes: []*common.KeyValue{{
-							Key: "span_event_attr",
-							Value: &common.AnyValue{
-								Value: &common.AnyValue_StringValue{StringValue: "span_event_attr_val"},
-							},
-						}},
-					}},
-					Links: []*trace.Span_Link{{
-						TraceId: linkedTraceID,
-						SpanId:  linkedSpanID,
-						Attributes: []*common.KeyValue{{
-							Key: "span_link_attr",
-							Value: &common.AnyValue{
-								Value: &common.AnyValue_StringValue{StringValue: "span_link_attr_val"},
-							},
-						}},
-					}},
+					Name:              "test-span",
+					StartTimeUnixNano: uint64(startTime.UnixNano()),
+					EndTimeUnixNano:   uint64(endTime.UnixNano()),
 				}},
 			}},
 		}},
 	}
 
-	testCases := []struct {
-		Name            string
-		ri              RequestInfo
-		expectedDataset string
-		encoding        string
-	}{
-		{
-			Name: "Uncompressed",
-			ri: RequestInfo{
-				ApiKey:          "abc123DEF456ghi789jklm",
-				Dataset:         "legacy-dataset",
-				ContentType:     "application/protobuf",
-				ContentEncoding: "",
-			},
-			expectedDataset: testServiceName,
-			encoding:        "",
-		},
-		{
-			Name: "Gzip",
-			ri: RequestInfo{
-				ApiKey:          "abc123DEF456ghi789jklm",
-				Dataset:         "legacy-dataset",
-				ContentType:     "application/protobuf",
-				ContentEncoding: "gzip",
-			},
-			expectedDataset: testServiceName,
-			encoding:        "gzip",
-		},
-		{
-			Name: "Zstd",
-			ri: RequestInfo{
-				ApiKey:          "abc123DEF456ghi789jklm",
-				Dataset:         "legacy-dataset",
-				ContentType:     "application/protobuf",
-				ContentEncoding: "zstd",
-			},
-			expectedDataset: testServiceName,
-			encoding:        "zstd",
-		},
-		{
-			Name: "JSON",
-			ri: RequestInfo{
-				ApiKey:          "abc123DEF456ghi789jklm",
-				Dataset:         "legacy-dataset",
-				ContentType:     "application/json",
-				ContentEncoding: "",
-			},
-			expectedDataset: testServiceName,
-			encoding:        "",
-		},
-		{
-			Name: "JSON_Gzip",
-			ri: RequestInfo{
-				ApiKey:          "abc123DEF456ghi789jklm",
-				Dataset:         "legacy-dataset",
-				ContentType:     "application/json",
-				ContentEncoding: "gzip",
-			},
-			expectedDataset: testServiceName,
-			encoding:        "gzip",
-		},
-	}
-	for _, tC := range testCases {
-		t.Run(tC.Name, func(t *testing.T) {
-			// First get the expected result from the original implementation
-			var expectedResult *TranslateOTLPRequestResult
-			if tC.ri.ContentType == "application/json" {
-				// For JSON, both implementations should use the same path
-				bodyStr, err := prepareOtlpRequestHttpBody(req, tC.ri.ContentType, tC.encoding)
-				require.NoError(t, err)
-				body := io.NopCloser(strings.NewReader(bodyStr))
-				expectedResult, err = TranslateTraceRequestFromReaderSized(context.Background(), body, tC.ri, 20*1024*1024)
-				require.NoError(t, err)
-			} else {
-				// For protobuf, use the original proto-based implementation
-				var err error
-				expectedResult, err = TranslateTraceRequest(context.Background(), req, tC.ri)
-				require.NoError(t, err)
-			}
+	// Serialize the request
+	bodyBytes, err := proto.Marshal(req)
+	require.NoError(t, err)
 
-			// Now test the direct translation
-			bodyStr, err := prepareOtlpRequestHttpBody(req, tC.ri.ContentType, tC.encoding)
-			require.NoError(t, err)
-			body := io.NopCloser(strings.NewReader(bodyStr))
-
-			result, err := TranslateTraceRequestFromReaderDirect(context.Background(), body, tC.ri)
+	for _, encoding := range []string{"gzip", "zstd"} {
+		t.Run(encoding, func(t *testing.T) {
+			// Compress the body
+			compressedBody, err := encodeBody(bodyBytes, encoding)
 			require.NoError(t, err)
 
-			// Compare request sizes (direct implementation calculates from serialized data)
-			assert.Greater(t, result.RequestSize, 0)
-
-			// Compare batch structure
-			require.Equal(t, len(expectedResult.Batches), len(result.Batches))
-
-			for i, expectedBatch := range expectedResult.Batches {
-				actualBatch := result.Batches[i]
-				assert.Equal(t, expectedBatch.Dataset, actualBatch.Dataset)
-
-				// Sort events by name to ensure consistent ordering
-				// The original puts span events first, then links, then the span
-				require.Equal(t, len(expectedBatch.Events), len(actualBatch.Events), "Number of events should match")
-
-				// Compare entire events slice
-				assert.Equal(t, expectedBatch.Events, actualBatch.Events, "Events should match exactly")
+			ri := RequestInfo{
+				ApiKey:          "abc123DEF456ghi789jklm",
+				Dataset:         "test-dataset",
+				ContentType:     "application/protobuf",
+				ContentEncoding: encoding,
 			}
+
+			// Test TranslateTraceRequestFromReader
+			t.Run("TranslateTraceRequestFromReader", func(t *testing.T) {
+				body := io.NopCloser(strings.NewReader(compressedBody))
+				result, err := TranslateTraceRequestFromReader(context.Background(), body, ri)
+				require.NoError(t, err)
+				require.NotNil(t, result)
+				assert.Equal(t, len(bodyBytes), result.RequestSize)
+				assert.Len(t, result.Batches, 1)
+				assert.Equal(t, "test-service", result.Batches[0].Dataset)
+				assert.Len(t, result.Batches[0].Events, 1)
+				assert.Equal(t, "test-span", result.Batches[0].Events[0].Attributes["name"])
+			})
+
+			// Test TranslateOTLPTraceRequestFromReaderSizedWithMsgp
+			t.Run("TranslateOTLPTraceRequestFromReaderSizedWithMsgp", func(t *testing.T) {
+				body := io.NopCloser(strings.NewReader(compressedBody))
+				result, err := TranslateTraceRequestFromReaderSizedWithMsgp(
+					context.Background(),
+					body,
+					ri,
+					int64(len(compressedBody)*2), // Give it plenty of space
+				)
+				require.NoError(t, err)
+				require.NotNil(t, result)
+				assert.Equal(t, len(bodyBytes), result.RequestSize)
+				assert.Len(t, result.Batches, 1)
+				assert.Equal(t, "test-service", result.Batches[0].Dataset)
+				assert.Len(t, result.Batches[0].Events, 1)
+
+				// Verify the msgpack attributes are valid
+				event := result.Batches[0].Events[0]
+				attrs := decodeMessagePackAttributes(t, event.Attributes)
+				assert.Equal(t, "test-span", attrs["name"])
+				assert.Equal(t, BytesToTraceID(traceID), attrs["trace.trace_id"])
+				assert.Equal(t, hex.EncodeToString(spanID), attrs["trace.span_id"])
+			})
 		})
 	}
 }
