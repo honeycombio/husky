@@ -9,7 +9,7 @@ import (
 
 	"github.com/klauspost/compress/zstd"
 	"github.com/stretchr/testify/require"
-	"github.com/vmihailenco/msgpack"
+	"github.com/tinylib/msgp/msgp"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
@@ -90,11 +90,11 @@ func testCaseNameForEncoding(encoding string) string {
 
 // decodeMessagePackAttributes unmarshals MessagePack data into a map for testing
 func decodeMessagePackAttributes(t testing.TB, data []byte) map[string]any {
-	decoder := msgpack.NewDecoder(bytes.NewReader(data))
-	decoder.UseDecodeInterfaceLoose(true)
-
-	var attrs map[string]any
-	err := decoder.Decode(&attrs)
-	require.NoError(t, err, "Failed to unmarshal MessagePack attributes")
-	return attrs
+	decoded, _, err := msgp.ReadIntfBytes(data)
+	require.NoError(t, err)
+	if asMap, ok := decoded.(map[string]any); ok {
+		return asMap
+	}
+	t.Fatal("this doesn't look like a msgp map")
+	return nil
 }
