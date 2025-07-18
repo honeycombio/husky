@@ -96,6 +96,7 @@ import (
 	"time"
 
 	"github.com/honeycombio/husky"
+
 	"github.com/tinylib/msgp/msgp"
 	trace "go.opentelemetry.io/proto/otlp/trace/v1"
 )
@@ -169,21 +170,18 @@ func (m *msgpAttributes) addString(key []byte, value []byte) {
 	m.count++
 }
 
-// addInt64 adds a string key with int64 value
 func (m *msgpAttributes) addInt64(key []byte, value int64) {
 	m.buf = msgp.AppendStringFromBytes(m.buf, key)
 	m.buf = msgp.AppendInt64(m.buf, value)
 	m.count++
 }
 
-// addFloat64 adds a string key with float64 value
 func (m *msgpAttributes) addFloat64(key []byte, value float64) {
 	m.buf = msgp.AppendStringFromBytes(m.buf, key)
 	m.buf = msgp.AppendFloat64(m.buf, value)
 	m.count++
 }
 
-// addBool adds a string key with bool value
 func (m *msgpAttributes) addBool(key []byte, value bool) {
 	m.buf = msgp.AppendStringFromBytes(m.buf, key)
 	m.buf = msgp.AppendBool(m.buf, value)
@@ -305,7 +303,6 @@ func unmarshalTraceRequestDirectMsgp(ctx context.Context, data []byte, ri Reques
 			}
 
 		default:
-			// Skip unknown fields
 			if err := skipField(data, &iNdEx, preIndex, l); err != nil {
 				return nil, err
 			}
@@ -425,7 +422,6 @@ func unmarshalResource(ctx context.Context, data []byte, attrs *msgpAttributes) 
 			}
 
 		default:
-			// Skip unknown fields
 			if err := skipField(data, &iNdEx, preIndex, l); err != nil {
 				return err
 			}
@@ -464,7 +460,6 @@ func parseKeyValue(data []byte) ([]byte, []byte, error) {
 			}
 
 		default:
-			// Skip unknown fields
 			if err := skipField(data, &iNdEx, preIndex, l); err != nil {
 				return nil, nil, err
 			}
@@ -737,7 +732,6 @@ func unmarshalAnyValue(ctx context.Context, data []byte) (any, error) {
 			result = b
 
 		default:
-			// Skip unknown fields
 			if err := skipField(data, &iNdEx, preIndex, l); err != nil {
 				return nil, err
 			}
@@ -780,7 +774,6 @@ func unmarshalArrayValue(ctx context.Context, data []byte) ([]any, error) {
 			}
 
 		default:
-			// Skip unknown fields
 			if err := skipField(data, &iNdEx, preIndex, l); err != nil {
 				return nil, err
 			}
@@ -840,7 +833,6 @@ func unmarshalKvlistValue(ctx context.Context, data []byte) (map[string]any, err
 			}
 
 		default:
-			// Skip unknown fields
 			if err := skipField(data, &iNdEx, preIndex, l); err != nil {
 				return nil, err
 			}
@@ -968,7 +960,6 @@ func unmarshalInstrumentationScope(ctx context.Context, data []byte, attrs *msgp
 			}
 
 		default:
-			// Skip unknown fields
 			if err := skipField(data, &iNdEx, preIndex, l); err != nil {
 				return err
 			}
@@ -1158,7 +1149,6 @@ func unmarshalSpan(
 					}
 
 				default:
-					// Skip unknown fields
 					if err := skipField(slice, &siNdEx, sPreIndex, sl); err != nil {
 						return err
 					}
@@ -1166,7 +1156,6 @@ func unmarshalSpan(
 			}
 
 		default:
-			// Skip unknown fields and other fields we don't process yet
 			if err := skipField(data, &iNdEx, preIndex, l); err != nil {
 				return err
 			}
@@ -1318,7 +1307,6 @@ func unmarshalSpanEvent(
 			}
 
 		default:
-			// Skip unknown fields
 			if err := skipField(data, &iNdEx, preIndex, l); err != nil {
 				return nil, err
 			}
@@ -1506,7 +1494,6 @@ func unmarshalSpanLink(
 			}
 
 		default:
-			// Skip unknown fields
 			if err := skipField(data, &iNdEx, preIndex, l); err != nil {
 				return err
 			}

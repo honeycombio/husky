@@ -55,13 +55,10 @@ var zstdDecoderPool = sync.Pool{
 	},
 }
 
-// TranslateTraceRequestFromReaderSizedWithMsgp translates an OTLP/HTTP
-// request into the Honeycomb-friendly structure using direct unmarshaling
-// to avoid creating intermediate proto structs.
+// TranslateTraceRequestFromReaderSizedWithMsgp translates an OTLP/HTTP request
+// directly into our Honeycomb-friendly structure, avoiding intermediate proto
+// structs.
 // Note the returned data is shiny new heap memory and is safe for callers to keep.
-// This is a performance optimization that processes the serialized data directly.
-// RequestInfo is the parsed information from the HTTP headers.
-// maxSize is the maximum size of the request body in bytes.
 func TranslateTraceRequestFromReaderSizedWithMsgp(
 	ctx context.Context,
 	body io.ReadCloser,
@@ -116,13 +113,11 @@ func TranslateTraceRequestFromReaderSizedWithMsgp(
 		httpBodyBufferPool.Put(bodyBuffer)
 	}()
 
-	// Read the decompressed data
 	_, err := bodyBuffer.ReadFrom(reader)
 	if err != nil {
 		return nil, ErrFailedParseBody
 	}
 
-	// Call the msgpack version
 	return unmarshalTraceRequestDirectMsgp(ctx, bodyBuffer.Bytes(), ri)
 }
 
