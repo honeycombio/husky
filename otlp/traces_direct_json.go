@@ -19,6 +19,24 @@ import (
 	trace "go.opentelemetry.io/proto/otlp/trace/v1"
 )
 
+var jsonConfig = jsoniter.Config{
+	EscapeHTML:                    false,
+	ObjectFieldMustBeSimpleString: true,
+}.Froze()
+
+// bytesEqual compares a byte slice with a string without allocation
+func bytesEqual(b []byte, s string) bool {
+	if len(b) != len(s) {
+		return false
+	}
+	for i := 0; i < len(b); i++ {
+		if b[i] != s[i] {
+			return false
+		}
+	}
+	return true
+}
+
 // unmarshalTraceRequestDirectMsgpJSON translates a JSON-encoded OTLP trace request directly
 // into a Honeycomb-friendly structure without creating intermediate proto structs.
 func unmarshalTraceRequestDirectMsgpJSON(
@@ -36,7 +54,7 @@ func unmarshalTraceRequestDirectMsgpJSON(
 	}
 
 	// Parse the JSON
-	iter := jsoniter.ParseBytes(jsoniter.ConfigDefault, data)
+	iter := jsoniter.ParseBytes(jsonConfig, data)
 
 	// Read the root object
 	rootType := iter.WhatIsNext()
@@ -134,7 +152,7 @@ func unmarshalResourceSpansJSON(
 
 	// Now process scopeSpans with the resource attributes
 	for _, scopeSpansJSON := range scopeSpansData {
-		scopeIter := jsoniter.ParseBytes(jsoniter.ConfigDefault, scopeSpansJSON)
+		scopeIter := jsoniter.ParseBytes(jsonConfig, scopeSpansJSON)
 		if err := unmarshalScopeSpansJSON(ctx, scopeIter, resourceAttrs, dataset, result); err != nil {
 			return err
 		}
@@ -199,17 +217,20 @@ func unmarshalKeyValueJSON(
 	iter *jsoniter.Iterator,
 	attrs *msgpAttributes, depth int,
 ) error {
-	var key string
+	var keyBytes []byte
 	var valueProcessed bool
 
 	// Read the KeyValue object
 	iter.ReadObjectCB(func(iter *jsoniter.Iterator, field string) bool {
 		switch field {
 		case "key":
-			key = iter.ReadString()
+			// Read key and store as bytes
+			key := iter.ReadString()
+			keyBytes = make([]byte, len(key))
+			copy(keyBytes, key)
 		case "value":
-			if key != "" && !valueProcessed {
-				if err := unmarshalAnyValueIntoAttrsJSON(ctx, iter, []byte(key), attrs, depth); err != nil {
+			if len(keyBytes) > 0 && !valueProcessed {
+				if err := unmarshalAnyValueIntoAttrsJSON(ctx, iter, keyBytes, attrs, depth); err != nil {
 					iter.ReportError("unmarshalAnyValueIntoAttrsJSON", err.Error())
 					return false
 				}
@@ -608,7 +629,7 @@ func unmarshalScopeSpansJSON(
 
 	// Now process spans with both resource and scope attributes
 	for _, spanJSON := range spansData {
-		spanIter := jsoniter.ParseBytes(jsoniter.ConfigDefault, spanJSON)
+		spanIter := jsoniter.ParseBytes(jsonConfig, spanJSON)
 		if err := unmarshalSpanJSON(ctx, spanIter, resourceAttrs, scopeAttrs, dataset, result); err != nil {
 			return err
 		}
@@ -915,7 +936,7 @@ func unmarshalSpanJSON(
 	// Process span events first
 	var firstExceptionAttrs *msgpAttributes
 	for _, eventJSON := range eventsData {
-		eventIter := jsoniter.ParseBytes(jsoniter.ConfigDefault, eventJSON)
+		eventIter := jsoniter.ParseBytes(jsonConfig, eventJSON)
 		exceptionAttrs, err := unmarshalSpanEventJSON(ctx, eventIter, traceID, spanID, name, startTimeUnixNano, resourceAttrs, scopeAttrs, sampleRate, eventAttr.isError, batch)
 		if err != nil {
 			return err
@@ -937,7 +958,7 @@ func unmarshalSpanJSON(
 
 	// Process span links next
 	for _, linkJSON := range linksData {
-		linkIter := jsoniter.ParseBytes(jsoniter.ConfigDefault, linkJSON)
+		linkIter := jsoniter.ParseBytes(jsonConfig, linkJSON)
 		err := unmarshalSpanLinkJSON(ctx, linkIter, traceID, spanID, name, timestamp, resourceAttrs, scopeAttrs, sampleRate, eventAttr.isError, batch)
 		if err != nil {
 			return err
@@ -1034,7 +1055,7 @@ func unmarshalSpanEventJSON(
 	// Now process attributes if we have them
 	if len(attrData) > 0 {
 		// Parse attributes into event
-		attrIter := jsoniter.ParseBytes(jsoniter.ConfigDefault, attrData)
+		attrIter := jsoniter.ParseBytes(jsonConfig, attrData)
 		if err := unmarshalKeyValueArrayJSON(ctx, attrIter, eventAttr.msgpAttributes, 0); err != nil {
 			return nil, err
 		}
@@ -1044,7 +1065,7 @@ func unmarshalSpanEventJSON(
 			exceptionAttrs = msgpAttributesPool.Get().(*msgpAttributes)
 
 			// Re-parse to extract exception attributes
-			attrIter2 := jsoniter.ParseBytes(jsoniter.ConfigDefault, attrData)
+			attrIter2 := jsoniter.ParseBytes(jsonConfig, attrData)
 			for attrIter2.ReadArray() {
 				var key string
 				attrIter2.ReadObjectCB(func(iter *jsoniter.Iterator, field string) bool {

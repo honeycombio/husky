@@ -1253,32 +1253,64 @@ func BenchmarkUnmarshalTraceRequestDirectMsgp(b *testing.B) {
 		},
 	}
 
-	ri := RequestInfo{
-		ApiKey:      "abc123DEF456ghi789jklm",
-		Dataset:     "benchmark-dataset",
-		ContentType: "application/protobuf",
-	}
+	// Run sub-benchmarks for protobuf and JSON
+	b.Run("Protobuf", func(b *testing.B) {
+		ri := RequestInfo{
+			ApiKey:      "abc123DEF456ghi789jklm",
+			Dataset:     "benchmark-dataset",
+			ContentType: "application/protobuf",
+		}
 
-	// Serialize the request once before benchmarking
-	data, err := proto.Marshal(req)
-	if err != nil {
-		b.Fatal("Failed to serialize trace request:", err)
-	}
-	ctx := context.Background()
-
-	// Reset timer to exclude setup time
-	b.ResetTimer()
-
-	// Run the benchmark
-	for i := 0; i < b.N; i++ {
-		result, err := unmarshalTraceRequestDirectMsgp(ctx, data, ri)
+		// Serialize the request once before benchmarking
+		data, err := proto.Marshal(req)
 		if err != nil {
-			b.Fatal(err)
+			b.Fatal("Failed to serialize trace request:", err)
 		}
-		if len(result.Batches) != 1 || len(result.Batches[0].Events) != 1 {
-			b.Fatal("unexpected result structure")
+		ctx := context.Background()
+
+		// Reset timer to exclude setup time
+		b.ResetTimer()
+
+		// Run the benchmark
+		for i := 0; i < b.N; i++ {
+			result, err := unmarshalTraceRequestDirectMsgp(ctx, data, ri)
+			if err != nil {
+				b.Fatal(err)
+			}
+			if len(result.Batches) != 1 || len(result.Batches[0].Events) != 1 {
+				b.Fatal("unexpected result structure")
+			}
 		}
-	}
+	})
+
+	b.Run("JSON", func(b *testing.B) {
+		ri := RequestInfo{
+			ApiKey:      "abc123DEF456ghi789jklm",
+			Dataset:     "benchmark-dataset",
+			ContentType: "application/json",
+		}
+
+		// Serialize the request to JSON once before benchmarking
+		jsonData, err := protojson.Marshal(req)
+		if err != nil {
+			b.Fatal("Failed to serialize trace request to JSON:", err)
+		}
+		ctx := context.Background()
+
+		// Reset timer to exclude setup time
+		b.ResetTimer()
+
+		// Run the benchmark
+		for i := 0; i < b.N; i++ {
+			result, err := unmarshalTraceRequestDirectMsgpJSON(ctx, jsonData, ri)
+			if err != nil {
+				b.Fatal(err)
+			}
+			if len(result.Batches) != 1 || len(result.Batches[0].Events) != 1 {
+				b.Fatal("unexpected result structure")
+			}
+		}
+	})
 }
 
 func TestSampleRateFromFloat(t *testing.T) {
