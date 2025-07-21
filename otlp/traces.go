@@ -71,7 +71,11 @@ func TranslateTraceRequestFromReaderSizedWithMsgp(
 		return nil, err
 	}
 
-	if ri.ContentType != "application/protobuf" && ri.ContentType != "application/x-protobuf" {
+	// Check content type
+	switch ri.ContentType {
+	case "application/protobuf", "application/x-protobuf", "application/json":
+		// supported
+	default:
 		return nil, ErrInvalidContentType
 	}
 
@@ -118,7 +122,14 @@ func TranslateTraceRequestFromReaderSizedWithMsgp(
 		return nil, ErrFailedParseBody
 	}
 
-	return unmarshalTraceRequestDirectMsgp(ctx, bodyBuffer.Bytes(), ri)
+	// Unmarshal based on content type
+	switch ri.ContentType {
+	case "application/json":
+		return unmarshalTraceRequestDirectMsgpJSON(ctx, bodyBuffer.Bytes(), ri)
+	default:
+		// protobuf
+		return unmarshalTraceRequestDirectMsgp(ctx, bodyBuffer.Bytes(), ri)
+	}
 }
 
 // TranslateTraceRequest translates an OTLP/gRPC request into Honeycomb-friendly structure

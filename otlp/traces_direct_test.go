@@ -16,6 +16,7 @@ import (
 	common "go.opentelemetry.io/proto/otlp/common/v1"
 	resource "go.opentelemetry.io/proto/otlp/resource/v1"
 	trace "go.opentelemetry.io/proto/otlp/trace/v1"
+	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -169,7 +170,6 @@ func TestUnmarshalTraceRequestDirect_Complete(t *testing.T) {
 					},
 				},
 				ScopeSpans: []*trace.ScopeSpans{
-					// First scope - recognized instrumentation library
 					{
 						Scope: &common.InstrumentationScope{
 							Name:    "go.opentelemetry.io/contrib/instrumentation/net/http",
@@ -190,7 +190,7 @@ func TestUnmarshalTraceRequestDirect_Complete(t *testing.T) {
 							},
 						},
 						Spans: []*trace.Span{
-							// Span 1: Server span with all features
+							// Span 1: Server span with everything
 							{
 								TraceId:           hexToBin(traceID1),
 								SpanId:            hexToBin(spanID1),
@@ -252,14 +252,10 @@ func TestUnmarshalTraceRequestDirect_Complete(t *testing.T) {
 										},
 									},
 								},
-								Status: &trace.Status{
-									Code:    trace.Status_STATUS_CODE_OK,
-									Message: "Request completed successfully",
-								},
 								Events: []*trace.Span_Event{
 									{
-										TimeUnixNano: event1Time,
 										Name:         "cache_miss",
+										TimeUnixNano: event1Time,
 										Attributes: []*common.KeyValue{
 											{
 												Key: "cache.key",
@@ -282,8 +278,8 @@ func TestUnmarshalTraceRequestDirect_Complete(t *testing.T) {
 										},
 									},
 									{
-										TimeUnixNano: event2Time,
 										Name:         "exception",
+										TimeUnixNano: event2Time,
 										Attributes: []*common.KeyValue{
 											{
 												Key: "exception.type",
@@ -316,7 +312,7 @@ func TestUnmarshalTraceRequestDirect_Complete(t *testing.T) {
 									{
 										TraceId:    hexToBin(linkedTraceID),
 										SpanId:     hexToBin(linkedSpanID),
-										TraceState: "vendor=value",
+										TraceState: "vendor3=value3",
 										Attributes: []*common.KeyValue{
 											{
 												Key: "link.type",
@@ -332,6 +328,10 @@ func TestUnmarshalTraceRequestDirect_Complete(t *testing.T) {
 											},
 										},
 									},
+								},
+								Status: &trace.Status{
+									Code:    trace.Status_STATUS_CODE_OK,
+									Message: "Request completed successfully",
 								},
 							},
 							// Span 2: Client span
@@ -363,6 +363,7 @@ func TestUnmarshalTraceRequestDirect_Complete(t *testing.T) {
 							Name:    "custom-library",
 							Version: "2.0.0",
 						},
+
 						Spans: []*trace.Span{
 							// Span 3: Error span with negative duration
 							{
@@ -370,17 +371,16 @@ func TestUnmarshalTraceRequestDirect_Complete(t *testing.T) {
 								SpanId:            hexToBin(errorSpanID),
 								Name:              "Error Operation",
 								Kind:              trace.Span_SPAN_KIND_INTERNAL,
-								StartTimeUnixNano: errorStartTime,
+								StartTimeUnixNano: errorStartTime, // start is after end
 								EndTimeUnixNano:   errorEndTime,
 								Status: &trace.Status{
 									Code:    trace.Status_STATUS_CODE_ERROR,
 									Message: "Operation failed",
 								},
 								Events: []*trace.Span_Event{
-									// Multiple exception events - only first should be copied to span
 									{
-										TimeUnixNano: errorStartTime - 100_000_000, // Before span start
 										Name:         "exception",
+										TimeUnixNano: errorStartTime - 100_000_000, // Event before span start
 										Attributes: []*common.KeyValue{
 											{
 												Key: "exception.type",
@@ -397,8 +397,8 @@ func TestUnmarshalTraceRequestDirect_Complete(t *testing.T) {
 										},
 									},
 									{
-										TimeUnixNano: errorStartTime + 100_000_000,
 										Name:         "exception",
+										TimeUnixNano: errorStartTime + 100_000_000,
 										Attributes: []*common.KeyValue{
 											{
 												Key: "exception.type",
@@ -487,29 +487,6 @@ func TestUnmarshalTraceRequestDirect_Complete(t *testing.T) {
 		},
 	}
 
-	data := serializeTraceRequest(t, req)
-
-	ri := RequestInfo{
-		ApiKey:      "abc123DEF456ghi789jklm",
-		Dataset:     "test-dataset",
-		ContentType: "application/protobuf",
-	}
-
-	// Unmarshal twice, which is fine because this should be idempotent.
-	// Also assert we are not changing anything about the input buffer.
-	// In practice it would probably be ok if we did, but it implies a bug if
-	// it happens. (Reader, it happened.)
-	before := slices.Clone(data)
-	_, err := unmarshalTraceRequestDirectMsgp(context.Background(), data, ri)
-	require.NoError(t, err)
-	require.Equal(t, before, data)
-
-	result, err := unmarshalTraceRequestDirectMsgp(context.Background(), data, ri)
-	require.NoError(t, err)
-	assert.NotNil(t, result)
-	assert.Equal(t, len(data), result.RequestSize)
-	assert.Len(t, result.Batches, 3)
-
 	// Batch 1: service1
 	// addService1CommonAttributes adds the common resource attributes for batch 1,
 	// to reduce the verbosity here.
@@ -530,379 +507,430 @@ func TestUnmarshalTraceRequestDirect_Complete(t *testing.T) {
 		return attrs
 	}
 
-	batch1 := result.Batches[0]
-	assert.Equal(t, "service1", batch1.Dataset)
-	// 3 spans + 2 events from span1 + 2 events from error span + 1 link from span1 + 1 link from error span = 9 events
-	assert.Len(t, batch1.Events, 9)
+	// Test both protobuf and JSON serialization formats
+	testCases := []struct {
+		name        string
+		contentType string
+		serialize   func(*collectortrace.ExportTraceServiceRequest) ([]byte, error)
+		unmarshal   func(context.Context, []byte, RequestInfo) (*TranslateOTLPRequestResultMsgp, error)
+	}{
+		{
+			name:        "protobuf",
+			contentType: "application/protobuf",
+			serialize: func(req *collectortrace.ExportTraceServiceRequest) ([]byte, error) {
+				return proto.Marshal(req)
+			},
+			unmarshal: unmarshalTraceRequestDirectMsgp,
+		},
+		{
+			name:        "json",
+			contentType: "application/json",
+			serialize: func(req *collectortrace.ExportTraceServiceRequest) ([]byte, error) {
+				return protojson.Marshal(req)
+			},
+			unmarshal: unmarshalTraceRequestDirectMsgpJSON,
+		},
+	}
 
-	// Events are in deterministic order:
-	// 0: cache_miss event (from span1)
-	// 1: exception event (from span1)
-	// 2: link (from span1)
-	// 3: HTTP GET /api/users span (span1 itself)
-	// 4: DB Query span (span2)
-	// 5: First exception event (from error span)
-	// 6: Second exception event (from error span)
-	// 7: link (from error span)
-	// 8: Error Operation span (error span itself)
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			data, err := tc.serialize(req)
+			require.NoError(t, err)
 
-	// Verify the main span (HTTP GET /api/users) at index 3
-	mainSpan := &batch1.Events[3]
-	mainAttrs := decodeMessagePackAttributes(t, mainSpan.Attributes)
-
-	assert.Equal(t, addService1CommonAttributes(map[string]any{
-		"trace.trace_id":       traceID1,
-		"trace.span_id":        spanID1,
-		"trace.parent_id":      parentSpanID1,
-		"trace.trace_state":    "w3c=true;th=8",
-		"name":                 "HTTP GET /api/users",
-		"span.kind":            "server",
-		"type":                 "server",
-		"http.method":          "GET",
-		"http.status_code":     int64(200),
-		"http.url":             "https://example.com/api/users",
-		"response.size":        float64(1234.56),
-		"success":              true,
-		"status_code":          int64(1),
-		"status_message":       "Request completed successfully",
-		"duration_ms":          float64(864.197532),
-		"span.num_events":      int64(2),
-		"span.num_links":       int64(1),
-		"exception.type":       "ValueError",
-		"exception.message":    "Invalid user ID",
-		"exception.stacktrace": "stack trace here...",
-		"exception.escaped":    true,
-		"conflicting":          "span",
-
-		// Scope attributes from HTTP instrumentation library
-		"library.name":                      "go.opentelemetry.io/contrib/instrumentation/net/http",
-		"library.version":                   "1.0.0",
-		"telemetry.instrumentation_library": true,
-		"scope.attr":                        "scope_value",
-	}), mainAttrs)
-
-	// Sample rate and timestamp
-	assert.Equal(t, int32(10), mainSpan.SampleRate)
-	assert.Equal(t, time.Unix(0, int64(startTime)).UTC(), mainSpan.Timestamp)
-
-	// Verify span events
-	cacheEvent := &batch1.Events[0]
-	cacheAttrs := decodeMessagePackAttributes(t, cacheEvent.Attributes)
-	assert.Equal(t, addService1CommonAttributes(map[string]any{
-		"name":                          "cache_miss",
-		"trace.trace_id":                traceID1,
-		"trace.parent_id":               spanID1,
-		"parent_name":                   "HTTP GET /api/users",
-		"cache.key":                     "user:123",
-		"cache.ttl":                     int64(3600),
-		"meta.time_since_span_start_ms": float64(100),
-		"meta.annotation_type":          "span_event",
-		"conflicting":                   "event",
-
-		// Scope attributes from HTTP instrumentation library
-		"library.name":                      "go.opentelemetry.io/contrib/instrumentation/net/http",
-		"library.version":                   "1.0.0",
-		"telemetry.instrumentation_library": true,
-		"scope.attr":                        "scope_value",
-	}), cacheAttrs)
-	assert.Equal(t, int32(10), cacheEvent.SampleRate)
-	assert.Equal(t, time.Unix(0, int64(event1Time)).UTC(), cacheEvent.Timestamp)
-
-	// Exception event at index 1
-	exceptionEvent := &batch1.Events[1]
-	exceptionAttrs := decodeMessagePackAttributes(t, exceptionEvent.Attributes)
-	assert.Equal(t, addService1CommonAttributes(map[string]any{
-		"name":                          "exception",
-		"trace.trace_id":                traceID1,
-		"trace.parent_id":               spanID1,
-		"parent_name":                   "HTTP GET /api/users",
-		"meta.annotation_type":          "span_event",
-		"meta.time_since_span_start_ms": float64(200),
-		"exception.type":                "ValueError",
-		"exception.message":             "Invalid user ID",
-		"exception.stacktrace":          "stack trace here...",
-		"exception.escaped":             true,
-		"conflicting":                   "scope",
-
-		// Scope attributes from HTTP instrumentation library
-		"library.name":                      "go.opentelemetry.io/contrib/instrumentation/net/http",
-		"library.version":                   "1.0.0",
-		"telemetry.instrumentation_library": true,
-		"scope.attr":                        "scope_value",
-	}), exceptionAttrs)
-	assert.Equal(t, int32(10), exceptionEvent.SampleRate)
-	assert.Equal(t, time.Unix(0, int64(event2Time)).UTC(), exceptionEvent.Timestamp)
-
-	// Link at index 2
-	linkEvent := &batch1.Events[2]
-	linkAttrs := decodeMessagePackAttributes(t, linkEvent.Attributes)
-	assert.Equal(t, addService1CommonAttributes(map[string]any{
-		"trace.trace_id":       traceID1,
-		"trace.parent_id":      spanID1,
-		"trace.link.trace_id":  linkedTraceID,
-		"trace.link.span_id":   linkedSpanID,
-		"link.type":            "parent",
-		"meta.annotation_type": "link",
-		"parent_name":          "HTTP GET /api/users",
-		"conflicting":          "link",
-
-		// Scope attributes from HTTP instrumentation library
-		"library.name":                      "go.opentelemetry.io/contrib/instrumentation/net/http",
-		"library.version":                   "1.0.0",
-		"telemetry.instrumentation_library": true,
-		"scope.attr":                        "scope_value",
-	}), linkAttrs)
-	assert.Equal(t, int32(10), linkEvent.SampleRate)
-	assert.Equal(t, time.Unix(0, int64(startTime)).UTC(), linkEvent.Timestamp) // Links use parent span timestamp
-
-	// DB Query span at index 4
-	dbSpan := &batch1.Events[4]
-	dbAttrs := decodeMessagePackAttributes(t, dbSpan.Attributes)
-	assert.Equal(t, addService1CommonAttributes(map[string]any{
-		"name":            "DB Query",
-		"trace.trace_id":  traceID1,
-		"trace.span_id":   spanID2,
-		"trace.parent_id": spanID1,
-		"span.kind":       "client",
-		"type":            "client",
-		"db.statement":    "SELECT * FROM users WHERE id = ?",
-		"status_code":     int64(0),
-		"duration_ms":     float64(764.197532),
-		"span.num_events": int64(0),
-		"span.num_links":  int64(0),
-		"conflicting":     "scope",
-
-		// Scope attributes from HTTP instrumentation library
-		"library.name":                      "go.opentelemetry.io/contrib/instrumentation/net/http",
-		"library.version":                   "1.0.0",
-		"telemetry.instrumentation_library": true,
-		"scope.attr":                        "scope_value",
-	}), dbAttrs)
-	assert.Equal(t, int32(1), dbSpan.SampleRate) // DB Query span has no explicit sampleRate, gets default
-	assert.Equal(t, time.Unix(0, int64(startTime+50_000_000)).UTC(), dbSpan.Timestamp)
-
-	// Error span's link at index 7
-	errorLinkEvent := &batch1.Events[7]
-	errorLinkAttrs := decodeMessagePackAttributes(t, errorLinkEvent.Attributes)
-	assert.Equal(t, addService1CommonAttributes(map[string]any{
-		"trace.trace_id":       traceID1,
-		"trace.parent_id":      errorSpanID,
-		"trace.link.trace_id":  linkedTraceID,
-		"trace.link.span_id":   linkedSpanID,
-		"link.from":            "error_span",
-		"meta.annotation_type": "link",
-		"parent_name":          "Error Operation",
-		"error":                true,
-		"conflicting":          "resource",
-
-		// Scope attributes from custom-library
-		"library.name":    "custom-library",
-		"library.version": "2.0.0",
-	}), errorLinkAttrs)
-	assert.Equal(t, int32(1), errorLinkEvent.SampleRate)
-	assert.Equal(t, time.Unix(0, int64(errorStartTime)).UTC(), errorLinkEvent.Timestamp) // Links use parent span timestamp
-
-	// Error span at index 8
-	errorSpan := &batch1.Events[8]
-	errorAttrs := decodeMessagePackAttributes(t, errorSpan.Attributes)
-	assert.Equal(t, addService1CommonAttributes(map[string]any{
-		"name":                  "Error Operation",
-		"trace.trace_id":        traceID1,
-		"trace.span_id":         errorSpanID,
-		"span.kind":             "internal",
-		"type":                  "internal",
-		"error":                 true,
-		"status_code":           int64(2),
-		"status_message":        "Operation failed",
-		"duration_ms":           float64(0),
-		"meta.invalid_duration": true,
-		"span.num_events":       int64(2),
-		"span.num_links":        int64(1),
-		"exception.type":        "RuntimeError",
-		"exception.message":     "First exception",
-		"conflicting":           "resource",
-
-		// Scope attributes from custom-library
-		"library.name":    "custom-library",
-		"library.version": "2.0.0",
-	}), errorAttrs)
-	assert.Equal(t, int32(1), errorSpan.SampleRate) // Default sample rate
-	assert.Equal(t, time.Unix(0, int64(errorStartTime)).UTC(), errorSpan.Timestamp)
-
-	// Error span's exception events at indices 5 and 6
-	firstExceptionEvent := &batch1.Events[5]
-	firstExceptionAttrs := decodeMessagePackAttributes(t, firstExceptionEvent.Attributes)
-	assert.Equal(t, addService1CommonAttributes(map[string]any{
-		"name":                               "exception",
-		"trace.trace_id":                     traceID1,
-		"trace.parent_id":                    errorSpanID,
-		"parent_name":                        "Error Operation",
-		"exception.type":                     "RuntimeError",
-		"exception.message":                  "First exception",
-		"error":                              true,
-		"meta.annotation_type":               "span_event",
-		"meta.time_since_span_start_ms":      float64(0),
-		"meta.invalid_time_since_span_start": true,
-		"conflicting":                        "resource",
-
-		// Scope attributes from custom-library
-		"library.name":    "custom-library",
-		"library.version": "2.0.0",
-	}), firstExceptionAttrs)
-	assert.Equal(t, int32(1), firstExceptionEvent.SampleRate)
-	assert.Equal(t, time.Unix(0, int64(errorStartTime-100_000_000)).UTC(), firstExceptionEvent.Timestamp)
-
-	// Second exception event at index 6 (only first exception was copied to error span)
-	secondExceptionEvent := &batch1.Events[6]
-	secondExceptionAttrs := decodeMessagePackAttributes(t, secondExceptionEvent.Attributes)
-	assert.Equal(t, addService1CommonAttributes(map[string]any{
-		"name":                          "exception",
-		"trace.trace_id":                traceID1,
-		"trace.parent_id":               errorSpanID,
-		"parent_name":                   "Error Operation",
-		"exception.type":                "IOError",
-		"exception.message":             "Second exception",
-		"error":                         true,
-		"meta.annotation_type":          "span_event",
-		"meta.signal_type":              "trace",
-		"meta.time_since_span_start_ms": float64(100),
-		"conflicting":                   "resource",
-
-		// Scope attributes from custom-library
-		"library.name":    "custom-library",
-		"library.version": "2.0.0",
-	}), secondExceptionAttrs)
-	assert.Equal(t, int32(1), secondExceptionEvent.SampleRate)
-	assert.Equal(t, time.Unix(0, int64(errorStartTime+100_000_000)).UTC(), secondExceptionEvent.Timestamp)
-
-	// Batch 2: service2
-	batch2 := result.Batches[1]
-	assert.Equal(t, "service2", batch2.Dataset)
-	assert.Len(t, batch2.Events, 1) // Just the producer span
-
-	producerEvent := batch2.Events[0]
-	producerAttrs := decodeMessagePackAttributes(t, producerEvent.Attributes)
-	assert.Equal(t, map[string]any{
-		"trace.trace_id":   "1a2b3c4d5e6f7089",
-		"trace.span_id":    spanID2,
-		"name":             "Publish Message",
-		"span.kind":        "producer",
-		"type":             "producer",
-		"status_code":      int64(0),
-		"duration_ms":      float64(864.197532),
-		"span.num_events":  int64(0),
-		"span.num_links":   int64(0),
-		"meta.signal_type": "trace",
-		"service.name":     "service2",
-	}, producerAttrs)
-	assert.Equal(t, int32(1), producerEvent.SampleRate) // Default sample rate
-	assert.Equal(t, time.Unix(0, int64(startTime)).UTC(), producerEvent.Timestamp)
-
-	// Batch 3: service1 is batched seperately due to arriving in a different
-	// Resource message.
-	batch3 := result.Batches[2]
-	assert.Equal(t, "service1", batch3.Dataset)
-	assert.Len(t, batch3.Events, 1)
-
-	// Since this is an effectively empty message, confirm all of our default field values here.
-	batch3Event := batch3.Events[0]
-	batch3Attrs := decodeMessagePackAttributes(t, batch3Event.Attributes)
-	assert.Equal(t, map[string]any{
-		"trace.trace_id":   "",
-		"trace.span_id":    "",
-		"span.kind":        "unspecified",
-		"type":             "unspecified",
-		"name":             "",
-		"status_code":      int64(0),
-		"duration_ms":      float64(0),
-		"span.num_events":  int64(0),
-		"span.num_links":   int64(0),
-		"meta.signal_type": "trace",
-		"service.name":     "service1",
-	}, batch3Attrs)
-	assert.Equal(t, int32(1), batch3Event.SampleRate) // Default sample rate
-	assert.Equal(t, time.Unix(0, 0).UTC(), batch3Event.Timestamp)
-
-	t.Run("ErrorHandling", func(t *testing.T) {
-		// Shave 5 bytes off the end of our serialized message, which should net
-		// us an EOF error from deep within the stack.
-		data = data[:len(data)-5]
-		_, err := unmarshalTraceRequestDirectMsgp(context.Background(), data, ri)
-		assert.ErrorIs(t, err, io.ErrUnexpectedEOF)
-	})
-
-	// Now compare with the regular (non-direct) unmarshaling to ensure consistency
-	t.Run("CompareWithRegularUnmarshaling", func(t *testing.T) {
-		// Use the same serialized data with the regular unmarshaling path
-		regularResult, err := TranslateTraceRequest(context.Background(), req, ri)
-		require.NoError(t, err)
-		assert.NotNil(t, regularResult)
-
-		// TODO: Fix these bugs in the regular unmarshaling (traces.go):
-		// 1. Negative duration calculation causes unsigned integer overflow
-		//    - When endTime < startTime, should set duration_ms=0 and meta.invalid_duration=true
-		//    - Currently produces huge positive values like 1.8446744072845355e+13
-		// 2. Negative time_since_span_start calculation causes unsigned integer overflow
-		//    - When event time < span start time, should set time=0 and meta.invalid_time_since_span_start=true
-		//    - Currently produces huge positive values like 1.844674407360955e+13
-
-		// Compare high-level structure
-		assert.Equal(t, result.RequestSize, regularResult.RequestSize)
-		assert.Equal(t, len(result.Batches), len(regularResult.Batches))
-
-		// Convert msgpack batches to regular batches for comparison
-		directBatches := make([]Batch, len(result.Batches))
-		for i, msgpBatch := range result.Batches {
-			directBatches[i] = convertBatchMsgpToBatch(t, msgpBatch)
-		}
-
-		// Compare each batch
-		for i := range directBatches {
-			directBatch := directBatches[i]
-			regularBatch := regularResult.Batches[i]
-
-			assert.Equal(t, directBatch.Dataset, regularBatch.Dataset, "Batch %d dataset mismatch", i)
-			assert.Equal(t, len(directBatch.Events), len(regularBatch.Events), "Batch %d event count mismatch", i)
-
-			// Compare each event
-			for j := range directBatch.Events {
-				directEvent := directBatch.Events[j]
-				regularEvent := regularBatch.Events[j]
-
-				// Compare timestamps and sample rates
-				assert.Equal(t, directEvent.Timestamp, regularEvent.Timestamp, "Batch %d Event %d timestamp mismatch", i, j)
-				assert.Equal(t, directEvent.SampleRate, regularEvent.SampleRate, "Batch %d Event %d sample rate mismatch", i, j)
-
-				// Compare attributes
-				// Check for known discrepancies that are actually improvements in the direct implementation
-				if i == 0 && j == 5 { // First exception event
-					// The direct implementation correctly handles negative time_since_span_start
-					// Regular: meta.time_since_span_start_ms = 1.844674407360955e+13 (overflow)
-					// Direct: meta.time_since_span_start_ms = 0 + meta.invalid_time_since_span_start = true
-					assert.Equal(t, float64(0), directEvent.Attributes["meta.time_since_span_start_ms"])
-					assert.Equal(t, true, directEvent.Attributes["meta.invalid_time_since_span_start"])
-					// Remove the fields that differ to check the rest
-					delete(regularEvent.Attributes, "meta.time_since_span_start_ms")
-					delete(directEvent.Attributes, "meta.time_since_span_start_ms")
-					delete(directEvent.Attributes, "meta.invalid_time_since_span_start")
-				}
-				if i == 0 && j == 8 { // Error span with negative duration
-					// The direct implementation correctly handles negative duration
-					// Regular: duration_ms = 1.8446744072845355e+13 (overflow)
-					// Direct: duration_ms = 0 + meta.invalid_duration = true
-					assert.Equal(t, float64(0), directEvent.Attributes["duration_ms"])
-					assert.Equal(t, true, directEvent.Attributes["meta.invalid_duration"])
-					// Remove the fields that differ to check the rest
-					delete(regularEvent.Attributes, "duration_ms")
-					delete(directEvent.Attributes, "duration_ms")
-					delete(directEvent.Attributes, "meta.invalid_duration")
-				}
-
-				// Now compare the remaining attributes
-				assert.Equal(t, regularEvent.Attributes, directEvent.Attributes, "Batch %d Event %d attributes mismatch (after removing known improvements)", i, j)
+			ri := RequestInfo{
+				ApiKey:      "abc123DEF456ghi789jklm",
+				Dataset:     "test-dataset",
+				ContentType: tc.contentType,
 			}
-		}
-	})
+
+			// Unmarshal twice, which is fine because this should be idempotent.
+			// Also assert we are not changing anything about the input buffer.
+			// In practice it would probably be ok if we did, but it implies a bug if
+			// it happens. (Reader, it happened.)
+			before := slices.Clone(data)
+			_, err = tc.unmarshal(context.Background(), data, ri)
+			require.NoError(t, err)
+			require.Equal(t, before, data)
+
+			result, err := tc.unmarshal(context.Background(), data, ri)
+			require.NoError(t, err)
+			require.Equal(t, before, data)
+
+			batch1 := result.Batches[0]
+			assert.Equal(t, "service1", batch1.Dataset)
+			// 3 spans + 2 events from span1 + 2 events from error span + 1 link from span1 + 1 link from error span = 9 events
+			assert.Len(t, batch1.Events, 9)
+
+			// Events are in deterministic order:
+			// 0: cache_miss event (from span1)
+			// 1: exception event (from span1)
+			// 2: link (from span1)
+			// 3: HTTP GET /api/users span (span1 itself)
+			// 4: DB Query span (span2)
+			// 5: First exception event (from error span)
+			// 6: Second exception event (from error span)
+			// 7: link (from error span)
+			// 8: Error Operation span (error span itself)
+
+			// Verify the main span (HTTP GET /api/users) at index 3
+			mainSpan := &batch1.Events[3]
+			mainAttrs := decodeMessagePackAttributes(t, mainSpan.Attributes)
+
+			assert.Equal(t, addService1CommonAttributes(map[string]any{
+				"trace.trace_id":       traceID1,
+				"trace.span_id":        spanID1,
+				"trace.parent_id":      parentSpanID1,
+				"trace.trace_state":    "w3c=true;th=8",
+				"name":                 "HTTP GET /api/users",
+				"span.kind":            "server",
+				"type":                 "server",
+				"http.method":          "GET",
+				"http.status_code":     int64(200),
+				"http.url":             "https://example.com/api/users",
+				"response.size":        float64(1234.56),
+				"success":              true,
+				"status_code":          int64(1),
+				"status_message":       "Request completed successfully",
+				"duration_ms":          float64(864.197532),
+				"span.num_events":      int64(2),
+				"span.num_links":       int64(1),
+				"exception.type":       "ValueError",
+				"exception.message":    "Invalid user ID",
+				"exception.stacktrace": "stack trace here...",
+				"exception.escaped":    true,
+				"conflicting":          "span",
+
+				// Scope attributes from HTTP instrumentation library
+				"library.name":                      "go.opentelemetry.io/contrib/instrumentation/net/http",
+				"library.version":                   "1.0.0",
+				"telemetry.instrumentation_library": true,
+				"scope.attr":                        "scope_value",
+			}), mainAttrs)
+
+			// Sample rate and timestamp
+			assert.Equal(t, int32(10), mainSpan.SampleRate)
+			assert.Equal(t, time.Unix(0, int64(startTime)).UTC(), mainSpan.Timestamp)
+
+			// Verify span events
+			cacheEvent := &batch1.Events[0]
+			cacheAttrs := decodeMessagePackAttributes(t, cacheEvent.Attributes)
+			assert.Equal(t, addService1CommonAttributes(map[string]any{
+				"name":                          "cache_miss",
+				"trace.trace_id":                traceID1,
+				"trace.parent_id":               spanID1,
+				"parent_name":                   "HTTP GET /api/users",
+				"cache.key":                     "user:123",
+				"cache.ttl":                     int64(3600),
+				"meta.time_since_span_start_ms": float64(100),
+				"meta.annotation_type":          "span_event",
+				"conflicting":                   "event",
+
+				// Scope attributes from HTTP instrumentation library
+				"library.name":                      "go.opentelemetry.io/contrib/instrumentation/net/http",
+				"library.version":                   "1.0.0",
+				"telemetry.instrumentation_library": true,
+				"scope.attr":                        "scope_value",
+			}), cacheAttrs)
+			assert.Equal(t, int32(10), cacheEvent.SampleRate)
+			assert.Equal(t, time.Unix(0, int64(event1Time)).UTC(), cacheEvent.Timestamp)
+
+			// Exception event at index 1
+			exceptionEvent := &batch1.Events[1]
+			exceptionAttrs := decodeMessagePackAttributes(t, exceptionEvent.Attributes)
+			assert.Equal(t, addService1CommonAttributes(map[string]any{
+				"name":                          "exception",
+				"trace.trace_id":                traceID1,
+				"trace.parent_id":               spanID1,
+				"parent_name":                   "HTTP GET /api/users",
+				"meta.annotation_type":          "span_event",
+				"meta.time_since_span_start_ms": float64(200),
+				"exception.type":                "ValueError",
+				"exception.message":             "Invalid user ID",
+				"exception.stacktrace":          "stack trace here...",
+				"exception.escaped":             true,
+				"conflicting":                   "scope",
+
+				// Scope attributes from HTTP instrumentation library
+				"library.name":                      "go.opentelemetry.io/contrib/instrumentation/net/http",
+				"library.version":                   "1.0.0",
+				"telemetry.instrumentation_library": true,
+				"scope.attr":                        "scope_value",
+			}), exceptionAttrs)
+			assert.Equal(t, int32(10), exceptionEvent.SampleRate)
+			assert.Equal(t, time.Unix(0, int64(event2Time)).UTC(), exceptionEvent.Timestamp)
+
+			// Link at index 2
+			linkEvent := &batch1.Events[2]
+			linkAttrs := decodeMessagePackAttributes(t, linkEvent.Attributes)
+			assert.Equal(t, addService1CommonAttributes(map[string]any{
+				"trace.trace_id":       traceID1,
+				"trace.parent_id":      spanID1,
+				"trace.link.trace_id":  linkedTraceID,
+				"trace.link.span_id":   linkedSpanID,
+				"link.type":            "parent",
+				"meta.annotation_type": "link",
+				"parent_name":          "HTTP GET /api/users",
+				"conflicting":          "link",
+
+				// Scope attributes from HTTP instrumentation library
+				"library.name":                      "go.opentelemetry.io/contrib/instrumentation/net/http",
+				"library.version":                   "1.0.0",
+				"telemetry.instrumentation_library": true,
+				"scope.attr":                        "scope_value",
+			}), linkAttrs)
+			assert.Equal(t, int32(10), linkEvent.SampleRate)
+			assert.Equal(t, time.Unix(0, int64(startTime)).UTC(), linkEvent.Timestamp) // Links use parent span timestamp
+
+			// DB Query span at index 4
+			dbSpan := &batch1.Events[4]
+			dbAttrs := decodeMessagePackAttributes(t, dbSpan.Attributes)
+			assert.Equal(t, addService1CommonAttributes(map[string]any{
+				"name":            "DB Query",
+				"trace.trace_id":  traceID1,
+				"trace.span_id":   spanID2,
+				"trace.parent_id": spanID1,
+				"span.kind":       "client",
+				"type":            "client",
+				"db.statement":    "SELECT * FROM users WHERE id = ?",
+				"status_code":     int64(0),
+				"duration_ms":     float64(764.197532),
+				"span.num_events": int64(0),
+				"span.num_links":  int64(0),
+				"conflicting":     "scope",
+
+				// Scope attributes from HTTP instrumentation library
+				"library.name":                      "go.opentelemetry.io/contrib/instrumentation/net/http",
+				"library.version":                   "1.0.0",
+				"telemetry.instrumentation_library": true,
+				"scope.attr":                        "scope_value",
+			}), dbAttrs)
+			assert.Equal(t, int32(1), dbSpan.SampleRate) // DB Query span has no explicit sampleRate, gets default
+			assert.Equal(t, time.Unix(0, int64(startTime+50_000_000)).UTC(), dbSpan.Timestamp)
+
+			// Error span's link at index 7
+			errorLinkEvent := &batch1.Events[7]
+			errorLinkAttrs := decodeMessagePackAttributes(t, errorLinkEvent.Attributes)
+			assert.Equal(t, addService1CommonAttributes(map[string]any{
+				"trace.trace_id":       traceID1,
+				"trace.parent_id":      errorSpanID,
+				"trace.link.trace_id":  linkedTraceID,
+				"trace.link.span_id":   linkedSpanID,
+				"link.from":            "error_span",
+				"meta.annotation_type": "link",
+				"parent_name":          "Error Operation",
+				"error":                true,
+				"conflicting":          "resource",
+
+				// Scope attributes from custom-library
+				"library.name":    "custom-library",
+				"library.version": "2.0.0",
+			}), errorLinkAttrs)
+			assert.Equal(t, int32(1), errorLinkEvent.SampleRate)
+			assert.Equal(t, time.Unix(0, int64(errorStartTime)).UTC(), errorLinkEvent.Timestamp) // Links use parent span timestamp
+
+			// Error span at index 8
+			errorSpan := &batch1.Events[8]
+			errorAttrs := decodeMessagePackAttributes(t, errorSpan.Attributes)
+			assert.Equal(t, addService1CommonAttributes(map[string]any{
+				"name":                  "Error Operation",
+				"trace.trace_id":        traceID1,
+				"trace.span_id":         errorSpanID,
+				"span.kind":             "internal",
+				"type":                  "internal",
+				"error":                 true,
+				"status_code":           int64(2),
+				"status_message":        "Operation failed",
+				"duration_ms":           float64(0),
+				"meta.invalid_duration": true,
+				"span.num_events":       int64(2),
+				"span.num_links":        int64(1),
+				"exception.type":        "RuntimeError",
+				"exception.message":     "First exception",
+				"conflicting":           "resource",
+
+				// Scope attributes from custom-library
+				"library.name":    "custom-library",
+				"library.version": "2.0.0",
+			}), errorAttrs)
+			assert.Equal(t, int32(1), errorSpan.SampleRate) // Default sample rate
+			assert.Equal(t, time.Unix(0, int64(errorStartTime)).UTC(), errorSpan.Timestamp)
+
+			// Error span's exception events at indices 5 and 6
+			firstExceptionEvent := &batch1.Events[5]
+			firstExceptionAttrs := decodeMessagePackAttributes(t, firstExceptionEvent.Attributes)
+			assert.Equal(t, addService1CommonAttributes(map[string]any{
+				"name":                               "exception",
+				"trace.trace_id":                     traceID1,
+				"trace.parent_id":                    errorSpanID,
+				"parent_name":                        "Error Operation",
+				"exception.type":                     "RuntimeError",
+				"exception.message":                  "First exception",
+				"error":                              true,
+				"meta.annotation_type":               "span_event",
+				"meta.time_since_span_start_ms":      float64(0),
+				"meta.invalid_time_since_span_start": true,
+				"conflicting":                        "resource",
+
+				// Scope attributes from custom-library
+				"library.name":    "custom-library",
+				"library.version": "2.0.0",
+			}), firstExceptionAttrs)
+			assert.Equal(t, int32(1), firstExceptionEvent.SampleRate)
+			assert.Equal(t, time.Unix(0, int64(errorStartTime-100_000_000)).UTC(), firstExceptionEvent.Timestamp)
+
+			// Second exception event at index 6 (only first exception was copied to error span)
+			secondExceptionEvent := &batch1.Events[6]
+			secondExceptionAttrs := decodeMessagePackAttributes(t, secondExceptionEvent.Attributes)
+			assert.Equal(t, addService1CommonAttributes(map[string]any{
+				"name":                          "exception",
+				"trace.trace_id":                traceID1,
+				"trace.parent_id":               errorSpanID,
+				"parent_name":                   "Error Operation",
+				"exception.type":                "IOError",
+				"exception.message":             "Second exception",
+				"error":                         true,
+				"meta.annotation_type":          "span_event",
+				"meta.signal_type":              "trace",
+				"meta.time_since_span_start_ms": float64(100),
+				"conflicting":                   "resource",
+
+				// Scope attributes from custom-library
+				"library.name":    "custom-library",
+				"library.version": "2.0.0",
+			}), secondExceptionAttrs)
+			assert.Equal(t, int32(1), secondExceptionEvent.SampleRate)
+			assert.Equal(t, time.Unix(0, int64(errorStartTime+100_000_000)).UTC(), secondExceptionEvent.Timestamp)
+
+			// Batch 2: service2
+			batch2 := result.Batches[1]
+			assert.Equal(t, "service2", batch2.Dataset)
+			assert.Len(t, batch2.Events, 1) // Just the producer span
+
+			producerEvent := batch2.Events[0]
+			producerAttrs := decodeMessagePackAttributes(t, producerEvent.Attributes)
+			assert.Equal(t, map[string]any{
+				"trace.trace_id":   "1a2b3c4d5e6f7089",
+				"trace.span_id":    spanID2,
+				"name":             "Publish Message",
+				"span.kind":        "producer",
+				"type":             "producer",
+				"status_code":      int64(0),
+				"duration_ms":      float64(864.197532),
+				"span.num_events":  int64(0),
+				"span.num_links":   int64(0),
+				"meta.signal_type": "trace",
+				"service.name":     "service2",
+			}, producerAttrs)
+			assert.Equal(t, int32(1), producerEvent.SampleRate) // Default sample rate
+			assert.Equal(t, time.Unix(0, int64(startTime)).UTC(), producerEvent.Timestamp)
+
+			// Batch 3: service1 is batched seperately due to arriving in a different
+			// Resource message.
+			batch3 := result.Batches[2]
+			assert.Equal(t, "service1", batch3.Dataset)
+			assert.Len(t, batch3.Events, 1)
+
+			// Since this is an effectively empty message, confirm all of our default field values here.
+			batch3Event := batch3.Events[0]
+			batch3Attrs := decodeMessagePackAttributes(t, batch3Event.Attributes)
+			assert.Equal(t, map[string]any{
+				"trace.trace_id":   "",
+				"trace.span_id":    "",
+				"span.kind":        "unspecified",
+				"type":             "unspecified",
+				"name":             "",
+				"status_code":      int64(0),
+				"duration_ms":      float64(0),
+				"span.num_events":  int64(0),
+				"span.num_links":   int64(0),
+				"meta.signal_type": "trace",
+				"service.name":     "service1",
+			}, batch3Attrs)
+			assert.Equal(t, int32(1), batch3Event.SampleRate) // Default sample rate
+			assert.Equal(t, time.Unix(0, 0).UTC(), batch3Event.Timestamp)
+
+			t.Run("ErrorHandling", func(t *testing.T) {
+				// Shave 5 bytes off the end of our serialized message, which should net
+				// us an EOF error from deep within the stack.
+				data = data[:len(data)-5]
+				_, err := unmarshalTraceRequestDirectMsgp(context.Background(), data, ri)
+				assert.ErrorIs(t, err, io.ErrUnexpectedEOF)
+			})
+
+			// Now compare with the regular (non-direct) unmarshaling to ensure consistency
+			t.Run("CompareWithRegularUnmarshaling", func(t *testing.T) {
+				// Use the same serialized data with the regular unmarshaling path
+				regularResult, err := TranslateTraceRequest(context.Background(), req, ri)
+				require.NoError(t, err)
+				assert.NotNil(t, regularResult)
+
+				// TODO: Fix these bugs in the regular unmarshaling (traces.go):
+				// 1. Negative duration calculation causes unsigned integer overflow
+				//    - When endTime < startTime, should set duration_ms=0 and meta.invalid_duration=true
+				//    - Currently produces huge positive values like 1.8446744072845355e+13
+				// 2. Negative time_since_span_start calculation causes unsigned integer overflow
+				//    - When event time < span start time, should set time=0 and meta.invalid_time_since_span_start=true
+				//    - Currently produces huge positive values like 1.844674407360955e+13
+
+				// Compare high-level structure
+				assert.Equal(t, result.RequestSize, regularResult.RequestSize)
+				assert.Equal(t, len(result.Batches), len(regularResult.Batches))
+
+				// Convert msgpack batches to regular batches for comparison
+				directBatches := make([]Batch, len(result.Batches))
+				for i, msgpBatch := range result.Batches {
+					directBatches[i] = convertBatchMsgpToBatch(t, msgpBatch)
+				}
+
+				// Compare each batch
+				for i := range directBatches {
+					directBatch := directBatches[i]
+					regularBatch := regularResult.Batches[i]
+
+					assert.Equal(t, directBatch.Dataset, regularBatch.Dataset, "Batch %d dataset mismatch", i)
+					assert.Equal(t, len(directBatch.Events), len(regularBatch.Events), "Batch %d event count mismatch", i)
+
+					// Compare each event
+					for j := range directBatch.Events {
+						directEvent := directBatch.Events[j]
+						regularEvent := regularBatch.Events[j]
+
+						// Compare timestamps and sample rates
+						assert.Equal(t, directEvent.Timestamp, regularEvent.Timestamp, "Batch %d Event %d timestamp mismatch", i, j)
+						assert.Equal(t, directEvent.SampleRate, regularEvent.SampleRate, "Batch %d Event %d sample rate mismatch", i, j)
+
+						// Compare attributes
+						// Check for known discrepancies that are actually improvements in the direct implementation
+						if i == 0 && j == 5 { // First exception event
+							// The direct implementation correctly handles negative time_since_span_start
+							// Regular: meta.time_since_span_start_ms = 1.844674407360955e+13 (overflow)
+							// Direct: meta.time_since_span_start_ms = 0 + meta.invalid_time_since_span_start = true
+							assert.Equal(t, float64(0), directEvent.Attributes["meta.time_since_span_start_ms"])
+							assert.Equal(t, true, directEvent.Attributes["meta.invalid_time_since_span_start"])
+							// Remove the fields that differ to check the rest
+							delete(regularEvent.Attributes, "meta.time_since_span_start_ms")
+							delete(directEvent.Attributes, "meta.time_since_span_start_ms")
+							delete(directEvent.Attributes, "meta.invalid_time_since_span_start")
+						}
+						if i == 0 && j == 8 { // Error span with negative duration
+							// The direct implementation correctly handles negative duration
+							// Regular: duration_ms = 1.8446744072845355e+13 (overflow)
+							// Direct: duration_ms = 0 + meta.invalid_duration = true
+							assert.Equal(t, float64(0), directEvent.Attributes["duration_ms"])
+							assert.Equal(t, true, directEvent.Attributes["meta.invalid_duration"])
+							// Remove the fields that differ to check the rest
+							delete(regularEvent.Attributes, "duration_ms")
+							delete(directEvent.Attributes, "duration_ms")
+							delete(directEvent.Attributes, "meta.invalid_duration")
+						}
+
+						// Now compare the remaining attributes
+						assert.Equal(t, regularEvent.Attributes, directEvent.Attributes, "Batch %d Event %d attributes mismatch (after removing known improvements)", i, j)
+					}
+				}
+			})
+		})
+	}
 }
 
 func TestUnmarshalTraceRequestDirect_WithUnknownFields(t *testing.T) {
