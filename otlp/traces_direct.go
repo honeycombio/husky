@@ -139,7 +139,9 @@ func recycleMsgpAttributes(m *msgpAttributes) {
 	}
 }
 
-// Holds messagepack-encode keyvalues, without a header.
+// Holds a list of messagepack-encode keyvalues, without a map header.
+// (A complete msgp map includes a header indicating the number of kv pairs,
+// when we need that we'll use msgpAttributesMap, below.)
 type msgpAttributes struct {
 	buf   []byte
 	count int
@@ -188,17 +190,18 @@ func (m *msgpAttributes) addBool(key []byte, value bool) {
 	m.count++
 }
 
-// addTraceID adds a trace ID, encoding it as hex without allocating
+// addTraceID adds a trace ID, truncating the empty prefix if required,
+// and encoding it as hex without allocating.
 func (m *msgpAttributes) addTraceID(key []byte, traceID []byte) {
 	if shouldTrimTraceId(traceID) {
 		traceID = traceID[traceIDShortLength:]
 	}
 
-	m.addSpanID(key, traceID)
+	m.addHexID(key, traceID)
 }
 
-// addSpanID adds a span ID, encoding it as hex without allocating
-func (m *msgpAttributes) addSpanID(key []byte, spanID []byte) {
+// addHexID adds a hexidecimal ID, encoding it without allocating
+func (m *msgpAttributes) addHexID(key []byte, spanID []byte) {
 	m.buf = msgp.AppendStringFromBytes(m.buf, key)
 
 	// Calculate the encoded length
@@ -213,7 +216,7 @@ func (m *msgpAttributes) addSpanID(key []byte, spanID []byte) {
 		m.buf = append(m.buf, 0xd9, byte(encodedLen))
 	}
 
-	// Encode the trace ID directly into the buffer
+	// Encode the ID directly into the buffer
 	m.buf = hex.AppendEncode(m.buf, spanID)
 
 	m.count++
@@ -229,6 +232,15 @@ func newMsgpMap() msgpAttributesMap {
 	m := msgpAttributesMap{
 		msgpAttributes: msgpAttributesPool.Get().(*msgpAttributes),
 	}
+
+	// Messagepack has 3 map header formats for different maximum counts,
+	// 1, 3, and 5 bytes long. Here we'll just always use the 3-byte form,
+	// which can represent counts up to 2^16-1. This is slightly wasteful
+	// if there are few enough values that we could have used the 1-byte form,
+	// and will cause an error if there are too many, but honeycomb doesn't
+	// support column counts that large anyway. With a fixed-length header,
+	// we can allocate space for it now, then set the later 2 bytes with the
+	// real count once we're finished encoding.
 	m.buf = append(m.buf, 0xde, 0, 0)
 	return m
 }
@@ -264,7 +276,11 @@ func (m *msgpAttributesMap) finalize() ([]byte, error) {
 // Why does the code look like this? Because it's derived from gogo's generated
 // code, and carries over some of the style conventions so that it will hopefully
 // be relatively easy to update it in future, should that be necessary.
-// Fortunately this part of OTLP is marked as "stable" so we don't expect changes.
+// Fortunately this part of OTLP is marked as "stable" so we don't expect many changes.
+// However, as of this writing the otel folks are working on making this even more
+// complex than it already is, by adding a new EntityRef field to Resource.
+// https://github.com/open-telemetry/opentelemetry-proto/blob/main/opentelemetry/proto/resource/v1/resource.proto#L43
+// When this is finalized we'll presumably have to add support here.
 func unmarshalTraceRequestDirectMsgp(ctx context.Context, data []byte, ri RequestInfo) (*TranslateOTLPRequestResultMsgp, error) {
 	if err := ri.ValidateTracesHeaders(); err != nil {
 		return nil, err
@@ -380,6 +396,8 @@ loop:
 				return err
 			}
 
+			// Note, the logic here will probably need to change once the Entity
+			// system is finalized.
 			err = unmarshalScopeSpans(ctx, slice, resourceAttrs, dataset, result)
 			if err != nil {
 				return err
@@ -856,6 +874,7 @@ func unmarshalScopeSpans(
 
 	l := len(data)
 	iNdEx := 0
+loop:
 	for iNdEx < l {
 		preIndex := iNdEx
 		fieldNum, wireType, err := decodeField(data, &iNdEx)
@@ -875,6 +894,7 @@ func unmarshalScopeSpans(
 			if err != nil {
 				return err
 			}
+			break loop
 		default:
 			if err := skipField(data, &iNdEx, preIndex, l); err != nil {
 				return err
@@ -1028,7 +1048,7 @@ func unmarshalSpan(
 				return err
 			}
 			if len(spanID) > 0 {
-				eventAttr.addSpanID([]byte("trace.span_id"), spanID)
+				eventAttr.addHexID([]byte("trace.span_id"), spanID)
 			}
 
 		case 3: // trace_state
@@ -1051,7 +1071,7 @@ func unmarshalSpan(
 				return err
 			}
 			if len(parentSpanID) > 0 {
-				eventAttr.addSpanID([]byte("trace.parent_id"), parentSpanID)
+				eventAttr.addHexID([]byte("trace.parent_id"), parentSpanID)
 			}
 
 		case 5: // name
@@ -1254,7 +1274,7 @@ func unmarshalSpanEvent(
 		eventAttr.addTraceID([]byte("trace.trace_id"), traceID)
 	}
 	if len(parentSpanID) > 0 {
-		eventAttr.addSpanID([]byte("trace.parent_id"), parentSpanID)
+		eventAttr.addHexID([]byte("trace.parent_id"), parentSpanID)
 	}
 
 	// Don't generate a span ID for span events - they only have parent_id
@@ -1435,7 +1455,7 @@ func unmarshalSpanLink(
 		eventAttr.addTraceID([]byte("trace.trace_id"), traceID)
 	}
 	if len(parentSpanID) > 0 {
-		eventAttr.addSpanID([]byte("trace.parent_id"), parentSpanID)
+		eventAttr.addHexID([]byte("trace.parent_id"), parentSpanID)
 	}
 
 	// Don't generate a span ID for span links - they only have parent_id
@@ -1505,7 +1525,7 @@ func unmarshalSpanLink(
 		eventAttr.addTraceID([]byte("trace.link.trace_id"), linkedTraceID)
 	}
 	if len(linkedSpanID) > 0 {
-		eventAttr.addSpanID([]byte("trace.link.span_id"), linkedSpanID)
+		eventAttr.addHexID([]byte("trace.link.span_id"), linkedSpanID)
 	}
 	// Note: The original implementation doesn't add trace.link.trace_state
 	// even though it's part of the OTLP spec, so we skip it for compatibility

@@ -93,6 +93,7 @@ func TranslateTraceRequestFromReaderSizedWithMsgp(
 		defer func() {
 			zstdReader.Reset(nil)
 			zstdDecoderPool.Put(zstdReader)
+			zstdReader.Close()
 		}()
 
 		err := zstdReader.Reset(reader)
@@ -101,7 +102,7 @@ func TranslateTraceRequestFromReaderSizedWithMsgp(
 		}
 
 		reader = zstdReader
-	case "", "identity":
+	case "":
 		// cool
 	default:
 		return nil, ErrFailedParseBody
