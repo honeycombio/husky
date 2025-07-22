@@ -89,7 +89,6 @@ import (
 	"fmt"
 	"io"
 	"math"
-	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -97,6 +96,7 @@ import (
 
 	"github.com/honeycombio/husky"
 
+	"github.com/dgryski/go-wyhash"
 	"github.com/tinylib/msgp/msgp"
 	trace "go.opentelemetry.io/proto/otlp/trace/v1"
 )
@@ -139,12 +139,10 @@ func recycleMsgpAttributes(m *msgpAttributes) {
 	}
 }
 
-// Holds a list of messagepack-encode keyvalues, without a map header.
-// (A complete msgp map includes a header indicating the number of kv pairs,
-// when we need that we'll use msgpAttributesMap, below.)
+// Holds a list of messagepack-encoded key-value pairs, without a map header.
 type msgpAttributes struct {
-	buf   []byte
-	count int
+	buf       []byte
+	keyHashes map[uint64]struct{}
 
 	// memoized metadata fields we'll need internally
 	serviceName string
@@ -153,14 +151,15 @@ type msgpAttributes struct {
 }
 
 func (m *msgpAttributes) reset() {
+	clear(m.keyHashes)
 	*m = msgpAttributes{
-		buf: m.buf[:0],
+		buf:       m.buf[:0],
+		keyHashes: m.keyHashes,
 	}
 }
 
 func (m *msgpAttributes) addAny(key []byte, value any) error {
 	var err error
-	m.count++
 	m.buf = msgp.AppendStringFromBytes(m.buf, key)
 	m.buf, err = msgp.AppendIntf(m.buf, value)
 	return err
@@ -169,25 +168,102 @@ func (m *msgpAttributes) addAny(key []byte, value any) error {
 func (m *msgpAttributes) addString(key []byte, value []byte) {
 	m.buf = msgp.AppendStringFromBytes(m.buf, key)
 	m.buf = msgp.AppendStringFromBytes(m.buf, value)
-	m.count++
 }
 
 func (m *msgpAttributes) addInt64(key []byte, value int64) {
 	m.buf = msgp.AppendStringFromBytes(m.buf, key)
 	m.buf = msgp.AppendInt64(m.buf, value)
-	m.count++
 }
 
 func (m *msgpAttributes) addFloat64(key []byte, value float64) {
 	m.buf = msgp.AppendStringFromBytes(m.buf, key)
 	m.buf = msgp.AppendFloat64(m.buf, value)
-	m.count++
 }
 
 func (m *msgpAttributes) addBool(key []byte, value bool) {
 	m.buf = msgp.AppendStringFromBytes(m.buf, key)
 	m.buf = msgp.AppendBool(m.buf, value)
-	m.count++
+}
+
+// Adds the contents of the given msgpAttributes to this msgpAttributes.
+// When finalize() is called, it will prefer the first occurence of any duplicates,
+// so it's important to call this first with highest-precedence data, then the least.
+func (m *msgpAttributes) addAttributes(add *msgpAttributes) {
+	m.buf = append(m.buf, add.buf...)
+	if !m.isError {
+		m.isError = add.isError
+	}
+	if m.serviceName == "" {
+		m.serviceName = add.serviceName
+	}
+	if m.sampleRate == 0 {
+		m.sampleRate = add.sampleRate
+	}
+}
+
+var keyHashPool = sync.Pool{
+	New: func() any {
+		return make(map[uint64]struct{}, 64)
+	},
+}
+
+// Returns serialized msgp map including the header, suitable for transmission.
+// The result is on fresh heap, so the underlying msgpAttributes can be recycled.
+// Suppresses any duplicates in the input, prefering the FIRST occurence of each value.
+func (m *msgpAttributes) finalize() ([]byte, error) {
+	// Messagepack has 3 map header formats for different maximum counts,
+	// 1, 3, and 5 bytes long. Here we'll just always use the 3-byte form,
+	// which can represent counts up to 2^16-1. This is slightly wasteful
+	// if there are few enough values that we could have used the 1-byte form,
+	// and will cause an error if there are too many, but honeycomb doesn't
+	// support column counts that large anyway. With a fixed-length header,
+	// we can allocate space for it now, then set the later 2 bytes with the
+	// real count once we're finished encoding.
+	result := make([]byte, 3, len(m.buf)+3)
+	result[0] = 0xde // map16 format
+
+	keyHashes := keyHashPool.Get().(map[uint64]struct{})
+	defer func() {
+		clear(keyHashes)
+		keyHashPool.Put(keyHashes)
+	}()
+
+	// Parse the messagepack data directly
+	data := m.buf
+	for len(data) > 0 {
+		// Read the key using the zero-copy method
+		keyBytes, remaining, err := msgp.ReadMapKeyZC(data)
+		if err != nil {
+			return nil, err
+		}
+		keyHash := wyhash.Hash(keyBytes, 0)
+
+		// Find where the value ends by skipping it
+		afterValue, err := msgp.Skip(remaining)
+		if err != nil {
+			return nil, err
+		}
+		if _, exists := keyHashes[keyHash]; !exists {
+			keyHashes[keyHash] = struct{}{}
+
+			// Copy the entire key-value pair to result
+			result = append(result, data[:len(data)-len(afterValue)]...)
+		}
+
+		// Move to the next key-value pair
+		data = afterValue
+	}
+
+	uniqueCount := len(keyHashes)
+	if uniqueCount > 65535 {
+		return nil, errors.New("too many attributes")
+	}
+
+	// Update the count in the header
+	result[1] = byte(uniqueCount >> 8)
+	result[2] = byte(uniqueCount)
+
+	return result, nil
 }
 
 // addTraceID adds a trace ID, truncating the empty prefix if required,
@@ -218,56 +294,6 @@ func (m *msgpAttributes) addHexID(key []byte, spanID []byte) {
 
 	// Encode the ID directly into the buffer
 	m.buf = hex.AppendEncode(m.buf, spanID)
-
-	m.count++
-}
-
-// Wraps a msgpAttributes, but includes a map header indicating the value count.
-// Used to produce complete Attributes payloads using the finalize() method.
-type msgpAttributesMap struct {
-	*msgpAttributes
-}
-
-func newMsgpMap() msgpAttributesMap {
-	m := msgpAttributesMap{
-		msgpAttributes: msgpAttributesPool.Get().(*msgpAttributes),
-	}
-
-	// Messagepack has 3 map header formats for different maximum counts,
-	// 1, 3, and 5 bytes long. Here we'll just always use the 3-byte form,
-	// which can represent counts up to 2^16-1. This is slightly wasteful
-	// if there are few enough values that we could have used the 1-byte form,
-	// and will cause an error if there are too many, but honeycomb doesn't
-	// support column counts that large anyway. With a fixed-length header,
-	// we can allocate space for it now, then set the later 2 bytes with the
-	// real count once we're finished encoding.
-	m.buf = append(m.buf, 0xde, 0, 0)
-	return m
-}
-
-func (m *msgpAttributesMap) addAttributes(add *msgpAttributes) {
-	m.buf = append(m.buf, add.buf...)
-	m.count += add.count
-	if !m.isError {
-		m.isError = add.isError
-	}
-	if m.serviceName == "" {
-		m.serviceName = add.serviceName
-	}
-	if m.sampleRate == 0 {
-		m.sampleRate = add.sampleRate
-	}
-}
-
-// Returns serialized msgp map including the header, suitable for transmission.
-// Makes a copy of the buffer so that the underlying msgpAttributes can be recycled.
-func (m *msgpAttributesMap) finalize() ([]byte, error) {
-	if m.count > 65536 {
-		return nil, errors.New("too many attributes")
-	}
-	m.buf[1] = byte(m.count >> 8)
-	m.buf[2] = byte(m.count)
-	return slices.Clone(m.buf), nil
 }
 
 // unmarshalTraceRequestDirectMsgp translates a serialized OTLP trace request directly
@@ -527,7 +553,15 @@ func processValueDirect(ctx context.Context, key []byte, value any, attrs *msgpA
 		if depth < maxDepth {
 			// Flatten the kvlist
 			for k, v := range v {
-				flatKey := append(key, '.')
+				// Tricky: we can't just append to key, since key most likely
+				// came from the input buffer, so appending to it will write
+				// into the input. Instead construct a new key string.
+				// This does allocate garbage and in theory it could be factored
+				// out by writing directly into the messagepack buffer, but we
+				// expect this to be an uncommon case.
+				flatKey := make([]byte, 0, len(key)+1+len(k))
+				flatKey = append(flatKey, key...)
+				flatKey = append(flatKey, '.')
 				flatKey = append(flatKey, k...)
 
 				// Process the nested value recursively
@@ -558,10 +592,14 @@ func sampleRateFromFloat(f float64) int32 {
 	if f > math.MaxInt32 {
 		return math.MaxInt32
 	}
-	if f <= 0 {
+
+	rate := int32(f + 0.5) // Round to nearest int
+
+	// Check this AFTER converting to int, since oddities like NaN will become 0
+	if rate < defaultSampleRate {
 		return defaultSampleRate
 	}
-	return int32(f + 0.5) // Round to nearest int
+	return rate
 }
 
 // unmarshalKeyValue parses a KeyValue message and adds it to msgpAttributes
@@ -997,8 +1035,9 @@ func unmarshalSpan(
 	scopeAttrs *msgpAttributes,
 	batch *BatchMsgp,
 ) error {
-	eventAttr := newMsgpMap()
-	defer recycleMsgpAttributes(eventAttr.msgpAttributes)
+	// Collect span-specific attributes separately first
+	eventAttr := msgpAttributesPool.Get().(*msgpAttributes)
+	defer recycleMsgpAttributes(eventAttr)
 
 	var eventsData, linksData [][]byte
 	var name, traceID, spanID []byte
@@ -1086,7 +1125,7 @@ func unmarshalSpan(
 				return err
 			}
 			// Parse KeyValue attribute
-			err = unmarshalKeyValue(ctx, slice, eventAttr.msgpAttributes, 0)
+			err = unmarshalKeyValue(ctx, slice, eventAttr, 0)
 			if err != nil {
 				return err
 			}
@@ -1169,9 +1208,6 @@ func unmarshalSpan(
 	eventAttr.addString([]byte("span.kind"), []byte(kindStr))
 	eventAttr.addString([]byte("type"), []byte(kindStr))
 
-	eventAttr.addAttributes(resourceAttrs)
-	eventAttr.addAttributes(scopeAttrs)
-
 	// Calculate duration
 	duration := float64(0)
 	if startTimeUnixNano > 0 && endTimeUnixNano > 0 {
@@ -1194,10 +1230,24 @@ func unmarshalSpan(
 		sampleRate = eventAttr.sampleRate
 	}
 
+	eventAttr.addAttributes(scopeAttrs)
+	eventAttr.addAttributes(resourceAttrs)
+
 	// Process span events first (before the main span)
 	var firstExceptionAttrs *msgpAttributes
 	for _, eventData := range eventsData {
-		exceptionAttrs, err := unmarshalSpanEvent(ctx, eventData, traceID, spanID, name, startTimeUnixNano, resourceAttrs, scopeAttrs, sampleRate, eventAttr.isError, batch)
+		exceptionAttrs, err := unmarshalSpanEvent(ctx,
+			eventData,
+			traceID,
+			spanID,
+			name,
+			startTimeUnixNano,
+			resourceAttrs,
+			scopeAttrs,
+			sampleRate,
+			eventAttr.isError,
+			batch,
+		)
 		if err != nil {
 			return err
 		}
@@ -1214,7 +1264,19 @@ func unmarshalSpan(
 
 	// Process span links next
 	for _, linkData := range linksData {
-		err := unmarshalSpanLink(ctx, linkData, traceID, spanID, name, timestamp, resourceAttrs, scopeAttrs, sampleRate, eventAttr.isError, batch)
+		err := unmarshalSpanLink(
+			ctx,
+			linkData,
+			traceID,
+			spanID,
+			name,
+			timestamp,
+			resourceAttrs,
+			scopeAttrs,
+			sampleRate,
+			eventAttr.isError,
+			batch,
+		)
 		if err != nil {
 			return err
 		}
@@ -1247,7 +1309,9 @@ func unmarshalSpanEvent(
 	isError bool,
 	batch *BatchMsgp,
 ) (*msgpAttributes, error) {
-	eventAttr := newMsgpMap()
+	// Collect event-specific attributes separately
+	eventAttr := msgpAttributesPool.Get().(*msgpAttributes)
+	defer recycleMsgpAttributes(eventAttr)
 
 	// Set trace info
 	if len(traceID) > 0 {
@@ -1301,7 +1365,7 @@ func unmarshalSpanEvent(
 				return nil, err
 			}
 			// Parse KeyValue attribute
-			err = unmarshalKeyValue(ctx, slice, eventAttr.msgpAttributes, 0)
+			err = unmarshalKeyValue(ctx, slice, eventAttr, 0)
 			if err != nil {
 				return nil, err
 			}
@@ -1333,9 +1397,8 @@ func unmarshalSpanEvent(
 		eventAttr.addBool([]byte("error"), true)
 	}
 
-	// Add resource and scope attributes
-	eventAttr.addAttributes(resourceAttrs)
 	eventAttr.addAttributes(scopeAttrs)
+	eventAttr.addAttributes(resourceAttrs)
 
 	// Set timestamp
 	timestamp := timestampFromUnixNano(timeUnixNano)
@@ -1428,7 +1491,9 @@ func unmarshalSpanLink(
 	isError bool,
 	batch *BatchMsgp,
 ) error {
-	eventAttr := newMsgpMap()
+	// Collect link-specific attributes separately
+	eventAttr := msgpAttributesPool.Get().(*msgpAttributes)
+	defer recycleMsgpAttributes(eventAttr)
 
 	// Set trace info
 	if len(traceID) > 0 {
@@ -1488,7 +1553,7 @@ func unmarshalSpanLink(
 				return err
 			}
 			// Parse KeyValue attribute
-			err = unmarshalKeyValue(ctx, slice, eventAttr.msgpAttributes, 0)
+			err = unmarshalKeyValue(ctx, slice, eventAttr, 0)
 			if err != nil {
 				return err
 			}
@@ -1515,9 +1580,8 @@ func unmarshalSpanLink(
 		eventAttr.addBool([]byte("error"), true)
 	}
 
-	// Add resource and scope attributes
-	eventAttr.addAttributes(resourceAttrs)
 	eventAttr.addAttributes(scopeAttrs)
+	eventAttr.addAttributes(resourceAttrs)
 
 	attrBuf, err := eventAttr.finalize()
 	if err != nil {
@@ -1540,6 +1604,9 @@ func timestampFromUnixNano(unixNano uint64) time.Time {
 // decodeWireType2 decodes a length-delimited field (wire type 2) and returns
 // a sub-slice of the original data without copying. The iNdEx is advanced past
 // the field data. It also validates that the wire type is correct.
+// BE CAREFUL: the []byte returned here is a reference to a subslice of the input
+// data, which is fine as long as it's read-only. Writing to it or appending to
+// it will corrupt the input data. If you need to modify it, make a copy first.
 func decodeWireType2(data []byte, iNdEx *int, l int, wireType int) ([]byte, error) {
 	if wireType != 2 {
 		return nil, fmt.Errorf("proto: wrong wireType = %d for field", wireType)

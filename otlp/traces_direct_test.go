@@ -4,6 +4,9 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
+	"io"
+	"math"
+	"slices"
 	"testing"
 	"time"
 
@@ -156,6 +159,13 @@ func TestUnmarshalTraceRequestDirect_Complete(t *testing.T) {
 								},
 							},
 						},
+						{
+							// Present at multiple levels, to test field precedence.
+							Key: "conflicting",
+							Value: &common.AnyValue{
+								Value: &common.AnyValue_StringValue{StringValue: "resource"},
+							},
+						},
 					},
 				},
 				ScopeSpans: []*trace.ScopeSpans{
@@ -169,6 +179,12 @@ func TestUnmarshalTraceRequestDirect_Complete(t *testing.T) {
 									Key: "scope.attr",
 									Value: &common.AnyValue{
 										Value: &common.AnyValue_StringValue{StringValue: "scope_value"},
+									},
+								},
+								{
+									Key: "conflicting",
+									Value: &common.AnyValue{
+										Value: &common.AnyValue_StringValue{StringValue: "scope"},
 									},
 								},
 							},
@@ -229,6 +245,12 @@ func TestUnmarshalTraceRequestDirect_Complete(t *testing.T) {
 										Key:   "nil.attr",
 										Value: &common.AnyValue{},
 									},
+									{
+										Key: "conflicting",
+										Value: &common.AnyValue{
+											Value: &common.AnyValue_StringValue{StringValue: "span"},
+										},
+									},
 								},
 								Status: &trace.Status{
 									Code:    trace.Status_STATUS_CODE_OK,
@@ -249,6 +271,12 @@ func TestUnmarshalTraceRequestDirect_Complete(t *testing.T) {
 												Key: "cache.ttl",
 												Value: &common.AnyValue{
 													Value: &common.AnyValue_IntValue{IntValue: 3600},
+												},
+											},
+											{
+												Key: "conflicting",
+												Value: &common.AnyValue{
+													Value: &common.AnyValue_StringValue{StringValue: "event"},
 												},
 											},
 										},
@@ -294,6 +322,12 @@ func TestUnmarshalTraceRequestDirect_Complete(t *testing.T) {
 												Key: "link.type",
 												Value: &common.AnyValue{
 													Value: &common.AnyValue_StringValue{StringValue: "parent"},
+												},
+											},
+											{
+												Key: "conflicting",
+												Value: &common.AnyValue{
+													Value: &common.AnyValue_StringValue{StringValue: "link"},
 												},
 											},
 										},
@@ -461,6 +495,15 @@ func TestUnmarshalTraceRequestDirect_Complete(t *testing.T) {
 		ContentType: "application/protobuf",
 	}
 
+	// Unmarshal twice, which is fine because this should be idempotent.
+	// Also assert we are not changing anything about the input buffer.
+	// In practice it would probably be ok if we did, but it implies a bug if
+	// it happens. (Reader, it happened.)
+	before := slices.Clone(data)
+	_, err := unmarshalTraceRequestDirectMsgp(context.Background(), data, ri)
+	require.NoError(t, err)
+	require.Equal(t, before, data)
+
 	result, err := unmarshalTraceRequestDirectMsgp(context.Background(), data, ri)
 	require.NoError(t, err)
 	assert.NotNil(t, result)
@@ -529,6 +572,7 @@ func TestUnmarshalTraceRequestDirect_Complete(t *testing.T) {
 		"exception.message":    "Invalid user ID",
 		"exception.stacktrace": "stack trace here...",
 		"exception.escaped":    true,
+		"conflicting":          "span",
 
 		// Scope attributes from HTTP instrumentation library
 		"library.name":                      "go.opentelemetry.io/contrib/instrumentation/net/http",
@@ -553,6 +597,7 @@ func TestUnmarshalTraceRequestDirect_Complete(t *testing.T) {
 		"cache.ttl":                     int64(3600),
 		"meta.time_since_span_start_ms": float64(100),
 		"meta.annotation_type":          "span_event",
+		"conflicting":                   "event",
 
 		// Scope attributes from HTTP instrumentation library
 		"library.name":                      "go.opentelemetry.io/contrib/instrumentation/net/http",
@@ -577,6 +622,7 @@ func TestUnmarshalTraceRequestDirect_Complete(t *testing.T) {
 		"exception.message":             "Invalid user ID",
 		"exception.stacktrace":          "stack trace here...",
 		"exception.escaped":             true,
+		"conflicting":                   "scope",
 
 		// Scope attributes from HTTP instrumentation library
 		"library.name":                      "go.opentelemetry.io/contrib/instrumentation/net/http",
@@ -598,6 +644,7 @@ func TestUnmarshalTraceRequestDirect_Complete(t *testing.T) {
 		"link.type":            "parent",
 		"meta.annotation_type": "link",
 		"parent_name":          "HTTP GET /api/users",
+		"conflicting":          "link",
 
 		// Scope attributes from HTTP instrumentation library
 		"library.name":                      "go.opentelemetry.io/contrib/instrumentation/net/http",
@@ -623,6 +670,7 @@ func TestUnmarshalTraceRequestDirect_Complete(t *testing.T) {
 		"duration_ms":     float64(764.197532),
 		"span.num_events": int64(0),
 		"span.num_links":  int64(0),
+		"conflicting":     "scope",
 
 		// Scope attributes from HTTP instrumentation library
 		"library.name":                      "go.opentelemetry.io/contrib/instrumentation/net/http",
@@ -645,6 +693,7 @@ func TestUnmarshalTraceRequestDirect_Complete(t *testing.T) {
 		"meta.annotation_type": "link",
 		"parent_name":          "Error Operation",
 		"error":                true,
+		"conflicting":          "resource",
 
 		// Scope attributes from custom-library
 		"library.name":    "custom-library",
@@ -671,6 +720,7 @@ func TestUnmarshalTraceRequestDirect_Complete(t *testing.T) {
 		"span.num_links":        int64(1),
 		"exception.type":        "RuntimeError",
 		"exception.message":     "First exception",
+		"conflicting":           "resource",
 
 		// Scope attributes from custom-library
 		"library.name":    "custom-library",
@@ -693,6 +743,7 @@ func TestUnmarshalTraceRequestDirect_Complete(t *testing.T) {
 		"meta.annotation_type":               "span_event",
 		"meta.time_since_span_start_ms":      float64(0),
 		"meta.invalid_time_since_span_start": true,
+		"conflicting":                        "resource",
 
 		// Scope attributes from custom-library
 		"library.name":    "custom-library",
@@ -715,6 +766,7 @@ func TestUnmarshalTraceRequestDirect_Complete(t *testing.T) {
 		"meta.annotation_type":          "span_event",
 		"meta.signal_type":              "trace",
 		"meta.time_since_span_start_ms": float64(100),
+		"conflicting":                   "resource",
 
 		// Scope attributes from custom-library
 		"library.name":    "custom-library",
@@ -770,6 +822,14 @@ func TestUnmarshalTraceRequestDirect_Complete(t *testing.T) {
 	}, batch3Attrs)
 	assert.Equal(t, int32(1), batch3Event.SampleRate) // Default sample rate
 	assert.Equal(t, time.Unix(0, 0).UTC(), batch3Event.Timestamp)
+
+	t.Run("ErrorHandling", func(t *testing.T) {
+		// Shave 5 bytes off the end of our serialized message, which should net
+		// us an EOF error from deep within the stack.
+		data = data[:len(data)-5]
+		_, err := unmarshalTraceRequestDirectMsgp(context.Background(), data, ri)
+		assert.ErrorIs(t, err, io.ErrUnexpectedEOF)
+	})
 
 	// Now compare with the regular (non-direct) unmarshaling to ensure consistency
 	t.Run("CompareWithRegularUnmarshaling", func(t *testing.T) {
@@ -1190,5 +1250,83 @@ func BenchmarkUnmarshalTraceRequestDirectMsgp(b *testing.B) {
 		if len(result.Batches) != 1 || len(result.Batches[0].Events) != 1 {
 			b.Fatal("unexpected result structure")
 		}
+	}
+}
+
+func TestSampleRateFromFloat(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    float64
+		expected int32
+	}{
+		// Normal positive values
+		{
+			name:     "positive float rounds down",
+			input:    10.4,
+			expected: 10,
+		},
+		{
+			name:     "positive float rounds up",
+			input:    10.5,
+			expected: 11,
+		},
+
+		// Edge cases around zero and negative
+		{
+			name:     "zero",
+			input:    0.0,
+			expected: 1, // defaultSampleRate
+		},
+		{
+			name:     "negative zero",
+			input:    -0.0,
+			expected: 1, // defaultSampleRate
+		},
+		{
+			name:     "negative value",
+			input:    -10.0,
+			expected: 1, // defaultSampleRate
+		},
+
+		// Large values near MaxInt32
+		{
+			name:     "MaxInt32 exactly",
+			input:    math.MaxInt32,
+			expected: math.MaxInt32,
+		},
+		{
+			name:     "slightly above MaxInt32",
+			input:    math.MaxInt32 + 1,
+			expected: math.MaxInt32,
+		},
+
+		// Special float values
+		{
+			name:     "positive infinity",
+			input:    math.Inf(1),
+			expected: math.MaxInt32,
+		},
+		{
+			name:     "negative infinity",
+			input:    math.Inf(-1),
+			expected: 1, // defaultSampleRate
+		},
+		{
+			name:     "NaN",
+			input:    math.NaN(),
+			expected: defaultSampleRate, // NaN > MaxInt32 is false, NaN <= 0 is false, so int32(NaN + 0.5) = 0
+		},
+		{
+			name:     "epsilon",
+			input:    math.SmallestNonzeroFloat64,
+			expected: defaultSampleRate, // Rounds to 0, but f > 0
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := sampleRateFromFloat(tt.input)
+			assert.Equal(t, tt.expected, result, "sampleRateFromFloat(%v) = %v, want %v", tt.input, result, tt.expected)
+		})
 	}
 }

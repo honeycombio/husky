@@ -3,6 +3,7 @@ module github.com/honeycombio/husky
 go 1.23.0
 
 require (
+	github.com/dgryski/go-wyhash v0.0.0-20191203203029-c4841ae36371
 	github.com/json-iterator/go v1.1.12
 	github.com/klauspost/compress v1.18.0
 	github.com/open-telemetry/opentelemetry-collector-contrib/pkg/sampling v0.128.0
