@@ -16,7 +16,6 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-
 // convertBatchMsgpToBatch converts a BatchMsgp to a Batch by deserializing the msgpack attributes
 func convertBatchMsgpToBatch(t testing.TB, msgpBatch BatchMsgp) Batch {
 	batch := Batch{
@@ -221,6 +220,14 @@ func TestUnmarshalTraceRequestDirect_Complete(t *testing.T) {
 										Value: &common.AnyValue{
 											Value: &common.AnyValue_IntValue{IntValue: 10},
 										},
+									},
+									// Empty and nil values are dropped from the output.
+									{
+										Key: "empty.attr",
+									},
+									{
+										Key:   "nil.attr",
+										Value: &common.AnyValue{},
 									},
 								},
 								Status: &trace.Status{
@@ -469,6 +476,8 @@ func TestUnmarshalTraceRequestDirect_Complete(t *testing.T) {
 	assert.Equal(t, "HTTP GET /api/users", mainAttrs["name"])
 	assert.Equal(t, "server", mainAttrs["span.kind"])
 	assert.Equal(t, "server", mainAttrs["type"])
+	assert.NotContains(t, mainAttrs, "empty.attr")
+	assert.NotContains(t, mainAttrs, "nil.attr")
 
 	// Resource attributes
 	assert.Equal(t, "service1", mainAttrs["service.name"])

@@ -540,11 +540,6 @@ func processValueDirect(ctx context.Context, key []byte, value any, attrs *msgpA
 		}
 	}
 
-	// If this is the service name, note it.
-	if asStr, ok := value.(string); ok && bytes.Equal(key, []byte("service.name")) {
-		attrs.serviceName = asStr
-	}
-
 	return nil
 }
 
@@ -570,11 +565,6 @@ func unmarshalKeyValue(ctx context.Context, data []byte, attrs *msgpAttributes, 
 		// Parse the AnyValue directly to avoid allocations for scalar types
 		l := len(valueBytes)
 		iNdEx := 0
-
-		// Handle empty message
-		if l == 0 {
-			return nil
-		}
 
 		// We only need to parse the first field since AnyValue is a oneof
 		if iNdEx < l {
