@@ -429,6 +429,27 @@ func TestUnmarshalTraceRequestDirect_Complete(t *testing.T) {
 					},
 				},
 			},
+			// Third ResourceSpan - service1 again, should create a new batch
+			{
+				Resource: &resource.Resource{
+					Attributes: []*common.KeyValue{
+						{
+							Key: "service.name",
+							Value: &common.AnyValue{
+								Value: &common.AnyValue_StringValue{StringValue: "service1"},
+							},
+						},
+					},
+				},
+				ScopeSpans: []*trace.ScopeSpans{
+					{
+						Spans: []*trace.Span{
+							// Span 5: empty span
+							{},
+						},
+					},
+				},
+			},
 		},
 	}
 
@@ -444,9 +465,28 @@ func TestUnmarshalTraceRequestDirect_Complete(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotNil(t, result)
 	assert.Equal(t, len(data), result.RequestSize)
-	assert.Len(t, result.Batches, 2) // Two different services
+	assert.Len(t, result.Batches, 3)
 
 	// Batch 1: service1
+	// addService1CommonAttributes adds the common resource attributes for batch 1,
+	// to reduce the verbosity here.
+	addService1CommonAttributes := func(attrs map[string]any) map[string]any {
+		// Universal
+		attrs["meta.signal_type"] = "trace"
+
+		// Resource attributes from service1
+		attrs["service.name"] = "service1"
+		attrs["deployment.environment"] = "production"
+		attrs["bytes_attr"] = "\"AQIDBA==\"\n"
+		attrs["array_attr"] = "[\"item1\",42,true,3.14]\n"
+		attrs["kvlist_attr.nested_string"] = "nested_value"
+		attrs["kvlist_attr.nested_int"] = int64(123)
+		attrs["kvlist_attr.nested_bool"] = false
+		attrs["kvlist_attr.nested_double"] = float64(456.789)
+
+		return attrs
+	}
+
 	batch1 := result.Batches[0]
 	assert.Equal(t, "service1", batch1.Dataset)
 	// 3 spans + 2 events from span1 + 2 events from error span + 1 link from span1 + 1 link from error span = 9 events
@@ -465,186 +505,221 @@ func TestUnmarshalTraceRequestDirect_Complete(t *testing.T) {
 
 	// Verify the main span (HTTP GET /api/users) at index 3
 	mainSpan := &batch1.Events[3]
-
 	mainAttrs := decodeMessagePackAttributes(t, mainSpan.Attributes)
 
-	// Core attributes
-	assert.Equal(t, traceID1, mainAttrs["trace.trace_id"])
-	assert.Equal(t, spanID1, mainAttrs["trace.span_id"])
-	assert.Equal(t, parentSpanID1, mainAttrs["trace.parent_id"])
-	assert.Equal(t, "w3c=true;th=8", mainAttrs["trace.trace_state"])
-	assert.Equal(t, "HTTP GET /api/users", mainAttrs["name"])
-	assert.Equal(t, "server", mainAttrs["span.kind"])
-	assert.Equal(t, "server", mainAttrs["type"])
-	assert.NotContains(t, mainAttrs, "empty.attr")
-	assert.NotContains(t, mainAttrs, "nil.attr")
+	assert.Equal(t, addService1CommonAttributes(map[string]any{
+		"trace.trace_id":       traceID1,
+		"trace.span_id":        spanID1,
+		"trace.parent_id":      parentSpanID1,
+		"trace.trace_state":    "w3c=true;th=8",
+		"name":                 "HTTP GET /api/users",
+		"span.kind":            "server",
+		"type":                 "server",
+		"http.method":          "GET",
+		"http.status_code":     int64(200),
+		"http.url":             "https://example.com/api/users",
+		"response.size":        float64(1234.56),
+		"success":              true,
+		"status_code":          int64(1),
+		"status_message":       "Request completed successfully",
+		"duration_ms":          float64(864.197532),
+		"span.num_events":      int64(2),
+		"span.num_links":       int64(1),
+		"exception.type":       "ValueError",
+		"exception.message":    "Invalid user ID",
+		"exception.stacktrace": "stack trace here...",
+		"exception.escaped":    true,
 
-	// Resource attributes
-	assert.Equal(t, "service1", mainAttrs["service.name"])
-	assert.Equal(t, "production", mainAttrs["deployment.environment"])
-	assert.Equal(t, "\"AQIDBA==\"\n", mainAttrs["bytes_attr"])
-	assert.Equal(t, "[\"item1\",42,true,3.14]\n", mainAttrs["array_attr"])
-
-	// Flattened kvlist attributes
-	assert.Equal(t, "nested_value", mainAttrs["kvlist_attr.nested_string"])
-	assert.Equal(t, int64(123), mainAttrs["kvlist_attr.nested_int"])
-	assert.Equal(t, false, mainAttrs["kvlist_attr.nested_bool"])
-	assert.Equal(t, float64(456.789), mainAttrs["kvlist_attr.nested_double"])
-
-	// Scope attributes
-	assert.Equal(t, "go.opentelemetry.io/contrib/instrumentation/net/http", mainAttrs["library.name"])
-	assert.Equal(t, "1.0.0", mainAttrs["library.version"])
-	assert.Equal(t, true, mainAttrs["telemetry.instrumentation_library"])
-	assert.Equal(t, "scope_value", mainAttrs["scope.attr"])
-
-	// Span attributes
-	assert.Equal(t, "GET", mainAttrs["http.method"])
-	assert.Equal(t, int64(200), mainAttrs["http.status_code"])
-	assert.Equal(t, "https://example.com/api/users", mainAttrs["http.url"])
-	assert.Equal(t, float64(1234.56), mainAttrs["response.size"])
-	assert.Equal(t, true, mainAttrs["success"])
-
-	// Status
-	assert.Equal(t, int64(1), mainAttrs["status_code"]) // STATUS_CODE_OK = 1
-	// Note: traces_direct.go doesn't add status.code or status.message fields
-	assert.Equal(t, "Request completed successfully", mainAttrs["status_message"])
-
-	// Duration
-	assert.InDelta(t, float64(864.197532), mainAttrs["duration_ms"], 0.01)
-
-	// Span event/link counts
-	assert.Equal(t, int64(2), mainAttrs["span.num_events"])
-	assert.Equal(t, int64(1), mainAttrs["span.num_links"])
-
-	// Meta attributes
-	assert.Equal(t, "trace", mainAttrs["meta.signal_type"])
-
-	// Exception attributes (should be copied from first exception event)
-	assert.Equal(t, "ValueError", mainAttrs["exception.type"])
-	assert.Equal(t, "Invalid user ID", mainAttrs["exception.message"])
-	assert.Equal(t, "stack trace here...", mainAttrs["exception.stacktrace"])
-	assert.Equal(t, true, mainAttrs["exception.escaped"])
+		// Scope attributes from HTTP instrumentation library
+		"library.name":                      "go.opentelemetry.io/contrib/instrumentation/net/http",
+		"library.version":                   "1.0.0",
+		"telemetry.instrumentation_library": true,
+		"scope.attr":                        "scope_value",
+	}), mainAttrs)
 
 	// Sample rate and timestamp
 	assert.Equal(t, int32(10), mainSpan.SampleRate)
-	assert.Nil(t, mainAttrs["sampleRate"]) // Should be removed
 	assert.Equal(t, time.Unix(0, int64(startTime)).UTC(), mainSpan.Timestamp)
 
 	// Verify span events
 	cacheEvent := &batch1.Events[0]
 	cacheAttrs := decodeMessagePackAttributes(t, cacheEvent.Attributes)
-	assert.Equal(t, "cache_miss", cacheAttrs["name"])
-	assert.Equal(t, traceID1, cacheAttrs["trace.trace_id"])
-	assert.Equal(t, spanID1, cacheAttrs["trace.parent_id"])
-	assert.Equal(t, "HTTP GET /api/users", cacheAttrs["parent_name"])
-	assert.Equal(t, "user:123", cacheAttrs["cache.key"])
-	assert.Equal(t, int64(3600), cacheAttrs["cache.ttl"])
-	assert.Equal(t, float64(100), cacheAttrs["meta.time_since_span_start_ms"])
-	assert.Equal(t, "span_event", cacheAttrs["meta.annotation_type"])
-	assert.Equal(t, "trace", cacheAttrs["meta.signal_type"])
-	assert.Nil(t, cacheAttrs["error"]) // Parent span is not error
+	assert.Equal(t, addService1CommonAttributes(map[string]any{
+		"name":                          "cache_miss",
+		"trace.trace_id":                traceID1,
+		"trace.parent_id":               spanID1,
+		"parent_name":                   "HTTP GET /api/users",
+		"cache.key":                     "user:123",
+		"cache.ttl":                     int64(3600),
+		"meta.time_since_span_start_ms": float64(100),
+		"meta.annotation_type":          "span_event",
+
+		// Scope attributes from HTTP instrumentation library
+		"library.name":                      "go.opentelemetry.io/contrib/instrumentation/net/http",
+		"library.version":                   "1.0.0",
+		"telemetry.instrumentation_library": true,
+		"scope.attr":                        "scope_value",
+	}), cacheAttrs)
 	assert.Equal(t, int32(10), cacheEvent.SampleRate)
 	assert.Equal(t, time.Unix(0, int64(event1Time)).UTC(), cacheEvent.Timestamp)
 
 	// Exception event at index 1
 	exceptionEvent := &batch1.Events[1]
 	exceptionAttrs := decodeMessagePackAttributes(t, exceptionEvent.Attributes)
-	assert.Equal(t, "exception", exceptionAttrs["name"])
-	assert.Equal(t, traceID1, exceptionAttrs["trace.trace_id"])
-	assert.Equal(t, spanID1, exceptionAttrs["trace.parent_id"])
-	assert.Equal(t, "span_event", exceptionAttrs["meta.annotation_type"])
+	assert.Equal(t, addService1CommonAttributes(map[string]any{
+		"name":                          "exception",
+		"trace.trace_id":                traceID1,
+		"trace.parent_id":               spanID1,
+		"parent_name":                   "HTTP GET /api/users",
+		"meta.annotation_type":          "span_event",
+		"meta.time_since_span_start_ms": float64(200),
+		"exception.type":                "ValueError",
+		"exception.message":             "Invalid user ID",
+		"exception.stacktrace":          "stack trace here...",
+		"exception.escaped":             true,
+
+		// Scope attributes from HTTP instrumentation library
+		"library.name":                      "go.opentelemetry.io/contrib/instrumentation/net/http",
+		"library.version":                   "1.0.0",
+		"telemetry.instrumentation_library": true,
+		"scope.attr":                        "scope_value",
+	}), exceptionAttrs)
 	assert.Equal(t, int32(10), exceptionEvent.SampleRate)
 	assert.Equal(t, time.Unix(0, int64(event2Time)).UTC(), exceptionEvent.Timestamp)
 
 	// Link at index 2
 	linkEvent := &batch1.Events[2]
 	linkAttrs := decodeMessagePackAttributes(t, linkEvent.Attributes)
-	assert.Equal(t, traceID1, linkAttrs["trace.trace_id"])
-	assert.Equal(t, spanID1, linkAttrs["trace.parent_id"])
-	assert.Equal(t, linkedTraceID, linkAttrs["trace.link.trace_id"])
-	assert.Equal(t, linkedSpanID, linkAttrs["trace.link.span_id"])
-	assert.Equal(t, "parent", linkAttrs["link.type"])
-	assert.Equal(t, "link", linkAttrs["meta.annotation_type"])
-	assert.Equal(t, "trace", linkAttrs["meta.signal_type"])
-	assert.Equal(t, "HTTP GET /api/users", linkAttrs["parent_name"])
+	assert.Equal(t, addService1CommonAttributes(map[string]any{
+		"trace.trace_id":       traceID1,
+		"trace.parent_id":      spanID1,
+		"trace.link.trace_id":  linkedTraceID,
+		"trace.link.span_id":   linkedSpanID,
+		"link.type":            "parent",
+		"meta.annotation_type": "link",
+		"parent_name":          "HTTP GET /api/users",
+
+		// Scope attributes from HTTP instrumentation library
+		"library.name":                      "go.opentelemetry.io/contrib/instrumentation/net/http",
+		"library.version":                   "1.0.0",
+		"telemetry.instrumentation_library": true,
+		"scope.attr":                        "scope_value",
+	}), linkAttrs)
 	assert.Equal(t, int32(10), linkEvent.SampleRate)
 	assert.Equal(t, time.Unix(0, int64(startTime)).UTC(), linkEvent.Timestamp) // Links use parent span timestamp
 
 	// DB Query span at index 4
 	dbSpan := &batch1.Events[4]
 	dbAttrs := decodeMessagePackAttributes(t, dbSpan.Attributes)
-	assert.Equal(t, "DB Query", dbAttrs["name"])
-	assert.Equal(t, traceID1, dbAttrs["trace.trace_id"])
-	assert.Equal(t, spanID2, dbAttrs["trace.span_id"])
-	assert.Equal(t, spanID1, dbAttrs["trace.parent_id"])
-	assert.Equal(t, "client", dbAttrs["span.kind"])
-	assert.Equal(t, "SELECT * FROM users WHERE id = ?", dbAttrs["db.statement"])
+	assert.Equal(t, addService1CommonAttributes(map[string]any{
+		"name":            "DB Query",
+		"trace.trace_id":  traceID1,
+		"trace.span_id":   spanID2,
+		"trace.parent_id": spanID1,
+		"span.kind":       "client",
+		"type":            "client",
+		"db.statement":    "SELECT * FROM users WHERE id = ?",
+		"status_code":     int64(0),
+		"duration_ms":     float64(764.197532),
+		"span.num_events": int64(0),
+		"span.num_links":  int64(0),
+
+		// Scope attributes from HTTP instrumentation library
+		"library.name":                      "go.opentelemetry.io/contrib/instrumentation/net/http",
+		"library.version":                   "1.0.0",
+		"telemetry.instrumentation_library": true,
+		"scope.attr":                        "scope_value",
+	}), dbAttrs)
 	assert.Equal(t, int32(1), dbSpan.SampleRate) // DB Query span has no explicit sampleRate, gets default
 	assert.Equal(t, time.Unix(0, int64(startTime+50_000_000)).UTC(), dbSpan.Timestamp)
 
 	// Error span's link at index 7
 	errorLinkEvent := &batch1.Events[7]
 	errorLinkAttrs := decodeMessagePackAttributes(t, errorLinkEvent.Attributes)
-	assert.Equal(t, traceID1, errorLinkAttrs["trace.trace_id"])
-	assert.Equal(t, errorSpanID, errorLinkAttrs["trace.parent_id"])
-	assert.Equal(t, linkedTraceID, errorLinkAttrs["trace.link.trace_id"])
-	assert.Equal(t, linkedSpanID, errorLinkAttrs["trace.link.span_id"])
-	assert.Equal(t, "error_span", errorLinkAttrs["link.from"])
-	assert.Equal(t, "link", errorLinkAttrs["meta.annotation_type"])
-	assert.Equal(t, "trace", errorLinkAttrs["meta.signal_type"])
-	assert.Equal(t, "Error Operation", errorLinkAttrs["parent_name"])
-	assert.Equal(t, true, errorLinkAttrs["error"]) // Parent span has error status
+	assert.Equal(t, addService1CommonAttributes(map[string]any{
+		"trace.trace_id":       traceID1,
+		"trace.parent_id":      errorSpanID,
+		"trace.link.trace_id":  linkedTraceID,
+		"trace.link.span_id":   linkedSpanID,
+		"link.from":            "error_span",
+		"meta.annotation_type": "link",
+		"parent_name":          "Error Operation",
+		"error":                true,
+
+		// Scope attributes from custom-library
+		"library.name":    "custom-library",
+		"library.version": "2.0.0",
+	}), errorLinkAttrs)
 	assert.Equal(t, int32(1), errorLinkEvent.SampleRate)
 	assert.Equal(t, time.Unix(0, int64(errorStartTime)).UTC(), errorLinkEvent.Timestamp) // Links use parent span timestamp
 
 	// Error span at index 8
 	errorSpan := &batch1.Events[8]
 	errorAttrs := decodeMessagePackAttributes(t, errorSpan.Attributes)
-	assert.Equal(t, "Error Operation", errorAttrs["name"])
-	assert.Equal(t, traceID1, errorAttrs["trace.trace_id"])
-	assert.Equal(t, errorSpanID, errorAttrs["trace.span_id"])
-	assert.Equal(t, true, errorAttrs["error"])
-	assert.Equal(t, int64(2), errorAttrs["status_code"]) // STATUS_CODE_ERROR = 2
-	assert.Equal(t, "Operation failed", errorAttrs["status_message"])
-	// Note: traces_direct.go doesn't add status.code field
-	// Verify negative duration is handled correctly
-	assert.Equal(t, float64(0), errorAttrs["duration_ms"]) // Negative duration should be clamped to 0
-	assert.Equal(t, true, errorAttrs["meta.invalid_duration"])
-	// Only first exception should be copied
-	assert.Equal(t, "RuntimeError", errorAttrs["exception.type"])
-	assert.Equal(t, "First exception", errorAttrs["exception.message"])
+	assert.Equal(t, addService1CommonAttributes(map[string]any{
+		"name":                  "Error Operation",
+		"trace.trace_id":        traceID1,
+		"trace.span_id":         errorSpanID,
+		"span.kind":             "internal",
+		"type":                  "internal",
+		"error":                 true,
+		"status_code":           int64(2),
+		"status_message":        "Operation failed",
+		"duration_ms":           float64(0),
+		"meta.invalid_duration": true,
+		"span.num_events":       int64(2),
+		"span.num_links":        int64(1),
+		"exception.type":        "RuntimeError",
+		"exception.message":     "First exception",
+
+		// Scope attributes from custom-library
+		"library.name":    "custom-library",
+		"library.version": "2.0.0",
+	}), errorAttrs)
 	assert.Equal(t, int32(1), errorSpan.SampleRate) // Default sample rate
 	assert.Equal(t, time.Unix(0, int64(errorStartTime)).UTC(), errorSpan.Timestamp)
 
 	// Error span's exception events at indices 5 and 6
 	firstExceptionEvent := &batch1.Events[5]
 	firstExceptionAttrs := decodeMessagePackAttributes(t, firstExceptionEvent.Attributes)
-	assert.Equal(t, "exception", firstExceptionAttrs["name"])
-	assert.Equal(t, traceID1, firstExceptionAttrs["trace.trace_id"])
-	assert.Equal(t, errorSpanID, firstExceptionAttrs["trace.parent_id"])
-	assert.Equal(t, "Error Operation", firstExceptionAttrs["parent_name"])
-	assert.Equal(t, "RuntimeError", firstExceptionAttrs["exception.type"])
-	assert.Equal(t, "First exception", firstExceptionAttrs["exception.message"])
-	assert.Equal(t, true, firstExceptionAttrs["error"]) // Parent span is error
-	assert.Equal(t, "span_event", firstExceptionAttrs["meta.annotation_type"])
-	// Verify time since span start calculation handles negative values correctly
-	assert.Equal(t, float64(0), firstExceptionAttrs["meta.time_since_span_start_ms"])
-	assert.Equal(t, true, firstExceptionAttrs["meta.invalid_time_since_span_start"])
+	assert.Equal(t, addService1CommonAttributes(map[string]any{
+		"name":                               "exception",
+		"trace.trace_id":                     traceID1,
+		"trace.parent_id":                    errorSpanID,
+		"parent_name":                        "Error Operation",
+		"exception.type":                     "RuntimeError",
+		"exception.message":                  "First exception",
+		"error":                              true,
+		"meta.annotation_type":               "span_event",
+		"meta.time_since_span_start_ms":      float64(0),
+		"meta.invalid_time_since_span_start": true,
+
+		// Scope attributes from custom-library
+		"library.name":    "custom-library",
+		"library.version": "2.0.0",
+	}), firstExceptionAttrs)
 	assert.Equal(t, int32(1), firstExceptionEvent.SampleRate)
 	assert.Equal(t, time.Unix(0, int64(errorStartTime-100_000_000)).UTC(), firstExceptionEvent.Timestamp)
 
 	// Second exception event at index 6 (only first exception was copied to error span)
 	secondExceptionEvent := &batch1.Events[6]
 	secondExceptionAttrs := decodeMessagePackAttributes(t, secondExceptionEvent.Attributes)
-	assert.Equal(t, "exception", secondExceptionAttrs["name"])
-	assert.Equal(t, traceID1, secondExceptionAttrs["trace.trace_id"])
-	assert.Equal(t, errorSpanID, secondExceptionAttrs["trace.parent_id"])
-	assert.Equal(t, "Error Operation", secondExceptionAttrs["parent_name"])
-	assert.Equal(t, "IOError", secondExceptionAttrs["exception.type"])
-	assert.Equal(t, "Second exception", secondExceptionAttrs["exception.message"])
-	assert.Equal(t, true, secondExceptionAttrs["error"]) // Parent span is error
-	assert.Equal(t, "span_event", secondExceptionAttrs["meta.annotation_type"])
-	assert.Equal(t, float64(100), secondExceptionAttrs["meta.time_since_span_start_ms"])
+	assert.Equal(t, addService1CommonAttributes(map[string]any{
+		"name":                          "exception",
+		"trace.trace_id":                traceID1,
+		"trace.parent_id":               errorSpanID,
+		"parent_name":                   "Error Operation",
+		"exception.type":                "IOError",
+		"exception.message":             "Second exception",
+		"error":                         true,
+		"meta.annotation_type":          "span_event",
+		"meta.signal_type":              "trace",
+		"meta.time_since_span_start_ms": float64(100),
+
+		// Scope attributes from custom-library
+		"library.name":    "custom-library",
+		"library.version": "2.0.0",
+	}), secondExceptionAttrs)
 	assert.Equal(t, int32(1), secondExceptionEvent.SampleRate)
 	assert.Equal(t, time.Unix(0, int64(errorStartTime+100_000_000)).UTC(), secondExceptionEvent.Timestamp)
 
@@ -655,14 +730,46 @@ func TestUnmarshalTraceRequestDirect_Complete(t *testing.T) {
 
 	producerEvent := batch2.Events[0]
 	producerAttrs := decodeMessagePackAttributes(t, producerEvent.Attributes)
-	assert.Equal(t, "1a2b3c4d5e6f7089", producerAttrs["trace.trace_id"]) // Leading zeros trimmed
-	assert.Equal(t, spanID2, producerAttrs["trace.span_id"])
-	assert.Equal(t, "Publish Message", producerAttrs["name"])
-	assert.Equal(t, "producer", producerAttrs["span.kind"])
-	assert.Equal(t, "producer", producerAttrs["type"])
-	assert.Nil(t, producerAttrs["telemetry.instrumentation_library"]) // No recognized library
-	assert.Equal(t, int32(1), producerEvent.SampleRate)               // Default sample rate
+	assert.Equal(t, map[string]any{
+		"trace.trace_id":   "1a2b3c4d5e6f7089",
+		"trace.span_id":    spanID2,
+		"name":             "Publish Message",
+		"span.kind":        "producer",
+		"type":             "producer",
+		"status_code":      int64(0),
+		"duration_ms":      float64(864.197532),
+		"span.num_events":  int64(0),
+		"span.num_links":   int64(0),
+		"meta.signal_type": "trace",
+		"service.name":     "service2",
+	}, producerAttrs)
+	assert.Equal(t, int32(1), producerEvent.SampleRate) // Default sample rate
 	assert.Equal(t, time.Unix(0, int64(startTime)).UTC(), producerEvent.Timestamp)
+
+	// Batch 3: service1 is batched seperately due to arriving in a different
+	// Resource message.
+	batch3 := result.Batches[2]
+	assert.Equal(t, "service1", batch3.Dataset)
+	assert.Len(t, batch3.Events, 1)
+
+	// Since this is an effectively empty message, confirm all of our default field values here.
+	batch3Event := batch3.Events[0]
+	batch3Attrs := decodeMessagePackAttributes(t, batch3Event.Attributes)
+	assert.Equal(t, map[string]any{
+		"trace.trace_id":   "",
+		"trace.span_id":    "",
+		"span.kind":        "unspecified",
+		"type":             "unspecified",
+		"name":             "",
+		"status_code":      int64(0),
+		"duration_ms":      float64(0),
+		"span.num_events":  int64(0),
+		"span.num_links":   int64(0),
+		"meta.signal_type": "trace",
+		"service.name":     "service1",
+	}, batch3Attrs)
+	assert.Equal(t, int32(1), batch3Event.SampleRate) // Default sample rate
+	assert.Equal(t, time.Unix(0, 0).UTC(), batch3Event.Timestamp)
 
 	// Now compare with the regular (non-direct) unmarshaling to ensure consistency
 	t.Run("CompareWithRegularUnmarshaling", func(t *testing.T) {

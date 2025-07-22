@@ -380,6 +380,17 @@ loop:
 	// Determine dataset from resource attributes
 	dataset = getDatasetFromMsgpAttr(ri, resourceAttrs)
 
+	// Create a new batch for this resource. Note this may create multiple
+	// batches for the same dataset, which matches the behavior of the legacy
+	// implementation. In future we may want to change this to combine all
+	// events from the dataset into a single batch.
+	// Find or create the batch for this dataset
+	result.Batches = append(result.Batches, BatchMsgp{
+		Dataset: dataset,
+		Events:  []EventMsgp{},
+	})
+	batch := &result.Batches[len(result.Batches)-1]
+
 	// Now parse the spans.
 	iNdEx = 0
 	for iNdEx < l {
@@ -398,7 +409,7 @@ loop:
 
 			// Note, the logic here will probably need to change once the Entity
 			// system is finalized.
-			err = unmarshalScopeSpans(ctx, slice, resourceAttrs, dataset, result)
+			err = unmarshalScopeSpans(ctx, slice, resourceAttrs, batch)
 			if err != nil {
 				return err
 			}
@@ -855,8 +866,7 @@ func unmarshalScopeSpans(
 	ctx context.Context,
 	data []byte,
 	resourceAttrs *msgpAttributes,
-	dataset string,
-	result *TranslateOTLPRequestResultMsgp,
+	batch *BatchMsgp,
 ) error {
 	// Get the instrumentation scope first
 	scopeAttrs := msgpAttributesPool.Get().(*msgpAttributes)
@@ -908,7 +918,7 @@ loop:
 			}
 
 			// Parse Span
-			err = unmarshalSpan(ctx, slice, resourceAttrs, scopeAttrs, dataset, result)
+			err = unmarshalSpan(ctx, slice, resourceAttrs, scopeAttrs, batch)
 			if err != nil {
 				return err
 			}
@@ -985,25 +995,8 @@ func unmarshalSpan(
 	data []byte,
 	resourceAttrs,
 	scopeAttrs *msgpAttributes,
-	dataset string,
-	result *TranslateOTLPRequestResultMsgp,
+	batch *BatchMsgp,
 ) error {
-	// Find or create the batch for this dataset
-	var batch *BatchMsgp
-	for i := range result.Batches {
-		if result.Batches[i].Dataset == dataset {
-			batch = &result.Batches[i]
-			break
-		}
-	}
-	if batch == nil {
-		result.Batches = append(result.Batches, BatchMsgp{
-			Dataset: dataset,
-			Events:  []EventMsgp{},
-		})
-		batch = &result.Batches[len(result.Batches)-1]
-	}
-
 	eventAttr := newMsgpMap()
 	defer recycleMsgpAttributes(eventAttr.msgpAttributes)
 
@@ -1011,6 +1004,7 @@ func unmarshalSpan(
 	var name, traceID, spanID []byte
 	var statusCode int64
 	var startTimeUnixNano, endTimeUnixNano uint64
+	kindStr := "unspecified"
 	sampleRate := defaultSampleRate
 
 	l := len(data)
@@ -1028,17 +1022,11 @@ func unmarshalSpan(
 			if err != nil {
 				return err
 			}
-			if len(traceID) > 0 {
-				eventAttr.addTraceID([]byte("trace.trace_id"), traceID)
-			}
 
 		case 2: // span_id
 			spanID, err = decodeWireType2(data, &iNdEx, l, wireType)
 			if err != nil {
 				return err
-			}
-			if len(spanID) > 0 {
-				eventAttr.addHexID([]byte("trace.span_id"), spanID)
 			}
 
 		case 3: // trace_state
@@ -1076,9 +1064,7 @@ func unmarshalSpan(
 				return fmt.Errorf("proto: wrong wireType = %d for field Kind", wireType)
 			}
 			kind := trace.Span_SpanKind(decodeVarint(data, &iNdEx))
-			kindStr := getSpanKind(kind)
-			eventAttr.addString([]byte("span.kind"), []byte(kindStr))
-			eventAttr.addString([]byte("type"), []byte(kindStr)) // Also add "type" for backward compatibility
+			kindStr = getSpanKind(kind)
 
 		case 7: // start_time_unix_nano
 			v, err := decodeWireType1(data, &iNdEx, l, wireType)
@@ -1173,11 +1159,15 @@ func unmarshalSpan(
 	}
 
 	// Add fields which are always expected, even when they have no encoded value.
+	eventAttr.addTraceID([]byte("trace.trace_id"), traceID)
+	eventAttr.addHexID([]byte("trace.span_id"), spanID)
 	eventAttr.addString([]byte("name"), name)
 	eventAttr.addString([]byte("meta.signal_type"), []byte("trace"))
 	eventAttr.addInt64([]byte("status_code"), statusCode)
 	eventAttr.addInt64([]byte("span.num_events"), int64(len(eventsData)))
 	eventAttr.addInt64([]byte("span.num_links"), int64(len(linksData)))
+	eventAttr.addString([]byte("span.kind"), []byte(kindStr))
+	eventAttr.addString([]byte("type"), []byte(kindStr))
 
 	eventAttr.addAttributes(resourceAttrs)
 	eventAttr.addAttributes(scopeAttrs)
