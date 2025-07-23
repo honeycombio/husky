@@ -853,8 +853,13 @@ func TestUnmarshalTraceRequestDirect_Complete(t *testing.T) {
 				// Shave 5 bytes off the end of our serialized message, which should net
 				// us an EOF error from deep within the stack.
 				data = data[:len(data)-5]
-				_, err := unmarshalTraceRequestDirectMsgp(context.Background(), data, ri)
-				assert.ErrorIs(t, err, io.ErrUnexpectedEOF)
+				_, err := tc.unmarshal(context.Background(), data, ri)
+				if tc.contentType == "application/json" {
+					// JSON parsing errors are different from protobuf.
+					assert.Error(t, err)
+				} else {
+					assert.ErrorIs(t, err, io.ErrUnexpectedEOF)
+				}
 			})
 
 			// Now compare with the regular (non-direct) unmarshaling to ensure consistency
@@ -872,8 +877,12 @@ func TestUnmarshalTraceRequestDirect_Complete(t *testing.T) {
 				//    - When event time < span start time, should set time=0 and meta.invalid_time_since_span_start=true
 				//    - Currently produces huge positive values like 1.844674407360955e+13
 
-				// Compare high-level structure
-				assert.Equal(t, result.RequestSize, regularResult.RequestSize)
+				// RequestSize will be different for JSON vs protobuf
+				if tc.contentType == "application/json" {
+					assert.Greater(t, result.RequestSize, regularResult.RequestSize)
+				} else {
+					assert.Equal(t, result.RequestSize, regularResult.RequestSize)
+				}
 				assert.Equal(t, len(result.Batches), len(regularResult.Batches))
 
 				// Convert msgpack batches to regular batches for comparison

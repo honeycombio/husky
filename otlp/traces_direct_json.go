@@ -113,7 +113,7 @@ func unmarshalResourceSpansJSON(
 ) error {
 	var dataset string
 	resourceAttrs := msgpAttributesPool.Get().(*msgpAttributes)
-	defer recycleMsgpAttributes(resourceAttrs)
+	defer resourceAttrs.recycle()
 
 	// We need to read resource first, then scopeSpans
 	// Store scopeSpans data to process after we have resource
@@ -150,10 +150,17 @@ func unmarshalResourceSpansJSON(
 	// Determine dataset from resource attributes
 	dataset = getDatasetFromMsgpAttr(ri, resourceAttrs)
 
+	// Create a new batch for this resource
+	result.Batches = append(result.Batches, BatchMsgp{
+		Dataset: dataset,
+		Events:  []EventMsgp{},
+	})
+	batch := &result.Batches[len(result.Batches)-1]
+
 	// Now process scopeSpans with the resource attributes
 	for _, scopeSpansJSON := range scopeSpansData {
 		scopeIter := jsoniter.ParseBytes(jsonConfig, scopeSpansJSON)
-		if err := unmarshalScopeSpansJSON(ctx, scopeIter, resourceAttrs, dataset, result); err != nil {
+		if err := unmarshalScopeSpansJSON(ctx, scopeIter, resourceAttrs, batch); err != nil {
 			return err
 		}
 		if scopeIter.Error != nil {
@@ -506,7 +513,10 @@ func unmarshalKvlistValueFlattenJSON(
 						case "value":
 							if key != "" && !valueProcessed {
 								// Create flattened key
-								flatKey := append(keyPrefix, '.')
+								// Create a new buffer to avoid corrupting the input
+								flatKey := make([]byte, 0, len(keyPrefix)+1+len(key))
+								flatKey = append(flatKey, keyPrefix...)
+								flatKey = append(flatKey, '.')
 								flatKey = append(flatKey, key...)
 
 								// Process the value with AnyValue unmarshaling
@@ -592,11 +602,10 @@ func unmarshalScopeSpansJSON(
 	ctx context.Context,
 	iter *jsoniter.Iterator,
 	resourceAttrs *msgpAttributes,
-	dataset string,
-	result *TranslateOTLPRequestResultMsgp,
+	batch *BatchMsgp,
 ) error {
 	scopeAttrs := msgpAttributesPool.Get().(*msgpAttributes)
-	defer recycleMsgpAttributes(scopeAttrs)
+	defer scopeAttrs.recycle()
 
 	// Store spans data to process after we have scope
 	var spansData [][]byte
@@ -630,7 +639,7 @@ func unmarshalScopeSpansJSON(
 	// Now process spans with both resource and scope attributes
 	for _, spanJSON := range spansData {
 		spanIter := jsoniter.ParseBytes(jsonConfig, spanJSON)
-		if err := unmarshalSpanJSON(ctx, spanIter, resourceAttrs, scopeAttrs, dataset, result); err != nil {
+		if err := unmarshalSpanJSON(ctx, spanIter, resourceAttrs, scopeAttrs, batch); err != nil {
 			return err
 		}
 		if spanIter.Error != nil {
@@ -687,33 +696,18 @@ func unmarshalSpanJSON(
 	iter *jsoniter.Iterator,
 	resourceAttrs,
 	scopeAttrs *msgpAttributes,
-	dataset string,
-	result *TranslateOTLPRequestResultMsgp,
+	batch *BatchMsgp,
 ) error {
-	// Find or create the batch for this dataset
-	var batch *BatchMsgp
-	for i := range result.Batches {
-		if result.Batches[i].Dataset == dataset {
-			batch = &result.Batches[i]
-			break
-		}
-	}
-	if batch == nil {
-		result.Batches = append(result.Batches, BatchMsgp{
-			Dataset: dataset,
-			Events:  []EventMsgp{},
-		})
-		batch = &result.Batches[len(result.Batches)-1]
-	}
 
-	eventAttr := newMsgpMap()
-	defer recycleMsgpAttributes(eventAttr.msgpAttributes)
+	eventAttr := msgpAttributesPool.Get().(*msgpAttributes)
+	defer eventAttr.recycle()
 
 	var eventsData, linksData [][]byte
 	var name, traceID, spanID []byte
 	var traceState string
 	var statusCode int64
 	var startTimeUnixNano, endTimeUnixNano uint64
+	kindStr := "unspecified"
 	sampleRate := defaultSampleRate
 
 	// Read the Span object
@@ -728,9 +722,6 @@ func unmarshalSpanJSON(
 				return false
 			}
 			traceID = b
-			if len(traceID) > 0 {
-				eventAttr.addTraceID([]byte("trace.trace_id"), traceID)
-			}
 
 		case "spanId":
 			// Span ID is base64 encoded in JSON
@@ -741,9 +732,6 @@ func unmarshalSpanJSON(
 				return false
 			}
 			spanID = b
-			if len(spanID) > 0 {
-				eventAttr.addHexID([]byte("trace.span_id"), spanID)
-			}
 
 		case "traceState":
 			traceState = iter.ReadString()
@@ -776,33 +764,28 @@ func unmarshalSpanJSON(
 			// In JSON, kind can be either string enum name or integer
 			if iter.WhatIsNext() == jsoniter.StringValue {
 				// String enum like "SPAN_KIND_SERVER"
-				kindStr := iter.ReadString()
+				enumStr := iter.ReadString()
 				// Map from protobuf enum string to our string representation
-				var kind string
-				switch kindStr {
+				switch enumStr {
 				case "SPAN_KIND_UNSPECIFIED":
-					kind = "unspecified"
+					kindStr = "unspecified"
 				case "SPAN_KIND_INTERNAL":
-					kind = "internal"
+					kindStr = "internal"
 				case "SPAN_KIND_SERVER":
-					kind = "server"
+					kindStr = "server"
 				case "SPAN_KIND_CLIENT":
-					kind = "client"
+					kindStr = "client"
 				case "SPAN_KIND_PRODUCER":
-					kind = "producer"
+					kindStr = "producer"
 				case "SPAN_KIND_CONSUMER":
-					kind = "consumer"
+					kindStr = "consumer"
 				default:
-					kind = "unspecified"
+					kindStr = "unspecified"
 				}
-				eventAttr.addString([]byte("span.kind"), []byte(kind))
-				eventAttr.addString([]byte("type"), []byte(kind))
 			} else {
 				// Integer value
 				kind := trace.Span_SpanKind(iter.ReadInt())
-				kindStr := getSpanKind(kind)
-				eventAttr.addString([]byte("span.kind"), []byte(kindStr))
-				eventAttr.addString([]byte("type"), []byte(kindStr))
+				kindStr = getSpanKind(kind)
 			}
 
 		case "startTimeUnixNano":
@@ -826,7 +809,7 @@ func unmarshalSpanJSON(
 			endTimeUnixNano = v
 
 		case "attributes":
-			if err := unmarshalKeyValueArrayJSON(ctx, iter, eventAttr.msgpAttributes, 0); err != nil {
+			if err := unmarshalKeyValueArrayJSON(ctx, iter, eventAttr, 0); err != nil {
 				iter.ReportError("unmarshalKeyValueArrayJSON", err.Error())
 				return false
 			}
@@ -903,14 +886,18 @@ func unmarshalSpanJSON(
 	}
 
 	// Add fields which are always expected
+	eventAttr.addTraceID([]byte("trace.trace_id"), traceID)
+	eventAttr.addHexID([]byte("trace.span_id"), spanID)
 	eventAttr.addString([]byte("name"), name)
 	eventAttr.addString([]byte("meta.signal_type"), []byte("trace"))
 	eventAttr.addInt64([]byte("status_code"), statusCode)
 	eventAttr.addInt64([]byte("span.num_events"), int64(len(eventsData)))
 	eventAttr.addInt64([]byte("span.num_links"), int64(len(linksData)))
+	eventAttr.addString([]byte("span.kind"), []byte(kindStr))
+	eventAttr.addString([]byte("type"), []byte(kindStr))
 
-	eventAttr.addAttributes(resourceAttrs)
 	eventAttr.addAttributes(scopeAttrs)
+	eventAttr.addAttributes(resourceAttrs)
 
 	// Calculate duration
 	duration := float64(0)
@@ -953,7 +940,7 @@ func unmarshalSpanJSON(
 	// Add exception attributes from the first exception event to the parent span
 	if firstExceptionAttrs != nil {
 		eventAttr.addAttributes(firstExceptionAttrs)
-		recycleMsgpAttributes(firstExceptionAttrs)
+		firstExceptionAttrs.recycle()
 	}
 
 	// Process span links next
@@ -998,7 +985,7 @@ func unmarshalSpanEventJSON(
 	isError bool,
 	batch *BatchMsgp,
 ) (*msgpAttributes, error) {
-	eventAttr := newMsgpMap()
+	eventAttr := msgpAttributesPool.Get().(*msgpAttributes)
 
 	// Set trace info
 	if len(traceID) > 0 {
@@ -1056,7 +1043,7 @@ func unmarshalSpanEventJSON(
 	if len(attrData) > 0 {
 		// Parse attributes into event
 		attrIter := jsoniter.ParseBytes(jsonConfig, attrData)
-		if err := unmarshalKeyValueArrayJSON(ctx, attrIter, eventAttr.msgpAttributes, 0); err != nil {
+		if err := unmarshalKeyValueArrayJSON(ctx, attrIter, eventAttr, 0); err != nil {
 			return nil, err
 		}
 
@@ -1128,8 +1115,8 @@ func unmarshalSpanEventJSON(
 	}
 
 	// Add resource and scope attributes
-	eventAttr.addAttributes(resourceAttrs)
 	eventAttr.addAttributes(scopeAttrs)
+	eventAttr.addAttributes(resourceAttrs)
 
 	// Set timestamp
 	timestamp := timestampFromUnixNano(timeUnixNano)
@@ -1161,7 +1148,7 @@ func unmarshalSpanLinkJSON(
 	isError bool,
 	batch *BatchMsgp,
 ) error {
-	eventAttr := newMsgpMap()
+	eventAttr := msgpAttributesPool.Get().(*msgpAttributes)
 
 	// Set trace info
 	if len(traceID) > 0 {
@@ -1209,7 +1196,7 @@ func unmarshalSpanLinkJSON(
 			iter.Skip()
 
 		case "attributes":
-			if err := unmarshalKeyValueArrayJSON(ctx, iter, eventAttr.msgpAttributes, 0); err != nil {
+			if err := unmarshalKeyValueArrayJSON(ctx, iter, eventAttr, 0); err != nil {
 				iter.ReportError("unmarshalKeyValueArrayJSON", err.Error())
 				return false
 			}
@@ -1238,8 +1225,8 @@ func unmarshalSpanLinkJSON(
 	}
 
 	// Add resource and scope attributes
-	eventAttr.addAttributes(resourceAttrs)
 	eventAttr.addAttributes(scopeAttrs)
+	eventAttr.addAttributes(resourceAttrs)
 
 	attrBuf, err := eventAttr.finalize()
 	if err != nil {
