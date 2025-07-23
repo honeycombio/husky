@@ -332,20 +332,15 @@ func isInstrumentationLibrary(libraryName string) bool {
 }
 
 func getDataset(ri RequestInfo, attrs map[string]interface{}) string {
-	var dataset string
 	if ri.hasClassicKey() {
-		dataset = ri.Dataset
-	} else {
-		serviceName, ok := attrs["service.name"].(string)
-		if !ok ||
-			strings.TrimSpace(serviceName) == "" ||
-			strings.HasPrefix(serviceName, "unknown_service") {
-			dataset = defaultServiceName
-		} else {
-			dataset = strings.TrimSpace(serviceName)
-		}
+		return ri.Dataset
 	}
-	return dataset
+
+	serviceName, ok := attrs["service.name"].(string)
+	if !ok || strings.TrimSpace(serviceName) == "" || strings.HasPrefix(serviceName, defaultServiceName) {
+		return defaultServiceName
+	}
+	return strings.TrimSpace(serviceName)
 }
 
 func getLogsDataset(ri RequestInfo, attrs map[string]interface{}) string {
@@ -450,12 +445,14 @@ func addAttributeToMap(ctx context.Context, result map[string]interface{}, key s
 			"received_kvlist_attr_type": true,
 			"kvlist_max_depth":          depth,
 		})
-		for _, entry := range value.GetKvlistValue().Values {
-			k := key + "." + entry.Key
-			if depth < maxDepth {
+		if depth >= maxDepth {
+			// If we've reached max depth, encode the entire kvlist as JSON
+			addAttributeToMapAsJson(result, key, value)
+		} else {
+			// Otherwise, continue flattening
+			for _, entry := range value.GetKvlistValue().Values {
+				k := key + "." + entry.Key
 				addAttributeToMap(ctx, result, k, entry.Value, depth+1)
-			} else {
-				addAttributeToMapAsJson(result, k, entry.Value)
 			}
 		}
 	}
@@ -583,7 +580,10 @@ func BytesToSpanID(spanID []byte) string {
 }
 
 func shouldTrimTraceId(traceID []byte) bool {
-	for i := 0; i < 8; i++ {
+	if len(traceID) != traceIDLongLength {
+		return false
+	}
+	for i := 0; i < traceIDShortLength; i++ {
 		if traceID[i] != 0 {
 			return false
 		}
@@ -616,8 +616,14 @@ func getSampleRateFromHoneycombAttribute(attrs map[string]any) (int32, bool) {
 		return defaultSampleRate, false
 	}
 
+	rate := getSampleRateFromAnyValue(attrs[sampleRateKey])
+	delete(attrs, sampleRateKey) // remove attr
+
+	return rate, true
+}
+
+func getSampleRateFromAnyValue(sampleRateVal any) int32 {
 	sampleRate := defaultSampleRate
-	sampleRateVal := attrs[sampleRateKey]
 	switch v := sampleRateVal.(type) {
 	case string:
 		if i, err := strconv.ParseFloat(v, 64); err == nil {
@@ -661,8 +667,7 @@ func getSampleRateFromHoneycombAttribute(attrs map[string]any) (int32, bool) {
 	if sampleRate <= 0 {
 		sampleRate = defaultSampleRate
 	}
-	delete(attrs, sampleRateKey) // remove attr
-	return sampleRate, true
+	return sampleRate
 }
 
 // getSampleRateFromOTelSamplingThreshold returns the sampling threshold from the OpenTelemetry

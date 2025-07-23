@@ -5,8 +5,11 @@ import (
 	"compress/gzip"
 	"errors"
 	"strings"
+	"testing"
 
 	"github.com/klauspost/compress/zstd"
+	"github.com/stretchr/testify/require"
+	"github.com/tinylib/msgp/msgp"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
@@ -83,4 +86,15 @@ func testCaseNameForEncoding(encoding string) string {
 	} else {
 		return encoding
 	}
+}
+
+// decodeMessagePackAttributes unmarshals MessagePack data into a map for testing
+func decodeMessagePackAttributes(t testing.TB, data []byte) map[string]any {
+	decoded, _, err := msgp.ReadIntfBytes(data)
+	require.NoError(t, err)
+	if asMap, ok := decoded.(map[string]any); ok {
+		return asMap
+	}
+	t.Fatal("this doesn't look like a msgp map")
+	return nil
 }

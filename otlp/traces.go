@@ -1,11 +1,15 @@
 package otlp
 
 import (
+	"bytes"
+	"compress/gzip"
 	"context"
 	"encoding/hex"
 	"io"
+	"sync"
 	"time"
 
+	"github.com/klauspost/compress/zstd"
 	collectorTrace "go.opentelemetry.io/proto/otlp/collector/trace/v1"
 	trace "go.opentelemetry.io/proto/otlp/trace/v1"
 	"google.golang.org/protobuf/proto"
@@ -36,6 +40,85 @@ func TranslateTraceRequestFromReaderSized(ctx context.Context, body io.ReadClose
 		return nil, ErrFailedParseBody
 	}
 	return TranslateTraceRequest(ctx, request, ri)
+}
+
+var httpBodyBufferPool = sync.Pool{
+	New: func() any {
+		return new(bytes.Buffer)
+	},
+}
+
+var zstdDecoderPool = sync.Pool{
+	New: func() any {
+		reader, _ := zstd.NewReader(nil, zstd.WithDecoderConcurrency(1))
+		return reader
+	},
+}
+
+// TranslateTraceRequestFromReaderSizedWithMsgp translates an OTLP/HTTP request
+// directly into our Honeycomb-friendly structure, avoiding intermediate proto
+// structs.
+// Note the returned data is shiny new heap memory and is safe for callers to keep.
+func TranslateTraceRequestFromReaderSizedWithMsgp(
+	ctx context.Context,
+	body io.ReadCloser,
+	ri RequestInfo,
+	maxSize int64,
+) (*TranslateOTLPRequestResultMsgp, error) {
+	defer body.Close()
+
+	if err := ri.ValidateTracesHeaders(); err != nil {
+		return nil, err
+	}
+
+	if ri.ContentType != "application/protobuf" && ri.ContentType != "application/x-protobuf" {
+		return nil, ErrInvalidContentType
+	}
+
+	reader := io.LimitReader(body, maxSize)
+
+	// Handle decompression
+	switch ri.ContentEncoding {
+	case "gzip":
+		gzipReader, err := gzip.NewReader(reader)
+		if err != nil {
+			return nil, ErrFailedParseBody
+		}
+		defer gzipReader.Close()
+		reader = gzipReader
+	case "zstd":
+		// zstd decoders are extremely expensive to set up (big internal buffers),
+		// so use a pool for them.
+		zstdReader := zstdDecoderPool.Get().(*zstd.Decoder)
+		defer func() {
+			zstdReader.Reset(nil)
+			zstdDecoderPool.Put(zstdReader)
+		}()
+
+		err := zstdReader.Reset(reader)
+		if err != nil {
+			return nil, ErrFailedParseBody
+		}
+
+		reader = zstdReader
+	case "":
+		// cool
+	default:
+		return nil, ErrFailedParseBody
+	}
+
+	bodyBuffer := httpBodyBufferPool.Get().(*bytes.Buffer)
+	defer func() {
+		bodyBuffer.Reset()
+		httpBodyBufferPool.Put(bodyBuffer)
+	}()
+
+	_, err := bodyBuffer.ReadFrom(reader)
+	if err != nil {
+		return nil, ErrFailedParseBody
+	}
+
+	return unmarshalTraceRequestDirectMsgp(ctx, bodyBuffer.Bytes(), ri)
 }
 
 // TranslateTraceRequest translates an OTLP/gRPC request into Honeycomb-friendly structure

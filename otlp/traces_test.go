@@ -10,8 +10,8 @@ import (
 	"time"
 
 	"github.com/honeycombio/husky"
-
 	"github.com/honeycombio/husky/test"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	collectortrace "go.opentelemetry.io/proto/otlp/collector/trace/v1"
@@ -20,6 +20,13 @@ import (
 	trace "go.opentelemetry.io/proto/otlp/trace/v1"
 	"google.golang.org/protobuf/proto"
 )
+
+// serializeTraceRequest is a helper to convert a proto message to bytes for testing direct unmarshaling
+func serializeTraceRequest(t *testing.T, req *collectortrace.ExportTraceServiceRequest) []byte {
+	data, err := proto.Marshal(req)
+	require.NoError(t, err, "Failed to serialize trace request")
+	return data
+}
 
 func TestTranslateGrpcTraceRequest(t *testing.T) {
 	traceID := test.RandomBytes(16)
@@ -45,6 +52,46 @@ func TestTranslateGrpcTraceRequest(t *testing.T) {
 					Value: &common.AnyValue{
 						Value: &common.AnyValue_StringValue{StringValue: testServiceName},
 					},
+				}, {
+					Key: "bytes_attr",
+					Value: &common.AnyValue{
+						Value: &common.AnyValue_BytesValue{BytesValue: []byte{0x01, 0x02, 0x03, 0x04}},
+					},
+				}, {
+					Key: "array_attr",
+					Value: &common.AnyValue{
+						Value: &common.AnyValue_ArrayValue{
+							ArrayValue: &common.ArrayValue{
+								Values: []*common.AnyValue{
+									{Value: &common.AnyValue_StringValue{StringValue: "item1"}},
+									{Value: &common.AnyValue_IntValue{IntValue: 42}},
+									{Value: &common.AnyValue_BoolValue{BoolValue: true}},
+								},
+							},
+						},
+					},
+				}, {
+					Key: "kvlist_attr",
+					Value: &common.AnyValue{
+						Value: &common.AnyValue_KvlistValue{
+							KvlistValue: &common.KeyValueList{
+								Values: []*common.KeyValue{
+									{
+										Key: "nested_string",
+										Value: &common.AnyValue{
+											Value: &common.AnyValue_StringValue{StringValue: "nested_value"},
+										},
+									},
+									{
+										Key: "nested_int",
+										Value: &common.AnyValue{
+											Value: &common.AnyValue_IntValue{IntValue: 123},
+										},
+									},
+								},
+							},
+						},
+					},
 				}},
 			},
 			ScopeSpans: []*trace.ScopeSpans{{
@@ -67,8 +114,8 @@ func TestTranslateGrpcTraceRequest(t *testing.T) {
 					Name:              "test_span",
 					Kind:              trace.Span_SPAN_KIND_CLIENT,
 					Status:            &trace.Status{Code: trace.Status_STATUS_CODE_OK},
-					StartTimeUnixNano: uint64(startTimestamp.Nanosecond()),
-					EndTimeUnixNano:   uint64(endTimestamp.Nanosecond()),
+					StartTimeUnixNano: uint64(startTimestamp.UnixNano()),
+					EndTimeUnixNano:   uint64(endTimestamp.UnixNano()),
 					Attributes: []*common.KeyValue{
 						{
 							Key: "span_attr",
@@ -85,7 +132,7 @@ func TestTranslateGrpcTraceRequest(t *testing.T) {
 					},
 					Events: []*trace.Span_Event{{
 						Name:         "span_event",
-						TimeUnixNano: uint64(startTimestamp.Add(time.Millisecond * 1).Nanosecond()),
+						TimeUnixNano: uint64(startTimestamp.Add(time.Millisecond * 1).UnixNano()),
 						Attributes: []*common.KeyValue{{
 							Key: "span_event_attr",
 							Value: &common.AnyValue{
@@ -158,7 +205,7 @@ func TestTranslateGrpcTraceRequest(t *testing.T) {
 
 			// link
 			ev = events[1]
-			assert.Equal(t, startTimestamp.Nanosecond(), ev.Timestamp.Nanosecond())
+			assert.Equal(t, startTimestamp.UnixNano(), ev.Timestamp.UnixNano())
 			assert.Equal(t, int32(100), ev.SampleRate)
 			assert.Equal(t, BytesToTraceID(traceID), ev.Attributes["trace.trace_id"])
 			assert.Equal(t, hex.EncodeToString(spanID), ev.Attributes["trace.parent_id"])
@@ -171,7 +218,7 @@ func TestTranslateGrpcTraceRequest(t *testing.T) {
 
 			// span
 			ev = events[2]
-			assert.Equal(t, startTimestamp.Nanosecond(), ev.Timestamp.Nanosecond())
+			assert.Equal(t, startTimestamp.UnixNano(), ev.Timestamp.UnixNano())
 			assert.Equal(t, int32(100), ev.SampleRate)
 			assert.Equal(t, BytesToTraceID(traceID), ev.Attributes["trace.trace_id"])
 			assert.Equal(t, hex.EncodeToString(spanID), ev.Attributes["trace.span_id"])
@@ -179,12 +226,26 @@ func TestTranslateGrpcTraceRequest(t *testing.T) {
 			assert.Equal(t, "client", ev.Attributes["type"])
 			assert.Equal(t, "client", ev.Attributes["span.kind"])
 			assert.Equal(t, "test_span", ev.Attributes["name"])
-			assert.Equal(t, float64(endTimestamp.Nanosecond()-startTimestamp.Nanosecond())/float64(time.Millisecond), ev.Attributes["duration_ms"])
+			assert.Equal(t, float64(endTimestamp.UnixNano()-startTimestamp.UnixNano())/float64(time.Millisecond), ev.Attributes["duration_ms"])
 			assert.Equal(t, int(trace.Status_STATUS_CODE_OK), ev.Attributes["status_code"])
 			assert.Equal(t, "span_attr_val", ev.Attributes["span_attr"])
 			assert.Equal(t, "resource_attr_val", ev.Attributes["resource_attr"])
 			assert.Equal(t, 1, ev.Attributes["span.num_links"])
 			assert.Equal(t, 1, ev.Attributes["span.num_events"])
+
+			// Check bytes attribute - should be JSON encoded
+			bytesAttr, ok := ev.Attributes["bytes_attr"].(string)
+			assert.Truef(t, ok, "bytes_attr should be a string", "bytes_attr type: %T, value: %v", ev.Attributes["bytes_attr"], ev.Attributes["bytes_attr"])
+			assert.Equal(t, "\"AQIDBA==\"\n", bytesAttr) // base64 encoded with JSON encoding and newline
+
+			// Check array attribute - should be JSON encoded
+			arrayAttr, ok := ev.Attributes["array_attr"].(string)
+			assert.True(t, ok, "array_attr should be a string")
+			assert.Equal(t, "[\"item1\",42,true]\n", arrayAttr)
+
+			// Check kvlist attribute - should be flattened
+			assert.Equal(t, "nested_value", ev.Attributes["kvlist_attr.nested_string"])
+			assert.Equal(t, int64(123), ev.Attributes["kvlist_attr.nested_int"])
 		})
 	}
 }
@@ -231,8 +292,8 @@ func TestTranslateException(t *testing.T) {
 					Name:              "test_span",
 					Kind:              trace.Span_SPAN_KIND_CLIENT,
 					Status:            &trace.Status{Code: trace.Status_STATUS_CODE_OK},
-					StartTimeUnixNano: uint64(startTimestamp.Nanosecond()),
-					EndTimeUnixNano:   uint64(endTimestamp.Nanosecond()),
+					StartTimeUnixNano: uint64(startTimestamp.UnixNano()),
+					EndTimeUnixNano:   uint64(endTimestamp.UnixNano()),
 					Attributes: []*common.KeyValue{
 						{
 							Key: "span_attr",
@@ -249,7 +310,7 @@ func TestTranslateException(t *testing.T) {
 					},
 					Events: []*trace.Span_Event{{
 						Name:         "exception",
-						TimeUnixNano: uint64(startTimestamp.Add(time.Millisecond * 1).Nanosecond()),
+						TimeUnixNano: uint64(startTimestamp.Add(time.Millisecond * 1).UnixNano()),
 						Attributes: []*common.KeyValue{
 							{
 								Key: "exception.type",
@@ -340,7 +401,7 @@ func TestTranslateException(t *testing.T) {
 			assert.Equal(t, "client", ev.Attributes["type"])
 			assert.Equal(t, "client", ev.Attributes["span.kind"])
 			assert.Equal(t, "test_span", ev.Attributes["name"])
-			assert.Equal(t, float64(endTimestamp.Nanosecond()-startTimestamp.Nanosecond())/float64(time.Millisecond), ev.Attributes["duration_ms"])
+			assert.Equal(t, float64(endTimestamp.UnixNano()-startTimestamp.UnixNano())/float64(time.Millisecond), ev.Attributes["duration_ms"])
 			assert.Equal(t, int(trace.Status_STATUS_CODE_OK), ev.Attributes["status_code"])
 			assert.Equal(t, "span_attr_val", ev.Attributes["span_attr"])
 			assert.Equal(t, "resource_attr_val", ev.Attributes["resource_attr"])
@@ -524,8 +585,8 @@ func TestTranslateHttpTraceRequest(t *testing.T) {
 					Name:              "test_span",
 					Kind:              trace.Span_SPAN_KIND_CLIENT,
 					Status:            &trace.Status{Code: trace.Status_STATUS_CODE_OK},
-					StartTimeUnixNano: uint64(startTimestamp.Nanosecond()),
-					EndTimeUnixNano:   uint64(endTimestamp.Nanosecond()),
+					StartTimeUnixNano: uint64(startTimestamp.UnixNano()),
+					EndTimeUnixNano:   uint64(endTimestamp.UnixNano()),
 					Attributes: []*common.KeyValue{{
 						Key: "span_attr",
 						Value: &common.AnyValue{
@@ -534,7 +595,7 @@ func TestTranslateHttpTraceRequest(t *testing.T) {
 					}},
 					Events: []*trace.Span_Event{{
 						Name:         "span_event",
-						TimeUnixNano: uint64(startTimestamp.Add(time.Millisecond * 1).Nanosecond()),
+						TimeUnixNano: uint64(startTimestamp.Add(time.Millisecond * 1).UnixNano()),
 						Attributes: []*common.KeyValue{{
 							Key: "span_event_attr",
 							Value: &common.AnyValue{
@@ -634,7 +695,7 @@ func TestTranslateHttpTraceRequest(t *testing.T) {
 							assert.Equal(t, "client", ev.Attributes["span.kind"])
 							assert.Equal(t, "test_span", ev.Attributes["name"])
 							assert.Equal(t, "my-service", ev.Attributes["service.name"])
-							assert.Equal(t, float64(endTimestamp.Nanosecond()-startTimestamp.Nanosecond())/float64(time.Millisecond), ev.Attributes["duration_ms"])
+							assert.Equal(t, float64(endTimestamp.UnixNano()-startTimestamp.UnixNano())/float64(time.Millisecond), ev.Attributes["duration_ms"])
 							assert.Equal(t, int(trace.Status_STATUS_CODE_OK), ev.Attributes["status_code"])
 							assert.Equal(t, "span_attr_val", ev.Attributes["span_attr"])
 							assert.Equal(t, "resource_attr_val", ev.Attributes["resource_attr"])
@@ -1243,8 +1304,8 @@ func TestOtlpAttributesRecordsAttribueType(t *testing.T) {
 	testCases := []struct {
 		name            string
 		attr            *common.AnyValue
-		eventFields     map[string]interface{}
-		telemetryFields map[string]interface{}
+		eventFields     map[string]any
+		telemetryFields map[string]any
 	}{
 		{
 			name: "array",
@@ -1259,10 +1320,10 @@ func TestOtlpAttributesRecordsAttribueType(t *testing.T) {
 					},
 				},
 			},
-			eventFields: map[string]interface{}{
+			eventFields: map[string]any{
 				"attr": "[\"io.opentelemetry.tomcat-7.0\"]\n",
 			},
-			telemetryFields: map[string]interface{}{
+			telemetryFields: map[string]any{
 				"received_array_attr_type": true,
 			},
 		},
@@ -1273,10 +1334,10 @@ func TestOtlpAttributesRecordsAttribueType(t *testing.T) {
 					BytesValue: []byte("data"),
 				},
 			},
-			eventFields: map[string]interface{}{
+			eventFields: map[string]any{
 				"attr": "\"ZGF0YQ==\"\n",
 			},
-			telemetryFields: map[string]interface{}{
+			telemetryFields: map[string]any{
 				"received_bytes_attr_type": true,
 			},
 		},
@@ -1307,10 +1368,10 @@ func TestOtlpAttributesRecordsAttribueType(t *testing.T) {
 					},
 				},
 			},
-			eventFields: map[string]interface{}{
+			eventFields: map[string]any{
 				"attr.custom.name": "value",
 			},
-			telemetryFields: map[string]interface{}{
+			telemetryFields: map[string]any{
 				"received_kvlist_attr_type": true,
 				"kvlist_max_depth":          1,
 			},
@@ -1319,15 +1380,101 @@ func TestOtlpAttributesRecordsAttribueType(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			telemetryFields := map[string]interface{}{}
+			telemetryFields := map[string]any{}
 			husky.AddTelemetryAttributeFunc = func(ctx context.Context, key string, value any) {
 				telemetryFields[key] = value
 			}
 
-			eventFields := map[string]interface{}{}
+			eventFields := map[string]any{}
 			addAttributeToMap(context.Background(), eventFields, "attr", tc.attr, 0)
 			assert.Equal(t, tc.eventFields, eventFields)
 			assert.Equal(t, tc.telemetryFields, telemetryFields)
+		})
+	}
+}
+
+func TestCompressedTraceRequests(t *testing.T) {
+	// Create a simple trace request
+	traceID := test.RandomBytes(16)
+	spanID := test.RandomBytes(8)
+	startTime := time.Now()
+	endTime := startTime.Add(time.Millisecond * 5)
+
+	req := &collectortrace.ExportTraceServiceRequest{
+		ResourceSpans: []*trace.ResourceSpans{{
+			Resource: &resource.Resource{
+				Attributes: []*common.KeyValue{{
+					Key: "service.name",
+					Value: &common.AnyValue{
+						Value: &common.AnyValue_StringValue{StringValue: "test-service"},
+					},
+				}},
+			},
+			ScopeSpans: []*trace.ScopeSpans{{
+				Spans: []*trace.Span{{
+					TraceId:           traceID,
+					SpanId:            spanID,
+					Name:              "test-span",
+					StartTimeUnixNano: uint64(startTime.UnixNano()),
+					EndTimeUnixNano:   uint64(endTime.UnixNano()),
+				}},
+			}},
+		}},
+	}
+
+	// Serialize the request
+	bodyBytes, err := proto.Marshal(req)
+	require.NoError(t, err)
+
+	for _, encoding := range []string{"gzip", "zstd"} {
+		t.Run(encoding, func(t *testing.T) {
+			// Compress the body
+			compressedBody, err := encodeBody(bodyBytes, encoding)
+			require.NoError(t, err)
+
+			ri := RequestInfo{
+				ApiKey:          "abc123DEF456ghi789jklm",
+				Dataset:         "test-dataset",
+				ContentType:     "application/protobuf",
+				ContentEncoding: encoding,
+			}
+
+			// Test TranslateTraceRequestFromReader
+			t.Run("TranslateTraceRequestFromReader", func(t *testing.T) {
+				body := io.NopCloser(strings.NewReader(compressedBody))
+				result, err := TranslateTraceRequestFromReader(context.Background(), body, ri)
+				require.NoError(t, err)
+				require.NotNil(t, result)
+				assert.Equal(t, len(bodyBytes), result.RequestSize)
+				assert.Len(t, result.Batches, 1)
+				assert.Equal(t, "test-service", result.Batches[0].Dataset)
+				assert.Len(t, result.Batches[0].Events, 1)
+				assert.Equal(t, "test-span", result.Batches[0].Events[0].Attributes["name"])
+			})
+
+			// Test TranslateOTLPTraceRequestFromReaderSizedWithMsgp
+			t.Run("TranslateOTLPTraceRequestFromReaderSizedWithMsgp", func(t *testing.T) {
+				body := io.NopCloser(strings.NewReader(compressedBody))
+				result, err := TranslateTraceRequestFromReaderSizedWithMsgp(
+					context.Background(),
+					body,
+					ri,
+					int64(len(compressedBody)*2), // Give it plenty of space
+				)
+				require.NoError(t, err)
+				require.NotNil(t, result)
+				assert.Equal(t, len(bodyBytes), result.RequestSize)
+				assert.Len(t, result.Batches, 1)
+				assert.Equal(t, "test-service", result.Batches[0].Dataset)
+				assert.Len(t, result.Batches[0].Events, 1)
+
+				// Verify the msgpack attributes are valid
+				event := result.Batches[0].Events[0]
+				attrs := decodeMessagePackAttributes(t, event.Attributes)
+				assert.Equal(t, "test-span", attrs["name"])
+				assert.Equal(t, BytesToTraceID(traceID), attrs["trace.trace_id"])
+				assert.Equal(t, hex.EncodeToString(spanID), attrs["trace.span_id"])
+			})
 		})
 	}
 }
