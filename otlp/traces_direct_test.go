@@ -237,6 +237,12 @@ func TestUnmarshalTraceRequestDirect_Complete(t *testing.T) {
 											Value: &common.AnyValue_IntValue{IntValue: 10},
 										},
 									},
+									{
+										Key: `unfriendly\to "json"`,
+										Value: &common.AnyValue{
+											Value: &common.AnyValue_StringValue{StringValue: `I need\ to "escape"`},
+										},
+									},
 									// Empty and nil values are dropped from the output.
 									{
 										Key: "empty.attr",
@@ -589,6 +595,7 @@ func TestUnmarshalTraceRequestDirect_Complete(t *testing.T) {
 				"http.url":             "https://example.com/api/users",
 				"response.size":        float64(1234.56),
 				"success":              true,
+				`unfriendly\to "json"`: `I need\ to "escape"`,
 				"status_code":          int64(1),
 				"status_message":       "Request completed successfully",
 				"duration_ms":          float64(864.197532),
