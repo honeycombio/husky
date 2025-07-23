@@ -250,9 +250,8 @@ func unmarshalAnyValueIntoAttrsJSON(
 
 			// Special handling for sample rate
 			if bytes.Equal(key, []byte("sampleRate")) || bytes.Equal(key, []byte("SampleRate")) {
-				val = min(val, math.MaxInt32)
 				if attrs.sampleRate == 0 || bytes.Equal(key, []byte("sampleRate")) {
-					attrs.sampleRate = max(defaultSampleRate, int32(val))
+					attrs.sampleRate = int32(max(int64(defaultSampleRate), min(val, math.MaxInt32)))
 				}
 				return
 			}

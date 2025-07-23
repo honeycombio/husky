@@ -658,7 +658,7 @@ func unmarshalKeyValue(ctx context.Context, data []byte, attrs *msgpAttributes, 
 				v := int64(decodeVarint(valueBytes, &iNdEx))
 
 				if bytes.Equal(key, []byte("sampleRate")) || bytes.Equal(key, []byte("SampleRate")) {
-					v = min(v, math.MaxInt32)
+					v = max(min(v, math.MaxInt32), math.MinInt32)
 					if attrs.sampleRate == 0 || bytes.Equal(key, []byte("sampleRate")) {
 						attrs.sampleRate = max(defaultSampleRate, int32(v))
 					}
@@ -1593,6 +1593,11 @@ func unmarshalSpanLink(
 
 // timestampFromUnixNano converts unix nano timestamp to time.Time
 func timestampFromUnixNano(unixNano uint64) time.Time {
+	// OTLP supports unsigned nanosecond timestamps, but golang doesn't.
+	// Apologies to anyone still running this code in 2262.
+	if unixNano > math.MaxInt64 {
+		unixNano = math.MaxInt64
+	}
 	return time.Unix(0, int64(unixNano)).UTC()
 }
 
