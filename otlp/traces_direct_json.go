@@ -20,37 +20,11 @@ import (
 
 var parserPool fastjson.ParserPool
 
-// reusableParser is a wrapper to safely return parser to pool
-type reusableParser struct {
-	p *fastjson.Parser
-}
-
-func (rp *reusableParser) Release() {
-	if rp.p != nil {
-		parserPool.Put(rp.p)
-		rp.p = nil
-	}
-}
-
-func getParser() *reusableParser {
-	return &reusableParser{p: parserPool.Get()}
-}
-
-// bytesEqual compares a byte slice with a string without allocation
-func bytesEqual(b []byte, s string) bool {
-	if len(b) != len(s) {
-		return false
-	}
-	for i := 0; i < len(b); i++ {
-		if b[i] != s[i] {
-			return false
-		}
-	}
-	return true
-}
-
 // unmarshalTraceRequestDirectMsgpJSON translates a JSON-encoded OTLP trace request directly
 // into a Honeycomb-friendly structure without creating intermediate proto structs.
+// This code makes extensive use of fastjson's Visit() method, which is efficient
+// but offers no way to return an error or abort iteration. Until this is modernized
+// or replaced, we end up having to use pretty awkward closure-based error handling.
 func unmarshalTraceRequestDirectMsgpJSON(
 	ctx context.Context,
 	data []byte,
@@ -66,10 +40,10 @@ func unmarshalTraceRequestDirectMsgpJSON(
 	}
 
 	// Parse the JSON
-	rp := getParser()
-	defer rp.Release()
+	parser := parserPool.Get()
+	defer parserPool.Put(parser)
 
-	v, err := rp.p.ParseBytes(data)
+	v, err := parser.ParseBytes(data)
 	if err != nil {
 		return nil, err
 	}
@@ -81,20 +55,18 @@ func unmarshalTraceRequestDirectMsgpJSON(
 	}
 
 	obj.Visit(func(key []byte, v *fastjson.Value) {
-		if bytesEqual(key, "resourceSpans") {
+		switch string(key) {
+		case "resourceSpans":
 			resourceSpansArray := v.GetArray()
-			if resourceSpansArray != nil {
-				for _, resourceSpansVal := range resourceSpansArray {
-					if err := unmarshalResourceSpansJSON(ctx, resourceSpansVal, ri, result); err != nil {
-						// Store error but continue processing
-						return
-					}
+			for _, resourceSpansVal := range resourceSpansArray {
+				if err = unmarshalResourceSpansJSON(ctx, resourceSpansVal, ri, result); err != nil {
+					return
 				}
 			}
 		}
 	})
 
-	return result, nil
+	return result, err
 }
 
 // unmarshalResourceSpansJSON parses a ResourceSpans message from JSON
@@ -114,18 +86,18 @@ func unmarshalResourceSpansJSON(
 	}
 
 	var scopeSpansArray []*fastjson.Value
-
 	obj.Visit(func(key []byte, v *fastjson.Value) {
 		switch string(key) {
 		case "resource":
-			if err := unmarshalResourceJSON(ctx, v, resourceAttrs); err != nil {
-				// Store error but continue
-				return
-			}
+			err = unmarshalResourceJSON(ctx, v, resourceAttrs)
 		case "scopeSpans":
 			scopeSpansArray = v.GetArray()
 		}
 	})
+
+	if err != nil {
+		return err
+	}
 
 	// Determine dataset from resource attributes
 	dataset = getDatasetFromMsgpAttr(ri, resourceAttrs)
@@ -138,11 +110,9 @@ func unmarshalResourceSpansJSON(
 	batch := &result.Batches[len(result.Batches)-1]
 
 	// Process scopeSpans
-	if scopeSpansArray != nil {
-		for _, scopeSpansVal := range scopeSpansArray {
-			if err := unmarshalScopeSpansJSON(ctx, scopeSpansVal, resourceAttrs, batch); err != nil {
-				return err
-			}
+	for _, scopeSpansVal := range scopeSpansArray {
+		if err := unmarshalScopeSpansJSON(ctx, scopeSpansVal, resourceAttrs, batch); err != nil {
+			return err
 		}
 	}
 
@@ -161,18 +131,18 @@ func unmarshalResourceJSON(
 	}
 
 	obj.Visit(func(key []byte, v *fastjson.Value) {
-		if bytesEqual(key, "attributes") {
+		switch string(key) {
+		case "attributes":
 			attributes := v.GetArray()
-			if attributes != nil {
-				if err := unmarshalKeyValueArrayJSON(ctx, attributes, attrs, 0); err != nil {
-					// Store error but continue
+			if len(attributes) > 0 {
+				if err = unmarshalKeyValueArrayJSON(ctx, attributes, attrs, 0); err != nil {
 					return
 				}
 			}
 		}
 	})
 
-	return nil
+	return err
 }
 
 // unmarshalKeyValueArrayJSON parses an array of KeyValue from JSON
@@ -182,7 +152,7 @@ func unmarshalKeyValueArrayJSON(
 	attrs *msgpAttributes,
 	depth int,
 ) error {
-	for i := 0; i < len(values); i++ {
+	for i := range values {
 		if err := unmarshalKeyValueJSON(ctx, values[i], attrs, depth); err != nil {
 			return err
 		}
@@ -205,7 +175,6 @@ func unmarshalKeyValueJSON(
 
 	var keyBytes []byte
 	var valueObj *fastjson.Value
-
 	obj.Visit(func(k []byte, v *fastjson.Value) {
 		switch string(k) {
 		case "key":
@@ -224,7 +193,12 @@ func unmarshalKeyValueJSON(
 	return unmarshalAnyValueIntoAttrsJSON(ctx, valueObj, keyBytes, attrs, depth)
 }
 
-// unmarshalAnyValueIntoAttrsJSON parses an AnyValue from JSON and adds it directly to msgpAttributes
+// unmarshalAnyValueIntoAttrsJSON parses an AnyValue from JSON and adds it
+// directly to msgpAttributes.
+// Similar to protobuf, JSON OTLP encodes an "AnyValue" as an object with one of
+// several potential keys, depending on the type. In this way, it can re-implent
+// JSON's inherent type agnosticism, with the advantage of being far more expensive
+// to generate, transmit, and parse.
 func unmarshalAnyValueIntoAttrsJSON(
 	ctx context.Context,
 	v *fastjson.Value,
@@ -245,7 +219,9 @@ func unmarshalAnyValueIntoAttrsJSON(
 
 			// Special handling for sample rate
 			if bytes.Equal(key, []byte("sampleRate")) || bytes.Equal(key, []byte("SampleRate")) {
-				if f, err := strconv.ParseFloat(string(value), 64); err == nil {
+				var f float64
+				f, err = strconv.ParseFloat(string(value), 64)
+				if err == nil {
 					if attrs.sampleRate == 0 || bytes.Equal(key, []byte("sampleRate")) {
 						attrs.sampleRate = sampleRateFromFloat(f)
 					}
@@ -266,7 +242,8 @@ func unmarshalAnyValueIntoAttrsJSON(
 		case "intValue":
 			// JSON encodes int64 as string
 			strBytes := v.GetStringBytes()
-			val, err := strconv.ParseInt(string(strBytes), 10, 64)
+			var val int64
+			val, err = strconv.ParseInt(string(strBytes), 10, 64)
 			if err != nil {
 				return
 			}
@@ -298,7 +275,8 @@ func unmarshalAnyValueIntoAttrsJSON(
 		case "bytesValue":
 			// Bytes are base64 encoded in JSON
 			strBytes := v.GetStringBytes()
-			b, err := base64.StdEncoding.DecodeString(string(strBytes))
+			var b []byte
+			b, err = base64.StdEncoding.DecodeString(string(strBytes))
 			if err != nil {
 				return
 			}
@@ -309,7 +287,8 @@ func unmarshalAnyValueIntoAttrsJSON(
 		case "arrayValue":
 			// For arrays, we need to parse and JSON encode
 			husky.AddTelemetryAttribute(ctx, "received_array_attr_type", true)
-			arr, err := unmarshalArrayValueJSON(ctx, v)
+			var arr []any
+			arr, err = unmarshalArrayValueJSON(ctx, v)
 			if err != nil {
 				return
 			}
@@ -324,12 +303,13 @@ func unmarshalAnyValueIntoAttrsJSON(
 
 			if depth < maxDepth {
 				// Flatten the kvlist
-				if err := unmarshalKvlistValueFlattenJSON(ctx, v, key, attrs, depth+1); err != nil {
+				if err = unmarshalKvlistValueFlattenJSON(ctx, v, key, attrs, depth+1); err != nil {
 					return
 				}
 			} else {
 				// Max depth exceeded, JSON encode the whole thing
-				m, err := unmarshalKvlistValueJSON(ctx, v)
+				var m map[string]any
+				m, err = unmarshalKvlistValueJSON(ctx, v)
 				if err != nil {
 					return
 				}
@@ -338,10 +318,11 @@ func unmarshalAnyValueIntoAttrsJSON(
 		}
 	})
 
-	return nil
+	return err
 }
 
 // unmarshalArrayValueJSON parses an ArrayValue from JSON and returns []any
+// Only used when we're going to re-marshal the values as JSON.
 func unmarshalArrayValueJSON(ctx context.Context, v *fastjson.Value) ([]any, error) {
 	obj, err := v.Object()
 	if err != nil {
@@ -351,14 +332,16 @@ func unmarshalArrayValueJSON(ctx context.Context, v *fastjson.Value) ([]any, err
 	var values []any
 
 	obj.Visit(func(key []byte, v *fastjson.Value) {
-		if bytesEqual(key, "values") {
+		switch string(key) {
+		case "values":
 			valuesArray := v.GetArray()
-			if valuesArray != nil {
+			if len(valuesArray) > 0 {
 				values = make([]any, 0, len(valuesArray))
 				for _, valObj := range valuesArray {
-					val, err := unmarshalAnyValueJSON(ctx, valObj)
+					var val any
+					val, err = unmarshalAnyValueJSON(ctx, valObj)
 					if err != nil {
-						continue
+						return
 					}
 					if val != nil {
 						values = append(values, val)
@@ -368,10 +351,11 @@ func unmarshalArrayValueJSON(ctx context.Context, v *fastjson.Value) ([]any, err
 		}
 	})
 
-	return values, nil
+	return values, err
 }
 
 // unmarshalAnyValueJSON parses an AnyValue from JSON and returns the value
+// Only used when we're going to re-marshal the values as JSON.
 func unmarshalAnyValueJSON(ctx context.Context, v *fastjson.Value) (any, error) {
 	obj, err := v.Object()
 	if err != nil {
@@ -379,7 +363,6 @@ func unmarshalAnyValueJSON(ctx context.Context, v *fastjson.Value) (any, error) 
 	}
 
 	var result any
-
 	obj.Visit(func(key []byte, v *fastjson.Value) {
 		switch string(key) {
 		case "stringValue":
@@ -391,7 +374,8 @@ func unmarshalAnyValueJSON(ctx context.Context, v *fastjson.Value) (any, error) 
 		case "intValue":
 			// JSON encodes int64 as string
 			strBytes := v.GetStringBytes()
-			val, err := strconv.ParseInt(string(strBytes), 10, 64)
+			var val int64
+			val, err = strconv.ParseInt(string(strBytes), 10, 64)
 			if err == nil {
 				result = val
 			}
@@ -402,18 +386,21 @@ func unmarshalAnyValueJSON(ctx context.Context, v *fastjson.Value) (any, error) 
 		case "bytesValue":
 			// Bytes are base64 encoded in JSON
 			strBytes := v.GetStringBytes()
-			b, err := base64.StdEncoding.DecodeString(string(strBytes))
+			var b []byte
+			b, err = base64.StdEncoding.DecodeString(string(strBytes))
 			if err == nil {
 				result = b
 			}
 
 		case "arrayValue":
+			var arr []any
 			arr, err := unmarshalArrayValueJSON(ctx, v)
 			if err == nil {
 				result = arr
 			}
 
 		case "kvlistValue":
+			var m map[string]any
 			m, err := unmarshalKvlistValueJSON(ctx, v)
 			if err == nil {
 				result = m
@@ -421,7 +408,56 @@ func unmarshalAnyValueJSON(ctx context.Context, v *fastjson.Value) (any, error) 
 		}
 	})
 
-	return result, nil
+	return result, err
+}
+
+// unmarshalKvlistValueJSON parses a KeyValueList from JSON and returns map[string]any
+// Only used when we're going to re-marshal the values as JSON.
+func unmarshalKvlistValueJSON(ctx context.Context, v *fastjson.Value) (map[string]any, error) {
+	obj, err := v.Object()
+	if err != nil {
+		return nil, nil
+	}
+
+	result := make(map[string]any)
+	obj.Visit(func(key []byte, v *fastjson.Value) {
+		switch string(key) {
+		case "values":
+			valuesArray := v.GetArray()
+			for _, value := range valuesArray {
+				var valueObject *fastjson.Object
+				valueObject, err = value.Object()
+				if err != nil {
+					return
+				}
+
+				var keyStr string
+				var valueObj *fastjson.Value
+
+				valueObject.Visit(func(k []byte, v *fastjson.Value) {
+					switch string(k) {
+					case "key":
+						keyStr = string(v.GetStringBytes())
+					case "value":
+						valueObj = v
+					}
+				})
+
+				if keyStr != "" && valueObj != nil {
+					var val any
+					val, err = unmarshalAnyValueJSON(ctx, valueObj)
+					if err != nil {
+						return
+					}
+					if val != nil {
+						result[keyStr] = val
+					}
+				}
+			}
+		}
+	})
+
+	return result, err
 }
 
 // unmarshalKvlistValueFlattenJSON parses a KeyValueList from JSON and flattens it into msgpAttributes
@@ -438,93 +474,48 @@ func unmarshalKvlistValueFlattenJSON(
 	}
 
 	obj.Visit(func(key []byte, v *fastjson.Value) {
-		if bytesEqual(key, "values") {
+		switch string(key) {
+		case "values":
 			valuesArray := v.GetArray()
-			if valuesArray != nil {
-				for _, kvObj := range valuesArray {
-					kvObjObj, err := kvObj.Object()
-					if err != nil {
-						continue
+			for _, value := range valuesArray {
+				var valueObject *fastjson.Object
+				valueObject, err = value.Object()
+				if err != nil {
+					return
+				}
+
+				var keyBytes []byte
+				var valueObj *fastjson.Value
+
+				valueObject.Visit(func(k []byte, v *fastjson.Value) {
+					switch string(k) {
+					case "key":
+						keyBytes = v.GetStringBytes()
+					case "value":
+						valueObj = v
 					}
+				})
 
-					var keyBytes []byte
-					var valueObj *fastjson.Value
+				if len(keyBytes) == 0 || valueObj == nil {
+					continue
+				}
 
-					kvObjObj.Visit(func(k []byte, v *fastjson.Value) {
-						switch string(k) {
-						case "key":
-							keyBytes = v.GetStringBytes()
-						case "value":
-							valueObj = v
-						}
-					})
+				// Create flattened key
+				// Create a new buffer to avoid corrupting the input
+				flatKey := make([]byte, 0, len(keyPrefix)+1+len(keyBytes))
+				flatKey = append(flatKey, keyPrefix...)
+				flatKey = append(flatKey, '.')
+				flatKey = append(flatKey, keyBytes...)
 
-					if len(keyBytes) == 0 || valueObj == nil {
-						continue
-					}
-
-					// Create flattened key
-					// Create a new buffer to avoid corrupting the input
-					flatKey := make([]byte, 0, len(keyPrefix)+1+len(keyBytes))
-					flatKey = append(flatKey, keyPrefix...)
-					flatKey = append(flatKey, '.')
-					flatKey = append(flatKey, keyBytes...)
-
-					// Process the value
-					if err := unmarshalAnyValueIntoAttrsJSON(ctx, valueObj, flatKey, attrs, depth); err != nil {
-						continue
-					}
+				// Process the value
+				if err = unmarshalAnyValueIntoAttrsJSON(ctx, valueObj, flatKey, attrs, depth); err != nil {
+					return
 				}
 			}
 		}
 	})
 
-	return nil
-}
-
-// unmarshalKvlistValueJSON parses a KeyValueList from JSON and returns map[string]any
-func unmarshalKvlistValueJSON(ctx context.Context, v *fastjson.Value) (map[string]any, error) {
-	obj, err := v.Object()
-	if err != nil {
-		return nil, nil
-	}
-
-	result := make(map[string]any)
-
-	obj.Visit(func(key []byte, v *fastjson.Value) {
-		if bytesEqual(key, "values") {
-			valuesArray := v.GetArray()
-			if valuesArray != nil {
-				for _, kvObj := range valuesArray {
-					kvObjObj, err := kvObj.Object()
-					if err != nil {
-						continue
-					}
-
-					var keyStr string
-					var valueObj *fastjson.Value
-
-					kvObjObj.Visit(func(k []byte, v *fastjson.Value) {
-						switch string(k) {
-						case "key":
-							keyStr = string(v.GetStringBytes())
-						case "value":
-							valueObj = v
-						}
-					})
-
-					if keyStr != "" && valueObj != nil {
-						val, err := unmarshalAnyValueJSON(ctx, valueObj)
-						if err == nil && val != nil {
-							result[keyStr] = val
-						}
-					}
-				}
-			}
-		}
-	})
-
-	return result, nil
+	return err
 }
 
 // unmarshalScopeSpansJSON parses a ScopeSpans message from JSON
@@ -543,25 +534,24 @@ func unmarshalScopeSpansJSON(
 	}
 
 	var spansArray []*fastjson.Value
-
 	obj.Visit(func(key []byte, v *fastjson.Value) {
 		switch string(key) {
 		case "scope":
-			if err := unmarshalInstrumentationScopeJSON(ctx, v, scopeAttrs); err != nil {
-				// Store error but continue
+			if err = unmarshalInstrumentationScopeJSON(ctx, v, scopeAttrs); err != nil {
 				return
 			}
 		case "spans":
 			spansArray = v.GetArray()
 		}
 	})
+	if err != nil {
+		return err
+	}
 
 	// Process spans
-	if spansArray != nil {
-		for _, spanVal := range spansArray {
-			if err := unmarshalSpanJSON(ctx, spanVal, resourceAttrs, scopeAttrs, batch); err != nil {
-				return err
-			}
+	for _, spanVal := range spansArray {
+		if err := unmarshalSpanJSON(ctx, spanVal, resourceAttrs, scopeAttrs, batch); err != nil {
+			return err
 		}
 	}
 
@@ -598,16 +588,15 @@ func unmarshalInstrumentationScopeJSON(
 
 		case "attributes":
 			attributes := v.GetArray()
-			if attributes != nil {
-				if err := unmarshalKeyValueArrayJSON(ctx, attributes, attrs, 0); err != nil {
-					// Store error but continue
+			if len(attributes) > 0 {
+				if err = unmarshalKeyValueArrayJSON(ctx, attributes, attrs, 0); err != nil {
 					return
 				}
 			}
 		}
 	})
 
-	return nil
+	return err
 }
 
 // unmarshalSpanJSON parses a Span message from JSON and creates an event
@@ -634,13 +623,13 @@ func unmarshalSpanJSON(
 		return err
 	}
 
-	// Process all span fields in one pass
 	obj.Visit(func(key []byte, v *fastjson.Value) {
 		switch string(key) {
 		case "traceId":
 			// Trace ID is base64 encoded in JSON
 			strBytes := v.GetStringBytes()
-			b, err := base64.StdEncoding.DecodeString(string(strBytes))
+			var b []byte
+			b, err = base64.StdEncoding.DecodeString(string(strBytes))
 			if err == nil {
 				traceID = b
 			}
@@ -648,7 +637,8 @@ func unmarshalSpanJSON(
 		case "spanId":
 			// Span ID is base64 encoded in JSON
 			strBytes := v.GetStringBytes()
-			b, err := base64.StdEncoding.DecodeString(string(strBytes))
+			var b []byte
+			b, err = base64.StdEncoding.DecodeString(string(strBytes))
 			if err == nil {
 				spanID = b
 			}
@@ -668,7 +658,8 @@ func unmarshalSpanJSON(
 		case "parentSpanId":
 			// Parent span ID is base64 encoded in JSON
 			strBytes := v.GetStringBytes()
-			b, err := base64.StdEncoding.DecodeString(string(strBytes))
+			var b []byte
+			b, err = base64.StdEncoding.DecodeString(string(strBytes))
 			if err == nil && len(b) > 0 {
 				eventAttr.addHexID([]byte("trace.parent_id"), b)
 			}
@@ -706,7 +697,8 @@ func unmarshalSpanJSON(
 		case "startTimeUnixNano":
 			// Time is encoded as string in JSON
 			strBytes := v.GetStringBytes()
-			val, err := strconv.ParseUint(string(strBytes), 10, 64)
+			var val uint64
+			val, err = strconv.ParseUint(string(strBytes), 10, 64)
 			if err == nil {
 				startTimeUnixNano = val
 			}
@@ -714,16 +706,16 @@ func unmarshalSpanJSON(
 		case "endTimeUnixNano":
 			// Time is encoded as string in JSON
 			strBytes := v.GetStringBytes()
-			val, err := strconv.ParseUint(string(strBytes), 10, 64)
+			var val uint64
+			val, err = strconv.ParseUint(string(strBytes), 10, 64)
 			if err == nil {
 				endTimeUnixNano = val
 			}
 
 		case "attributes":
 			attributes := v.GetArray()
-			if attributes != nil {
-				if err := unmarshalKeyValueArrayJSON(ctx, attributes, eventAttr, 0); err != nil {
-					// Store error but continue
+			if len(attributes) > 0 {
+				if err = unmarshalKeyValueArrayJSON(ctx, attributes, eventAttr, 0); err != nil {
 					return
 				}
 			}
@@ -735,47 +727,52 @@ func unmarshalSpanJSON(
 			linksArray = v.GetArray()
 
 		case "status":
-			statusObj, err := v.Object()
-			if err == nil {
-				statusObj.Visit(func(k []byte, v *fastjson.Value) {
-					switch string(k) {
-					case "message":
-						messageBytes := v.GetStringBytes()
-						if len(messageBytes) > 0 {
-							eventAttr.addString([]byte("status_message"), messageBytes)
-						}
+			var statusObj *fastjson.Object
+			statusObj, err = v.Object()
+			if err != nil {
+				return
+			}
+			statusObj.Visit(func(k []byte, v *fastjson.Value) {
+				switch string(k) {
+				case "message":
+					messageBytes := v.GetStringBytes()
+					if len(messageBytes) > 0 {
+						eventAttr.addString([]byte("status_message"), messageBytes)
+					}
 
-					case "code":
-						// In JSON, code can be either string enum or integer
-						if v.Type() == fastjson.TypeString {
-							// String enum like "STATUS_CODE_OK"
-							codeBytes := v.GetStringBytes()
-							switch string(codeBytes) {
-							case "STATUS_CODE_UNSET":
-								statusCode = 0
-							case "STATUS_CODE_OK":
-								statusCode = 1
-							case "STATUS_CODE_ERROR":
-								statusCode = 2
-								eventAttr.addBool([]byte("error"), true)
-								eventAttr.isError = true
-							default:
-								statusCode = 0
-							}
-						} else {
-							// Integer value
-							statusCode = int64(v.GetInt())
-							// Check if this is an error status
-							if statusCode == 2 { // STATUS_CODE_ERROR
-								eventAttr.addBool([]byte("error"), true)
-								eventAttr.isError = true
-							}
+				case "code":
+					// In JSON, code can be either string enum or integer
+					if v.Type() == fastjson.TypeString {
+						// String enum like "STATUS_CODE_OK"
+						codeBytes := v.GetStringBytes()
+						switch string(codeBytes) {
+						case "STATUS_CODE_UNSET":
+							statusCode = 0
+						case "STATUS_CODE_OK":
+							statusCode = 1
+						case "STATUS_CODE_ERROR":
+							statusCode = 2
+							eventAttr.addBool([]byte("error"), true)
+							eventAttr.isError = true
+						default:
+							statusCode = 0
+						}
+					} else {
+						// Integer value
+						statusCode = int64(v.GetInt())
+						// Check if this is an error status
+						if statusCode == 2 { // STATUS_CODE_ERROR
+							eventAttr.addBool([]byte("error"), true)
+							eventAttr.isError = true
 						}
 					}
-				})
-			}
+				}
+			})
 		}
 	})
+	if err != nil {
+		return err
+	}
 
 	// Add fields which are always expected
 	eventAttr.addTraceID([]byte("trace.trace_id"), traceID)
@@ -814,16 +811,14 @@ func unmarshalSpanJSON(
 
 	// Process span events first
 	var firstExceptionAttrs *msgpAttributes
-	if eventsArray != nil {
-		for _, eventVal := range eventsArray {
-			exceptionAttrs, err := unmarshalSpanEventJSON(ctx, eventVal, traceID, spanID, name, startTimeUnixNano, resourceAttrs, scopeAttrs, sampleRate, eventAttr.isError, batch)
-			if err != nil {
-				return err
-			}
-			// Only keep the first exception's attributes
-			if exceptionAttrs != nil && firstExceptionAttrs == nil {
-				firstExceptionAttrs = exceptionAttrs
-			}
+	for _, eventVal := range eventsArray {
+		exceptionAttrs, err := unmarshalSpanEventJSON(ctx, eventVal, traceID, spanID, name, startTimeUnixNano, resourceAttrs, scopeAttrs, sampleRate, eventAttr.isError, batch)
+		if err != nil {
+			return err
+		}
+		// Only keep the first exception's attributes
+		if exceptionAttrs != nil && firstExceptionAttrs == nil {
+			firstExceptionAttrs = exceptionAttrs
 		}
 	}
 
@@ -834,12 +829,10 @@ func unmarshalSpanJSON(
 	}
 
 	// Process span links next
-	if linksArray != nil {
-		for _, linkVal := range linksArray {
-			err := unmarshalSpanLinkJSON(ctx, linkVal, traceID, spanID, name, timestamp, resourceAttrs, scopeAttrs, sampleRate, eventAttr.isError, batch)
-			if err != nil {
-				return err
-			}
+	for _, linkVal := range linksArray {
+		err := unmarshalSpanLinkJSON(ctx, linkVal, traceID, spanID, name, timestamp, resourceAttrs, scopeAttrs, sampleRate, eventAttr.isError, batch)
+		if err != nil {
+			return err
 		}
 	}
 
@@ -906,7 +899,8 @@ func unmarshalSpanEventJSON(
 		case "timeUnixNano":
 			// Time is encoded as string in JSON
 			strBytes := v.GetStringBytes()
-			val, err := strconv.ParseUint(string(strBytes), 10, 64)
+			var val uint64
+			val, err = strconv.ParseUint(string(strBytes), 10, 64)
 			if err == nil {
 				timeUnixNano = val
 			}
@@ -918,10 +912,12 @@ func unmarshalSpanEventJSON(
 			attributes = v.GetArray()
 		}
 	})
+	if err != nil {
+		return nil, err
+	}
 
-	// Process attributes
-	if attributes != nil {
-		if err := unmarshalKeyValueArrayJSON(ctx, attributes, eventAttr, 0); err != nil {
+	if len(attributes) > 0 {
+		if err = unmarshalKeyValueArrayJSON(ctx, attributes, eventAttr, 0); err != nil {
 			return nil, err
 		}
 
@@ -1061,7 +1057,8 @@ func unmarshalSpanLinkJSON(
 		case "traceId":
 			// Trace ID is base64 encoded in JSON
 			strBytes := v.GetStringBytes()
-			b, err := base64.StdEncoding.DecodeString(string(strBytes))
+			var b []byte
+			b, err = base64.StdEncoding.DecodeString(string(strBytes))
 			if err == nil {
 				linkedTraceID = b
 			}
@@ -1069,21 +1066,24 @@ func unmarshalSpanLinkJSON(
 		case "spanId":
 			// Span ID is base64 encoded in JSON
 			strBytes := v.GetStringBytes()
-			b, err := base64.StdEncoding.DecodeString(string(strBytes))
+			var b []byte
+			b, err = base64.StdEncoding.DecodeString(string(strBytes))
 			if err == nil {
 				linkedSpanID = b
 			}
 
 		case "attributes":
 			attributes := v.GetArray()
-			if attributes != nil {
-				if err := unmarshalKeyValueArrayJSON(ctx, attributes, eventAttr, 0); err != nil {
-					// Store error but continue
+			if len(attributes) > 0 {
+				if err = unmarshalKeyValueArrayJSON(ctx, attributes, eventAttr, 0); err != nil {
 					return
 				}
 			}
 		}
 	})
+	if err != nil {
+		return err
+	}
 
 	// Set link fields
 	if len(linkedTraceID) > 0 {

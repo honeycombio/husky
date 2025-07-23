@@ -190,7 +190,7 @@ func TestUnmarshalTraceRequestDirect_Complete(t *testing.T) {
 							},
 						},
 						Spans: []*trace.Span{
-							// Span 1: Server span with everything
+							// Span 1: Server span with all features
 							{
 								TraceId:           hexToBin(traceID1),
 								SpanId:            hexToBin(spanID1),
@@ -260,8 +260,8 @@ func TestUnmarshalTraceRequestDirect_Complete(t *testing.T) {
 								},
 								Events: []*trace.Span_Event{
 									{
-										Name:         "cache_miss",
 										TimeUnixNano: event1Time,
+										Name:         "cache_miss",
 										Attributes: []*common.KeyValue{
 											{
 												Key: "cache.key",
@@ -284,8 +284,8 @@ func TestUnmarshalTraceRequestDirect_Complete(t *testing.T) {
 										},
 									},
 									{
-										Name:         "exception",
 										TimeUnixNano: event2Time,
+										Name:         "exception",
 										Attributes: []*common.KeyValue{
 											{
 												Key: "exception.type",
@@ -318,7 +318,7 @@ func TestUnmarshalTraceRequestDirect_Complete(t *testing.T) {
 									{
 										TraceId:    hexToBin(linkedTraceID),
 										SpanId:     hexToBin(linkedSpanID),
-										TraceState: "vendor3=value3",
+										TraceState: "vendor=value",
 										Attributes: []*common.KeyValue{
 											{
 												Key: "link.type",
@@ -369,7 +369,6 @@ func TestUnmarshalTraceRequestDirect_Complete(t *testing.T) {
 							Name:    "custom-library",
 							Version: "2.0.0",
 						},
-
 						Spans: []*trace.Span{
 							// Span 3: Error span with negative duration
 							{
@@ -385,8 +384,8 @@ func TestUnmarshalTraceRequestDirect_Complete(t *testing.T) {
 								},
 								Events: []*trace.Span_Event{
 									{
-										Name:         "exception",
 										TimeUnixNano: errorStartTime - 100_000_000, // Event before span start
+										Name:         "exception",
 										Attributes: []*common.KeyValue{
 											{
 												Key: "exception.type",
@@ -403,8 +402,8 @@ func TestUnmarshalTraceRequestDirect_Complete(t *testing.T) {
 										},
 									},
 									{
-										Name:         "exception",
 										TimeUnixNano: errorStartTime + 100_000_000,
+										Name:         "exception",
 										Attributes: []*common.KeyValue{
 											{
 												Key: "exception.type",
@@ -1327,6 +1326,108 @@ func BenchmarkUnmarshalTraceRequestDirectMsgp(b *testing.B) {
 			}
 		}
 	})
+}
+
+func TestUnmarshalTraceRequestDirectJSON_ErrorHandling(t *testing.T) {
+	ctx := context.Background()
+	ri := RequestInfo{
+		ApiKey:      "abc123DEF456ghi789jklm",
+		Dataset:     "test-dataset",
+		ContentType: "application/json",
+	}
+
+	testCases := []struct {
+		name     string
+		jsonData string
+		errorMsg string
+	}{
+		{
+			name: "invalid_int_value",
+			jsonData: `{
+				"resourceSpans": [{
+					"resource": {
+						"attributes": [{
+							"key": "test_int",
+							"value": {
+								"intValue": "not-a-number"
+							}
+						}]
+					},
+					"scopeSpans": [{
+						"spans": [{
+							"traceId": "AQIDBAUGAAAAAAAAAAAAAAAAAA==",
+							"spanId": "AQIDBAUGAA==",
+							"name": "test-span"
+						}]
+					}]
+				}]
+			}`,
+			errorMsg: "invalid syntax",
+		},
+		{
+			name: "invalid_bytes_value",
+			jsonData: `{
+				"resourceSpans": [{
+					"resource": {
+						"attributes": [{
+							"key": "test_bytes",
+							"value": {
+								"bytesValue": "!@#$%^&*()not-base64"
+							}
+						}]
+					},
+					"scopeSpans": [{
+						"spans": [{
+							"traceId": "AQIDBAUGAAAAAAAAAAAAAAAAAA==",
+							"spanId": "AQIDBAUGAA==",
+							"name": "test-span"
+						}]
+					}]
+				}]
+			}`,
+			errorMsg: "illegal base64 data",
+		},
+		{
+			name: "invalid_span_attributes",
+			jsonData: `{
+				"resourceSpans": [{
+					"scopeSpans": [{
+						"spans": [{
+							"traceId": "AQIDBAUGAAAAAAAAAAAAAAAAAA==",
+							"spanId": "AQIDBAUGAA==",
+							"name": "test-span",
+							"attributes": [{
+								"key": "bad_int",
+								"value": {
+									"intValue": "invalid"
+								}
+							}]
+						}]
+					}]
+				}]
+			}`,
+			errorMsg: "invalid syntax",
+		},
+		{
+			name: "invalid_json_syntax",
+			jsonData: `{
+				"resourceSpans": [{
+					"resource": {
+						"attributes": [{invalid json here}]
+					}
+				}]
+			}`,
+			errorMsg: "", // fastjson will return a parse error
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := unmarshalTraceRequestDirectMsgpJSON(ctx, []byte(tc.jsonData), ri)
+			assert.Error(t, err)
+			assert.Contains(t, err.Error(), tc.errorMsg)
+		})
+	}
 }
 
 func TestSampleRateFromFloat(t *testing.T) {
