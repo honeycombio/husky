@@ -93,7 +93,6 @@ func TranslateTraceRequestFromReaderSizedWithMsgp(
 		defer func() {
 			zstdReader.Reset(nil)
 			zstdDecoderPool.Put(zstdReader)
-			zstdReader.Close()
 		}()
 
 		err := zstdReader.Reset(reader)
