@@ -132,13 +132,6 @@ var msgpAttributesPool = sync.Pool{
 	},
 }
 
-func recycleMsgpAttributes(m *msgpAttributes) {
-	if m != nil {
-		m.reset()
-		msgpAttributesPool.Put(m)
-	}
-}
-
 // Holds a list of messagepack-encoded key-value pairs, without a map header.
 type msgpAttributes struct {
 	buf       []byte
@@ -150,12 +143,14 @@ type msgpAttributes struct {
 	isError     bool
 }
 
-func (m *msgpAttributes) reset() {
+// Resets state and returns to the pool. Do not re-use after calling this.
+func (m *msgpAttributes) recycle() {
 	clear(m.keyHashes)
 	*m = msgpAttributes{
 		buf:       m.buf[:0],
 		keyHashes: m.keyHashes,
 	}
+	msgpAttributesPool.Put(m)
 }
 
 func (m *msgpAttributes) addAny(key []byte, value any) error {
@@ -368,7 +363,7 @@ func unmarshalResourceSpans(
 	var dataset string
 
 	resourceAttrs := msgpAttributesPool.Get().(*msgpAttributes)
-	defer recycleMsgpAttributes(resourceAttrs)
+	defer resourceAttrs.recycle()
 
 	l := len(data)
 	iNdEx := 0
@@ -908,7 +903,7 @@ func unmarshalScopeSpans(
 ) error {
 	// Get the instrumentation scope first
 	scopeAttrs := msgpAttributesPool.Get().(*msgpAttributes)
-	defer recycleMsgpAttributes(scopeAttrs)
+	defer scopeAttrs.recycle()
 
 	l := len(data)
 	iNdEx := 0
@@ -1037,7 +1032,7 @@ func unmarshalSpan(
 ) error {
 	// Collect span-specific attributes separately first
 	eventAttr := msgpAttributesPool.Get().(*msgpAttributes)
-	defer recycleMsgpAttributes(eventAttr)
+	defer eventAttr.recycle()
 
 	var eventsData, linksData [][]byte
 	var name, traceID, spanID []byte
@@ -1311,7 +1306,7 @@ func unmarshalSpanEvent(
 ) (*msgpAttributes, error) {
 	// Collect event-specific attributes separately
 	eventAttr := msgpAttributesPool.Get().(*msgpAttributes)
-	defer recycleMsgpAttributes(eventAttr)
+	defer eventAttr.recycle()
 
 	// Set trace info
 	if len(traceID) > 0 {
@@ -1493,7 +1488,7 @@ func unmarshalSpanLink(
 ) error {
 	// Collect link-specific attributes separately
 	eventAttr := msgpAttributesPool.Get().(*msgpAttributes)
-	defer recycleMsgpAttributes(eventAttr)
+	defer eventAttr.recycle()
 
 	// Set trace info
 	if len(traceID) > 0 {
