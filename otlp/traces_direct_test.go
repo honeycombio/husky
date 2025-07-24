@@ -1036,6 +1036,26 @@ func TestUnmarshalTraceRequestDirect_WithUnknownFields(t *testing.T) {
 	assert.Equal(t, "test-span", attrs["name"])
 }
 
+// Helper to create nested kvlist attributes with any value type at the leaf
+func createNestedMapWithAnyValue(depth int, leafValue *common.AnyValue) *common.AnyValue {
+	if depth == 0 {
+		return leafValue
+	}
+
+	return &common.AnyValue{
+		Value: &common.AnyValue_KvlistValue{
+			KvlistValue: &common.KeyValueList{
+				Values: []*common.KeyValue{
+					{
+						Key:   fmt.Sprintf("level%d", depth),
+						Value: createNestedMapWithAnyValue(depth-1, leafValue),
+					},
+				},
+			},
+		},
+	}
+}
+
 func TestUnmarshalTraceRequestDirect_NestedMapAttributes(t *testing.T) {
 	// Test nested map attribute flattening at various depths
 	// Expected behavior:
@@ -1050,7 +1070,7 @@ func TestUnmarshalTraceRequestDirect_NestedMapAttributes(t *testing.T) {
 	startTime := uint64(1234567890123456789)
 	endTime := uint64(1234567890987654321)
 
-	// Helper to create nested kvlist attributes
+	// Helper to create nested kvlist attributes with string values
 	var createNestedMap func(depth int, leafValue string) *common.AnyValue
 	createNestedMap = func(depth int, leafValue string) *common.AnyValue {
 		if depth == 0 {
@@ -1127,10 +1147,137 @@ func TestUnmarshalTraceRequestDirect_NestedMapAttributes(t *testing.T) {
 										Key:   "map6",
 										Value: createNestedMap(6, "value6"),
 									},
-									// Depth 7: should be JSON encoded
+									// Depth 7: should be JSON encoded - test all supported field types
 									{
-										Key:   "map7",
+										Key:   "map7_string",
 										Value: createNestedMap(7, "value7"),
+									},
+									{
+										Key: "map7_bool",
+										Value: createNestedMapWithAnyValue(6, &common.AnyValue{
+											Value: &common.AnyValue_KvlistValue{
+												KvlistValue: &common.KeyValueList{
+													Values: []*common.KeyValue{
+														{
+															Key: "level1",
+															Value: &common.AnyValue{
+																Value: &common.AnyValue_BoolValue{BoolValue: true},
+															},
+														},
+													},
+												},
+											},
+										}),
+									},
+									{
+										Key: "map7_int",
+										Value: createNestedMapWithAnyValue(6, &common.AnyValue{
+											Value: &common.AnyValue_KvlistValue{
+												KvlistValue: &common.KeyValueList{
+													Values: []*common.KeyValue{
+														{
+															Key: "level1",
+															Value: &common.AnyValue{
+																Value: &common.AnyValue_IntValue{IntValue: 42},
+															},
+														},
+													},
+												},
+											},
+										}),
+									},
+									{
+										Key: "map7_double",
+										Value: createNestedMapWithAnyValue(6, &common.AnyValue{
+											Value: &common.AnyValue_KvlistValue{
+												KvlistValue: &common.KeyValueList{
+													Values: []*common.KeyValue{
+														{
+															Key: "level1",
+															Value: &common.AnyValue{
+																Value: &common.AnyValue_DoubleValue{DoubleValue: 3.14159},
+															},
+														},
+													},
+												},
+											},
+										}),
+									},
+									{
+										Key: "map7_bytes",
+										Value: createNestedMapWithAnyValue(6, &common.AnyValue{
+											Value: &common.AnyValue_KvlistValue{
+												KvlistValue: &common.KeyValueList{
+													Values: []*common.KeyValue{
+														{
+															Key: "level1",
+															Value: &common.AnyValue{
+																Value: &common.AnyValue_BytesValue{BytesValue: []byte("hello world")},
+															},
+														},
+													},
+												},
+											},
+										}),
+									},
+									{
+										Key: "map7_array",
+										Value: createNestedMapWithAnyValue(6, &common.AnyValue{
+											Value: &common.AnyValue_KvlistValue{
+												KvlistValue: &common.KeyValueList{
+													Values: []*common.KeyValue{
+														{
+															Key: "level1",
+															Value: &common.AnyValue{
+																Value: &common.AnyValue_ArrayValue{
+																	ArrayValue: &common.ArrayValue{
+																		Values: []*common.AnyValue{
+																			{Value: &common.AnyValue_StringValue{StringValue: "item1"}},
+																			{Value: &common.AnyValue_IntValue{IntValue: 123}},
+																			{Value: &common.AnyValue_BoolValue{BoolValue: false}},
+																		},
+																	},
+																},
+															},
+														},
+													},
+												},
+											},
+										}),
+									},
+									{
+										Key: "map7_nested_kvlist",
+										Value: createNestedMapWithAnyValue(6, &common.AnyValue{
+											Value: &common.AnyValue_KvlistValue{
+												KvlistValue: &common.KeyValueList{
+													Values: []*common.KeyValue{
+														{
+															Key: "level1",
+															Value: &common.AnyValue{
+																Value: &common.AnyValue_KvlistValue{
+																	KvlistValue: &common.KeyValueList{
+																		Values: []*common.KeyValue{
+																			{
+																				Key: "inner_key",
+																				Value: &common.AnyValue{
+																					Value: &common.AnyValue_StringValue{StringValue: "inner_value"},
+																				},
+																			},
+																			{
+																				Key: "inner_num",
+																				Value: &common.AnyValue{
+																					Value: &common.AnyValue_IntValue{IntValue: 999},
+																				},
+																			},
+																		},
+																	},
+																},
+															},
+														},
+													},
+												},
+											},
+										}),
 									},
 								},
 							},
@@ -1141,59 +1288,121 @@ func TestUnmarshalTraceRequestDirect_NestedMapAttributes(t *testing.T) {
 		},
 	}
 
-	ri := RequestInfo{
-		ApiKey:      "abc123DEF456ghi789jklm",
-		Dataset:     "test-dataset",
-		ContentType: "application/protobuf",
+	// Test both protobuf and JSON serialization formats
+	testCases := []struct {
+		name        string
+		contentType string
+		serialize   func(*collectortrace.ExportTraceServiceRequest) ([]byte, error)
+		unmarshal   func(context.Context, []byte, RequestInfo) (*TranslateOTLPRequestResultMsgp, error)
+	}{
+		{
+			name:        "protobuf",
+			contentType: "application/protobuf",
+			serialize: func(req *collectortrace.ExportTraceServiceRequest) ([]byte, error) {
+				return proto.Marshal(req)
+			},
+			unmarshal: unmarshalTraceRequestDirectMsgp,
+		},
+		{
+			name:        "json",
+			contentType: "application/json",
+			serialize: func(req *collectortrace.ExportTraceServiceRequest) ([]byte, error) {
+				return protojson.Marshal(req)
+			},
+			unmarshal: unmarshalTraceRequestDirectMsgpJSON,
+		},
 	}
 
-	// First, get results from direct unmarshaling
-	data := serializeTraceRequest(t, req)
-	directResult, err := unmarshalTraceRequestDirectMsgp(context.Background(), data, ri)
-	require.NoError(t, err)
-	require.Len(t, directResult.Batches, 1)
-	require.Len(t, directResult.Batches[0].Events, 1)
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			data, err := tc.serialize(req)
+			require.NoError(t, err)
 
-	directEvent := directResult.Batches[0].Events[0]
-	directAttrs := decodeMessagePackAttributes(t, directEvent.Attributes)
+			ri := RequestInfo{
+				ApiKey:      "abc123DEF456ghi789jklm",
+				Dataset:     "test-dataset",
+				ContentType: tc.contentType,
+			}
 
-	// Then get results from regular unmarshaling
-	regularResult, err := TranslateTraceRequest(context.Background(), req, ri)
-	require.NoError(t, err)
-	require.Len(t, regularResult.Batches, 1)
-	require.Len(t, regularResult.Batches[0].Events, 1)
+			// First, get results from direct unmarshaling
+			directResult, err := tc.unmarshal(context.Background(), data, ri)
+			require.NoError(t, err)
+			require.Len(t, directResult.Batches, 1)
+			require.Len(t, directResult.Batches[0].Events, 1)
 
-	regularEvent := regularResult.Batches[0].Events[0]
-	regularAttrs := regularEvent.Attributes
+			directEvent := directResult.Batches[0].Events[0]
+			directAttrs := decodeMessagePackAttributes(t, directEvent.Attributes)
 
-	// Verify depth 1-5 flattening behavior
-	t.Run("Depth1-5_Flattening", func(t *testing.T) {
-		assert.Equal(t, "value1", directAttrs["map1.level1"])
-		assert.Equal(t, "value1", regularAttrs["map1.level1"])
+			// Then get results from regular unmarshaling
+			regularResult, err := TranslateTraceRequest(context.Background(), req, ri)
+			require.NoError(t, err)
+			require.Len(t, regularResult.Batches, 1)
+			require.Len(t, regularResult.Batches[0].Events, 1)
 
-		assert.Equal(t, "value2", directAttrs["map2.level2.level1"])
-		assert.Equal(t, "value2", regularAttrs["map2.level2.level1"])
+			regularEvent := regularResult.Batches[0].Events[0]
+			regularAttrs := regularEvent.Attributes
 
-		assert.Equal(t, "value3", directAttrs["map3.level3.level2.level1"])
-		assert.Equal(t, "value3", regularAttrs["map3.level3.level2.level1"])
+			// Verify depth 1-5 flattening behavior
+			t.Run("Depth1-5_Flattening", func(t *testing.T) {
+				assert.Equal(t, "value1", directAttrs["map1.level1"])
+				assert.Equal(t, "value1", regularAttrs["map1.level1"])
 
-		assert.Equal(t, "value4", directAttrs["map4.level4.level3.level2.level1"])
-		assert.Equal(t, "value4", regularAttrs["map4.level4.level3.level2.level1"])
+				assert.Equal(t, "value2", directAttrs["map2.level2.level1"])
+				assert.Equal(t, "value2", regularAttrs["map2.level2.level1"])
 
-		assert.Equal(t, "value5", directAttrs["map5.level5.level4.level3.level2.level1"])
-		assert.Equal(t, "value5", regularAttrs["map5.level5.level4.level3.level2.level1"])
-	})
+				assert.Equal(t, "value3", directAttrs["map3.level3.level2.level1"])
+				assert.Equal(t, "value3", regularAttrs["map3.level3.level2.level1"])
 
-	// Verify depth 6-7 JSON encoding behavior
-	t.Run("Depth6-7_JSONEncoding", func(t *testing.T) {
-		expectedMap6 := `{"level1":"value6"}` + "\n"
-		assert.Equal(t, expectedMap6, regularAttrs["map6.level6.level5.level4.level3.level2"])
-		assert.Equal(t, expectedMap6, directAttrs["map6.level6.level5.level4.level3.level2"])
+				assert.Equal(t, "value4", directAttrs["map4.level4.level3.level2.level1"])
+				assert.Equal(t, "value4", regularAttrs["map4.level4.level3.level2.level1"])
 
-		expectedMap7 := `{"level2":{"level1":"value7"}}` + "\n"
-		assert.Equal(t, expectedMap7, regularAttrs["map7.level7.level6.level5.level4.level3"])
-		assert.Equal(t, expectedMap7, directAttrs["map7.level7.level6.level5.level4.level3"])
-	})
+				assert.Equal(t, "value5", directAttrs["map5.level5.level4.level3.level2.level1"])
+				assert.Equal(t, "value5", regularAttrs["map5.level5.level4.level3.level2.level1"])
+			})
+
+			// Verify depth 6-7 JSON encoding behavior
+			t.Run("Depth6-7_JSONEncoding", func(t *testing.T) {
+				expectedMap6 := `{"level1":"value6"}` + "\n"
+				assert.Equal(t, expectedMap6, regularAttrs["map6.level6.level5.level4.level3.level2"])
+				assert.Equal(t, expectedMap6, directAttrs["map6.level6.level5.level4.level3.level2"])
+
+				// String value (original test)
+				expectedMap7String := `{"level2":{"level1":"value7"}}` + "\n"
+				assert.Equal(t, expectedMap7String, regularAttrs["map7_string.level7.level6.level5.level4.level3"])
+				assert.Equal(t, expectedMap7String, directAttrs["map7_string.level7.level6.level5.level4.level3"])
+
+				// Bool value
+				expectedMap7Bool := `{"level1":{"level1":true}}` + "\n"
+				assert.Equal(t, expectedMap7Bool, regularAttrs["map7_bool.level6.level5.level4.level3.level2"])
+				assert.Equal(t, expectedMap7Bool, directAttrs["map7_bool.level6.level5.level4.level3.level2"])
+
+				// Int value
+				expectedMap7Int := `{"level1":{"level1":42}}` + "\n"
+				assert.Equal(t, expectedMap7Int, regularAttrs["map7_int.level6.level5.level4.level3.level2"])
+				assert.Equal(t, expectedMap7Int, directAttrs["map7_int.level6.level5.level4.level3.level2"])
+
+				// Double value
+				expectedMap7Double := `{"level1":{"level1":3.14159}}` + "\n"
+				assert.Equal(t, expectedMap7Double, regularAttrs["map7_double.level6.level5.level4.level3.level2"])
+				assert.Equal(t, expectedMap7Double, directAttrs["map7_double.level6.level5.level4.level3.level2"])
+
+				// Bytes value (base64 encoded in JSON)
+				expectedMap7Bytes := `{"level1":{"level1":"aGVsbG8gd29ybGQ="}}` + "\n"
+				assert.Equal(t, expectedMap7Bytes, regularAttrs["map7_bytes.level6.level5.level4.level3.level2"])
+				assert.Equal(t, expectedMap7Bytes, directAttrs["map7_bytes.level6.level5.level4.level3.level2"])
+
+				// Array value
+				expectedMap7Array := `{"level1":{"level1":["item1",123,false]}}` + "\n"
+				assert.Equal(t, expectedMap7Array, regularAttrs["map7_array.level6.level5.level4.level3.level2"])
+				assert.Equal(t, expectedMap7Array, directAttrs["map7_array.level6.level5.level4.level3.level2"])
+
+				// Nested kvlist value
+				expectedMap7Nested := `{"level1":{"level1":{"inner_key":"inner_value","inner_num":999}}}` + "\n"
+				assert.Equal(t, expectedMap7Nested, regularAttrs["map7_nested_kvlist.level6.level5.level4.level3.level2"])
+				assert.Equal(t, expectedMap7Nested, directAttrs["map7_nested_kvlist.level6.level5.level4.level3.level2"])
+			})
+		})
+	}
 }
 
 // BenchmarkUnmarshalTraceRequestDirectMsgp benchmarks the direct unmarshaling with 100 scalar attributes
@@ -1369,29 +1578,6 @@ func TestUnmarshalTraceRequestDirectJSON_ErrorHandling(t *testing.T) {
 				}]
 			}`,
 			errorMsg: "invalid syntax",
-		},
-		{
-			name: "invalid_bytes_value",
-			jsonData: `{
-				"resourceSpans": [{
-					"resource": {
-						"attributes": [{
-							"key": "test_bytes",
-							"value": {
-								"bytesValue": "!@#$%^&*()not-base64"
-							}
-						}]
-					},
-					"scopeSpans": [{
-						"spans": [{
-							"traceId": "AQIDBAUGAAAAAAAAAAAAAAAAAA==",
-							"spanId": "AQIDBAUGAA==",
-							"name": "test-span"
-						}]
-					}]
-				}]
-			}`,
-			errorMsg: "illegal base64 data",
 		},
 		{
 			name: "invalid_span_attributes",

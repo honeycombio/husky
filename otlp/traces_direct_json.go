@@ -272,16 +272,13 @@ func unmarshalAnyValueIntoAttrsJSON(
 			attrs.addFloat64(key, floatVal)
 
 		case "bytesValue":
-			// Bytes are base64 encoded in JSON
+			// Bytes are base64 encoded in JSON. We don't need to decode it since
+			// we're just turning it back into JSON. Note if we pass this as []byte
+			// instead of string, the JSON marshaller will double-encode it.
 			strBytes := v.GetStringBytes()
-			var b []byte
-			b, err = base64.StdEncoding.DecodeString(string(strBytes))
-			if err != nil {
-				return
-			}
+			attrs.addString(key, []byte(marshalAnyToJSON(string(strBytes))))
 
 			husky.AddTelemetryAttribute(ctx, "received_bytes_attr_type", true)
-			attrs.addAny(key, addAttributeToMapAsJsonDirect(b))
 
 		case "arrayValue":
 			// For arrays, we need to parse and JSON encode
@@ -291,7 +288,7 @@ func unmarshalAnyValueIntoAttrsJSON(
 			if err != nil {
 				return
 			}
-			attrs.addAny(key, addAttributeToMapAsJsonDirect(arr))
+			attrs.addString(key, marshalAnyToJSON(arr))
 
 		case "kvlistValue":
 			// For kvlists, handle flattening
@@ -312,7 +309,7 @@ func unmarshalAnyValueIntoAttrsJSON(
 				if err != nil {
 					return
 				}
-				attrs.addAny(key, addAttributeToMapAsJsonDirect(m))
+				attrs.addString(key, marshalAnyToJSON(m))
 			}
 		}
 	})
@@ -393,14 +390,14 @@ func unmarshalAnyValueJSON(ctx context.Context, v *fastjson.Value) (any, error) 
 
 		case "arrayValue":
 			var arr []any
-			arr, err := unmarshalArrayValueJSON(ctx, v)
+			arr, err = unmarshalArrayValueJSON(ctx, v)
 			if err == nil {
 				result = arr
 			}
 
 		case "kvlistValue":
 			var m map[string]any
-			m, err := unmarshalKvlistValueJSON(ctx, v)
+			m, err = unmarshalKvlistValueJSON(ctx, v)
 			if err == nil {
 				result = m
 			}
@@ -459,7 +456,8 @@ func unmarshalKvlistValueJSON(ctx context.Context, v *fastjson.Value) (map[strin
 	return result, err
 }
 
-// unmarshalKvlistValueFlattenJSON parses a KeyValueList from JSON and flattens it into msgpAttributes
+// unmarshalKvlistValueFlattenJSON parses a KeyValueList from JSON and flattens it
+// into msgpAttributes
 func unmarshalKvlistValueFlattenJSON(
 	ctx context.Context,
 	v *fastjson.Value,
@@ -609,13 +607,18 @@ func unmarshalSpanJSON(
 	eventAttr := msgpAttributesPool.Get().(*msgpAttributes)
 	defer eventAttr.recycle()
 
-	var name, traceID, spanID []byte
 	var traceState string
-	var statusCode int64
 	var startTimeUnixNano, endTimeUnixNano uint64
-	kindStr := "unspecified"
 	sampleRate := defaultSampleRate
 	var eventsArray, linksArray []*fastjson.Value
+
+	// Initialize span attributes struct
+	fields := spanFields{
+		commonFields: commonFields{
+			metaSignalType: "trace",
+		},
+		spanKind: "unspecified",
+	}
 
 	obj, err := v.Object()
 	if err != nil {
@@ -630,7 +633,7 @@ func unmarshalSpanJSON(
 			var b []byte
 			b, err = base64.StdEncoding.DecodeString(string(strBytes))
 			if err == nil {
-				traceID = b
+				fields.traceID = b
 			}
 
 		case "spanId":
@@ -639,14 +642,14 @@ func unmarshalSpanJSON(
 			var b []byte
 			b, err = base64.StdEncoding.DecodeString(string(strBytes))
 			if err == nil {
-				spanID = b
+				fields.spanID = b
 			}
 
 		case "traceState":
 			traceStateBytes := v.GetStringBytes()
 			traceState = string(traceStateBytes)
 			if traceState != "" {
-				eventAttr.addString([]byte("trace.trace_state"), traceStateBytes)
+				fields.traceState = traceStateBytes
 
 				rate, ok := getSampleRateFromOTelSamplingThreshold(traceState)
 				if ok {
@@ -660,11 +663,11 @@ func unmarshalSpanJSON(
 			var b []byte
 			b, err = base64.StdEncoding.DecodeString(string(strBytes))
 			if err == nil && len(b) > 0 {
-				eventAttr.addHexID([]byte("trace.parent_id"), b)
+				fields.parentID = b
 			}
 
 		case "name":
-			name = v.GetStringBytes()
+			fields.name = v.GetStringBytes()
 
 		case "kind":
 			// In JSON, kind can be either string enum name or integer
@@ -673,24 +676,24 @@ func unmarshalSpanJSON(
 				enumBytes := v.GetStringBytes()
 				switch string(enumBytes) {
 				case "SPAN_KIND_UNSPECIFIED":
-					kindStr = "unspecified"
+					fields.spanKind = "unspecified"
 				case "SPAN_KIND_INTERNAL":
-					kindStr = "internal"
+					fields.spanKind = "internal"
 				case "SPAN_KIND_SERVER":
-					kindStr = "server"
+					fields.spanKind = "server"
 				case "SPAN_KIND_CLIENT":
-					kindStr = "client"
+					fields.spanKind = "client"
 				case "SPAN_KIND_PRODUCER":
-					kindStr = "producer"
+					fields.spanKind = "producer"
 				case "SPAN_KIND_CONSUMER":
-					kindStr = "consumer"
+					fields.spanKind = "consumer"
 				default:
-					kindStr = "unspecified"
+					fields.spanKind = "unspecified"
 				}
 			} else {
 				// Integer value
 				kind := trace.Span_SpanKind(v.GetInt())
-				kindStr = getSpanKind(kind)
+				fields.spanKind = getSpanKind(kind)
 			}
 
 		case "startTimeUnixNano":
@@ -736,7 +739,7 @@ func unmarshalSpanJSON(
 				case "message":
 					messageBytes := v.GetStringBytes()
 					if len(messageBytes) > 0 {
-						eventAttr.addString([]byte("status_message"), messageBytes)
+						fields.statusMessage = messageBytes
 					}
 
 				case "code":
@@ -746,22 +749,22 @@ func unmarshalSpanJSON(
 						codeBytes := v.GetStringBytes()
 						switch string(codeBytes) {
 						case "STATUS_CODE_UNSET":
-							statusCode = 0
+							fields.statusCode = 0
 						case "STATUS_CODE_OK":
-							statusCode = 1
+							fields.statusCode = 1
 						case "STATUS_CODE_ERROR":
-							statusCode = 2
-							eventAttr.addBool([]byte("error"), true)
+							fields.statusCode = 2
+							fields.hasError = true
 							eventAttr.isError = true
 						default:
-							statusCode = 0
+							fields.statusCode = 0
 						}
 					} else {
 						// Integer value
-						statusCode = int64(v.GetInt())
+						fields.statusCode = int64(v.GetInt())
 						// Check if this is an error status
-						if statusCode == 2 { // STATUS_CODE_ERROR
-							eventAttr.addBool([]byte("error"), true)
+						if fields.statusCode == 2 { // STATUS_CODE_ERROR
+							fields.hasError = true
 							eventAttr.isError = true
 						}
 					}
@@ -773,33 +776,27 @@ func unmarshalSpanJSON(
 		return err
 	}
 
-	// Add fields which are always expected
-	eventAttr.addTraceID([]byte("trace.trace_id"), traceID)
-	eventAttr.addHexID([]byte("trace.span_id"), spanID)
-	eventAttr.addString([]byte("name"), name)
-	eventAttr.addString([]byte("meta.signal_type"), []byte("trace"))
-	eventAttr.addInt64([]byte("status_code"), statusCode)
-	eventAttr.addInt64([]byte("span.num_events"), int64(len(eventsArray)))
-	eventAttr.addInt64([]byte("span.num_links"), int64(len(linksArray)))
-	eventAttr.addString([]byte("span.kind"), []byte(kindStr))
-	eventAttr.addString([]byte("type"), []byte(kindStr))
-
-	eventAttr.addAttributes(scopeAttrs)
-	eventAttr.addAttributes(resourceAttrs)
-
-	// Calculate duration
-	duration := float64(0)
+	// Calculate duration directly in spanAttrs
 	if startTimeUnixNano > 0 && endTimeUnixNano > 0 {
 		if endTimeUnixNano >= startTimeUnixNano {
 			durationNs := float64(endTimeUnixNano - startTimeUnixNano)
-			duration = durationNs / float64(time.Millisecond)
+			fields.durationMs = durationNs / float64(time.Millisecond)
 		} else {
 			// Negative duration
-			duration = 0
-			eventAttr.addBool([]byte("meta.invalid_duration"), true)
+			fields.durationMs = 0
+			fields.hasInvalidDuration = true
 		}
 	}
-	eventAttr.addFloat64([]byte("duration_ms"), duration)
+
+	// Populate span attributes struct with remaining fields
+	fields.spanNumEvents = int64(len(eventsArray))
+	fields.spanNumLinks = int64(len(linksArray))
+
+	// Add all span attributes to eventAttr
+	fields.addToMsgpAttributes(eventAttr)
+
+	eventAttr.addAttributes(scopeAttrs)
+	eventAttr.addAttributes(resourceAttrs)
 
 	timestamp := timestampFromUnixNano(startTimeUnixNano)
 
@@ -811,7 +808,19 @@ func unmarshalSpanJSON(
 	// Process span events first
 	var firstExceptionAttrs *msgpAttributes
 	for _, eventVal := range eventsArray {
-		exceptionAttrs, err := unmarshalSpanEventJSON(ctx, eventVal, traceID, spanID, name, startTimeUnixNano, resourceAttrs, scopeAttrs, sampleRate, eventAttr.isError, batch)
+		exceptionAttrs, err := unmarshalSpanEventJSON(
+			ctx,
+			eventVal,
+			fields.traceID,
+			fields.spanID,
+			fields.name,
+			startTimeUnixNano,
+			resourceAttrs,
+			scopeAttrs,
+			sampleRate,
+			eventAttr.isError,
+			batch,
+		)
 		if err != nil {
 			return err
 		}
@@ -829,7 +838,19 @@ func unmarshalSpanJSON(
 
 	// Process span links next
 	for _, linkVal := range linksArray {
-		err := unmarshalSpanLinkJSON(ctx, linkVal, traceID, spanID, name, timestamp, resourceAttrs, scopeAttrs, sampleRate, eventAttr.isError, batch)
+		err := unmarshalSpanLinkJSON(
+			ctx,
+			linkVal,
+			fields.traceID,
+			fields.spanID,
+			fields.name,
+			timestamp,
+			resourceAttrs,
+			scopeAttrs,
+			sampleRate,
+			eventAttr.isError,
+			batch,
+		)
 		if err != nil {
 			return err
 		}
@@ -867,23 +888,19 @@ func unmarshalSpanEventJSON(
 ) (*msgpAttributes, error) {
 	eventAttr := msgpAttributesPool.Get().(*msgpAttributes)
 
-	// Set trace info
-	if len(traceID) > 0 {
-		eventAttr.addTraceID([]byte("trace.trace_id"), traceID)
-	}
-	if len(parentSpanID) > 0 {
-		eventAttr.addHexID([]byte("trace.parent_id"), parentSpanID)
-	}
-
-	// Mark as span event
-	eventAttr.addString([]byte("meta.annotation_type"), []byte("span_event"))
-	eventAttr.addString([]byte("meta.signal_type"), []byte("trace"))
-	if len(parentName) > 0 {
-		eventAttr.addString([]byte("parent_name"), parentName)
+	// Initialize span event fields struct
+	fields := spanEventFields{
+		commonFields: commonFields{
+			traceID:            traceID,
+			parentID:           parentSpanID,
+			parentName:         parentName,
+			metaAnnotationType: "span_event",
+			metaSignalType:     "trace",
+			hasError:           isError,
+		},
 	}
 
 	// Parse event fields
-	var name []byte
 	var timeUnixNano uint64
 	var exceptionAttrs *msgpAttributes
 	var attributes []*fastjson.Value
@@ -905,7 +922,7 @@ func unmarshalSpanEventJSON(
 			}
 
 		case "name":
-			name = v.GetStringBytes()
+			fields.name = v.GetStringBytes()
 
 		case "attributes":
 			attributes = v.GetArray()
@@ -921,7 +938,7 @@ func unmarshalSpanEventJSON(
 		}
 
 		// If this is an exception event, also collect exception-specific attributes
-		if bytes.Equal(name, []byte("exception")) {
+		if bytes.Equal(fields.name, []byte("exception")) {
 			exceptionAttrs = msgpAttributesPool.Get().(*msgpAttributes)
 
 			// Extract exception attributes
@@ -972,25 +989,19 @@ func unmarshalSpanEventJSON(
 		}
 	}
 
-	// Set event name
-	eventAttr.addString([]byte("name"), name)
-
 	// Calculate duration relative to span start
 	if timeUnixNano > 0 && spanStartTime > 0 {
 		if timeUnixNano >= spanStartTime {
-			timeSinceSpanStart := float64(timeUnixNano-spanStartTime) / float64(time.Millisecond)
-			eventAttr.addFloat64([]byte("meta.time_since_span_start_ms"), timeSinceSpanStart)
+			fields.timeSinceSpanStartMs = float64(timeUnixNano-spanStartTime) / float64(time.Millisecond)
 		} else {
 			// Event time is before span start time
-			eventAttr.addFloat64([]byte("meta.time_since_span_start_ms"), float64(0))
-			eventAttr.addBool([]byte("meta.invalid_time_since_span_start"), true)
+			fields.timeSinceSpanStartMs = float64(0)
+			fields.hasInvalidTimeSinceSpanStart = true
 		}
 	}
 
-	// Add error status from parent span if applicable
-	if isError {
-		eventAttr.addBool([]byte("error"), true)
-	}
+	// Add all span event fields to eventAttr
+	fields.addToMsgpAttributes(eventAttr)
 
 	// Add resource and scope attributes
 	eventAttr.addAttributes(scopeAttrs)
@@ -1028,23 +1039,19 @@ func unmarshalSpanLinkJSON(
 ) error {
 	eventAttr := msgpAttributesPool.Get().(*msgpAttributes)
 
-	// Set trace info
-	if len(traceID) > 0 {
-		eventAttr.addTraceID([]byte("trace.trace_id"), traceID)
-	}
-	if len(parentSpanID) > 0 {
-		eventAttr.addHexID([]byte("trace.parent_id"), parentSpanID)
-	}
-
-	// Mark as link
-	eventAttr.addString([]byte("meta.annotation_type"), []byte("link"))
-	eventAttr.addString([]byte("meta.signal_type"), []byte("trace"))
-	if len(parentName) > 0 {
-		eventAttr.addString([]byte("parent_name"), parentName)
+	// Initialize span link fields struct
+	fields := spanLinkFields{
+		commonFields: commonFields{
+			traceID:            traceID,
+			parentID:           parentSpanID,
+			parentName:         parentName,
+			metaAnnotationType: "link",
+			metaSignalType:     "trace",
+			hasError:           isError,
+		},
 	}
 
 	// Parse link fields
-	var linkedTraceID, linkedSpanID []byte
 
 	obj, err := v.Object()
 	if err != nil {
@@ -1059,7 +1066,7 @@ func unmarshalSpanLinkJSON(
 			var b []byte
 			b, err = base64.StdEncoding.DecodeString(string(strBytes))
 			if err == nil {
-				linkedTraceID = b
+				fields.linkedTraceID = b
 			}
 
 		case "spanId":
@@ -1068,7 +1075,7 @@ func unmarshalSpanLinkJSON(
 			var b []byte
 			b, err = base64.StdEncoding.DecodeString(string(strBytes))
 			if err == nil {
-				linkedSpanID = b
+				fields.linkedSpanID = b
 			}
 
 		case "attributes":
@@ -1084,18 +1091,8 @@ func unmarshalSpanLinkJSON(
 		return err
 	}
 
-	// Set link fields
-	if len(linkedTraceID) > 0 {
-		eventAttr.addTraceID([]byte("trace.link.trace_id"), linkedTraceID)
-	}
-	if len(linkedSpanID) > 0 {
-		eventAttr.addHexID([]byte("trace.link.span_id"), linkedSpanID)
-	}
-
-	// Add error status from parent span if applicable
-	if isError {
-		eventAttr.addBool([]byte("error"), true)
-	}
+	// Add all span link fields to eventAttr
+	fields.addToMsgpAttributes(eventAttr)
 
 	// Add resource and scope attributes
 	eventAttr.addAttributes(scopeAttrs)
