@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/sampling"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	collectortrace "go.opentelemetry.io/proto/otlp/collector/trace/v1"
@@ -85,6 +86,9 @@ func TestUnmarshalTraceRequestDirect_Complete(t *testing.T) {
 	// For the error span with negative duration
 	errorStartTime := uint64(1234567890987654321)
 	errorEndTime := uint64(1234567890123456789) // end before start
+
+	dbSpanThreshold, err := sampling.ProbabilityToThreshold(1.0 / 7.0)
+	require.NoError(t, err)
 
 	req := &collectortrace.ExportTraceServiceRequest{
 		ResourceSpans: []*trace.ResourceSpans{
@@ -349,6 +353,7 @@ func TestUnmarshalTraceRequestDirect_Complete(t *testing.T) {
 								Kind:              trace.Span_SPAN_KIND_CLIENT,
 								StartTimeUnixNano: startTime + 50_000_000,
 								EndTimeUnixNano:   endTime - 50_000_000,
+								TraceState:        "w3c=false;th=" + dbSpanThreshold.TValue(),
 								Attributes: []*common.KeyValue{
 									{
 										Key: "db.statement",
@@ -691,18 +696,19 @@ func TestUnmarshalTraceRequestDirect_Complete(t *testing.T) {
 			dbSpan := &batch1.Events[4]
 			dbAttrs := decodeMessagePackAttributes(t, dbSpan.Attributes)
 			assert.Equal(t, addService1CommonAttributes(map[string]any{
-				"name":            "DB Query",
-				"trace.trace_id":  traceID1,
-				"trace.span_id":   spanID2,
-				"trace.parent_id": spanID1,
-				"span.kind":       "client",
-				"type":            "client",
-				"db.statement":    "SELECT * FROM users WHERE id = ?",
-				"status_code":     int64(0),
-				"duration_ms":     float64(764.197532),
-				"span.num_events": int64(0),
-				"span.num_links":  int64(0),
-				"conflicting":     "scope",
+				"name":              "DB Query",
+				"trace.trace_id":    traceID1,
+				"trace.span_id":     spanID2,
+				"trace.parent_id":   spanID1,
+				"span.kind":         "client",
+				"type":              "client",
+				"db.statement":      "SELECT * FROM users WHERE id = ?",
+				"status_code":       int64(0),
+				"duration_ms":       float64(764.197532),
+				"span.num_events":   int64(0),
+				"span.num_links":    int64(0),
+				"conflicting":       "scope",
+				"trace.trace_state": "w3c=false;th=db6db6db6db6dc",
 
 				// Scope attributes from HTTP instrumentation library
 				"library.name":                      "go.opentelemetry.io/contrib/instrumentation/net/http",
@@ -710,7 +716,7 @@ func TestUnmarshalTraceRequestDirect_Complete(t *testing.T) {
 				"telemetry.instrumentation_library": true,
 				"scope.attr":                        "scope_value",
 			}), dbAttrs)
-			assert.Equal(t, int32(1), dbSpan.SampleRate) // DB Query span has no explicit sampleRate, gets default
+			assert.Equal(t, int32(7), dbSpan.SampleRate) // DB Query span gets sample rate from trace state.
 			assert.Equal(t, time.Unix(0, int64(startTime+50_000_000)).UTC(), dbSpan.Timestamp)
 
 			// Error span's link at index 7
