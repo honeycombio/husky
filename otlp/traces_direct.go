@@ -83,13 +83,11 @@ package otlp
 import (
 	"bytes"
 	"context"
-	"encoding/base64"
 	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
 	"math"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -140,7 +138,6 @@ type msgpAttributes struct {
 	// memoized metadata fields we'll need internally
 	serviceName string
 	sampleRate  int32
-	isError     bool
 }
 
 // Resets state and returns to the pool. Do not re-use after calling this.
@@ -185,9 +182,6 @@ func (m *msgpAttributes) addBool(key []byte, value bool) {
 // so it's important to call this first with highest-precedence data, then the least.
 func (m *msgpAttributes) addAttributes(add *msgpAttributes) {
 	m.buf = append(m.buf, add.buf...)
-	if !m.isError {
-		m.isError = add.isError
-	}
 	if m.serviceName == "" {
 		m.serviceName = add.serviceName
 	}
@@ -291,6 +285,160 @@ func (m *msgpAttributes) addHexID(key []byte, spanID []byte) {
 	m.buf = hex.AppendEncode(m.buf, spanID)
 }
 
+// Holds universal attributes common to all trace event types, or ones which
+// will be output only set when they have a non-default value.
+type commonFields struct {
+	traceID            []byte
+	parentID           []byte
+	parentName         []byte
+	metaAnnotationType string
+	metaSignalType     string
+	hasError           bool
+}
+
+func (s *commonFields) addToMsgpAttributes(attrs *msgpAttributes) {
+	attrs.addTraceID([]byte("trace.trace_id"), s.traceID)
+	if len(s.parentID) > 0 {
+		attrs.addHexID([]byte("trace.parent_id"), s.parentID)
+	}
+
+	// Add parent name if present
+	if len(s.parentName) > 0 {
+		attrs.addString([]byte("parent_name"), s.parentName)
+	}
+
+	// Add metadata - only add annotation type if it's set (not for regular spans)
+	if s.metaAnnotationType != "" {
+		attrs.addString([]byte("meta.annotation_type"), []byte(s.metaAnnotationType))
+	}
+	attrs.addString([]byte("meta.signal_type"), []byte(s.metaSignalType))
+
+	// Add error status if applicable
+	if s.hasError {
+		attrs.addBool([]byte("error"), true)
+	}
+}
+
+// spanFields holds the universal attributes that are set for spans
+type spanFields struct {
+	commonFields
+
+	name               []byte
+	spanID             []byte
+	traceState         []byte
+	statusMessage      []byte
+	spanKind           string
+	statusCode         int64
+	spanNumEvents      int64
+	spanNumLinks       int64
+	durationMs         float64
+	hasInvalidDuration bool
+}
+
+// addToMsgpAttributes adds all the span attributes to the given msgpAttributes
+func (s *spanFields) addToMsgpAttributes(attrs *msgpAttributes) {
+	s.commonFields.addToMsgpAttributes(attrs)
+
+	// Add name (always expected)
+	attrs.addString([]byte("name"), s.name)
+
+	// Add span ID (always expected, even when empty)
+	attrs.addHexID([]byte("trace.span_id"), s.spanID)
+
+	// Add trace state if present
+	if len(s.traceState) > 0 {
+		attrs.addString([]byte("trace.trace_state"), s.traceState)
+	}
+
+	// Add status fields
+	attrs.addInt64([]byte("status_code"), s.statusCode)
+	if len(s.statusMessage) > 0 {
+		attrs.addString([]byte("status_message"), s.statusMessage)
+	}
+
+	// Add span metadata
+	attrs.addInt64([]byte("span.num_events"), s.spanNumEvents)
+	attrs.addInt64([]byte("span.num_links"), s.spanNumLinks)
+	attrs.addString([]byte("span.kind"), []byte(s.spanKind))
+	attrs.addString([]byte("type"), []byte(s.spanKind))
+
+	// Add duration
+	attrs.addFloat64([]byte("duration_ms"), s.durationMs)
+
+	// Add invalid duration flag
+	if s.hasInvalidDuration {
+		attrs.addBool([]byte("meta.invalid_duration"), true)
+	}
+}
+
+// spanEventFields holds the universal attributes that are set for span events
+type spanEventFields struct {
+	commonFields
+
+	name                         []byte
+	timeSinceSpanStartMs         float64
+	hasInvalidTimeSinceSpanStart bool
+}
+
+// addToMsgpAttributes adds all the span event attributes to the given msgpAttributes
+func (s *spanEventFields) addToMsgpAttributes(attrs *msgpAttributes) {
+	s.commonFields.addToMsgpAttributes(attrs)
+
+	// Add name (always expected)
+	attrs.addString([]byte("name"), s.name)
+
+	// Add time since span start
+	attrs.addFloat64([]byte("meta.time_since_span_start_ms"), s.timeSinceSpanStartMs)
+
+	// Add invalid time flag if needed
+	if s.hasInvalidTimeSinceSpanStart {
+		attrs.addBool([]byte("meta.invalid_time_since_span_start"), true)
+	}
+}
+
+// spanLinkFields holds the universal attributes that are set for span links
+type spanLinkFields struct {
+	commonFields
+
+	linkedTraceID []byte
+	linkedSpanID  []byte
+}
+
+// addToMsgpAttributes adds all the span link attributes to the given msgpAttributes
+func (s *spanLinkFields) addToMsgpAttributes(attrs *msgpAttributes) {
+	s.commonFields.addToMsgpAttributes(attrs)
+
+	// Add linked trace and span IDs
+	if len(s.linkedTraceID) > 0 {
+		attrs.addTraceID([]byte("trace.link.trace_id"), s.linkedTraceID)
+	}
+	if len(s.linkedSpanID) > 0 {
+		attrs.addHexID([]byte("trace.link.span_id"), s.linkedSpanID)
+	}
+}
+
+// isSampleRateKey returns true if the given key is a sample rate field
+func isSampleRateKey(key []byte) bool {
+	return bytes.Equal(key, []byte("sampleRate")) || bytes.Equal(key, []byte("SampleRate"))
+}
+
+// trySetSampleRate attempts to set the sample rate on attrs if the key is a
+// sample rate field.
+// Returns true of the value was set, false otherwise.
+// Callers must call isSampleRateKey() first. This comes second as a separate
+// call to avoid placing a scalar value in the any parameter and allocating heap.
+// Yes, this does do a single heap allocation which is strictly avoidable, but
+// this saves a lot of verbosity.
+func trySetSampleRate(key []byte, value any, attrs *msgpAttributes) bool {
+	sampleRate := getSampleRateFromAnyValue(value)
+	// Only set if we don't already have a sample rate, or if this is the lowercase "sampleRate" (preferred)
+	if attrs.sampleRate == 0 || bytes.Equal(key, []byte("sampleRate")) {
+		attrs.sampleRate = sampleRate
+		return true
+	}
+	return false
+}
+
 // unmarshalTraceRequestDirectMsgp translates a serialized OTLP trace request directly
 // into a Honeycomb-friendly structure without creating intermediate proto structs,
 // which is EXTREMELY expensive.
@@ -302,7 +450,11 @@ func (m *msgpAttributes) addHexID(key []byte, spanID []byte) {
 // complex than it already is, by adding a new EntityRef field to Resource.
 // https://github.com/open-telemetry/opentelemetry-proto/blob/main/opentelemetry/proto/resource/v1/resource.proto#L43
 // When this is finalized we'll presumably have to add support here.
-func unmarshalTraceRequestDirectMsgp(ctx context.Context, data []byte, ri RequestInfo) (*TranslateOTLPRequestResultMsgp, error) {
+func unmarshalTraceRequestDirectMsgp(
+	ctx context.Context,
+	data []byte,
+	ri RequestInfo,
+) (*TranslateOTLPRequestResultMsgp, error) {
 	if err := ri.ValidateTracesHeaders(); err != nil {
 		return nil, err
 	}
@@ -520,7 +672,13 @@ func parseKeyValue(data []byte) ([]byte, []byte, error) {
 }
 
 // processValueDirect handles a value recursively, tracking depth for proper flattening
-func processValueDirect(ctx context.Context, key []byte, value any, attrs *msgpAttributes, depth int) error {
+func processValueDirect(
+	ctx context.Context,
+	key []byte,
+	value any,
+	attrs *msgpAttributes,
+	depth int,
+) error {
 	var err error
 
 	// Handle different value types to match legacy behavior
@@ -528,17 +686,11 @@ func processValueDirect(ctx context.Context, key []byte, value any, attrs *msgpA
 	case []byte:
 		// Bytes are JSON encoded - match the legacy behavior
 		husky.AddTelemetryAttribute(ctx, "received_bytes_attr_type", true)
-		err = attrs.addAny(key, addAttributeToMapAsJsonDirect(v))
-		if err != nil {
-			return err
-		}
+		attrs.addString(key, marshalAnyToJSON(v))
 	case []any:
 		// Arrays are JSON encoded
 		husky.AddTelemetryAttribute(ctx, "received_array_attr_type", true)
-		err = attrs.addAny(key, addAttributeToMapAsJsonDirect(v))
-		if err != nil {
-			return err
-		}
+		attrs.addString(key, marshalAnyToJSON(v))
 	case map[string]any:
 		// Kvlists are flattened with dot notation
 		husky.AddTelemetryAttributes(ctx, map[string]any{
@@ -567,10 +719,7 @@ func processValueDirect(ctx context.Context, key []byte, value any, attrs *msgpA
 			}
 		} else {
 			// Max depth exceeded, JSON encode the whole thing
-			err = attrs.addAny(key, addAttributeToMapAsJsonDirect(v))
-			if err != nil {
-				return err
-			}
+			attrs.addString(key, marshalAnyToJSON(v))
 		}
 	default:
 		// Simple types - just encode directly
@@ -625,13 +774,7 @@ func unmarshalKeyValue(ctx context.Context, data []byte, attrs *msgpAttributes, 
 					return err
 				}
 
-				if bytes.Equal(key, []byte("sampleRate")) || bytes.Equal(key, []byte("SampleRate")) {
-					// Convert string to float for sample rate
-					if f, err := strconv.ParseFloat(string(slice), 64); err == nil {
-						if attrs.sampleRate == 0 || bytes.Equal(key, []byte("sampleRate")) {
-							attrs.sampleRate = sampleRateFromFloat(f)
-						}
-					}
+				if isSampleRateKey(key) && trySetSampleRate(key, string(slice), attrs) {
 					return nil
 				}
 
@@ -657,11 +800,7 @@ func unmarshalKeyValue(ctx context.Context, data []byte, attrs *msgpAttributes, 
 				}
 				v := int64(decodeVarint(valueBytes, &iNdEx))
 
-				if bytes.Equal(key, []byte("sampleRate")) || bytes.Equal(key, []byte("SampleRate")) {
-					v = min(v, math.MaxInt32)
-					if attrs.sampleRate == 0 || bytes.Equal(key, []byte("sampleRate")) {
-						attrs.sampleRate = max(defaultSampleRate, int32(v))
-					}
+				if isSampleRateKey(key) && trySetSampleRate(key, v, attrs) {
 					return nil
 				}
 
@@ -675,10 +814,7 @@ func unmarshalKeyValue(ctx context.Context, data []byte, attrs *msgpAttributes, 
 				}
 				floatVal := math.Float64frombits(v)
 
-				if bytes.Equal(key, []byte("sampleRate")) || bytes.Equal(key, []byte("SampleRate")) {
-					if attrs.sampleRate == 0 || bytes.Equal(key, []byte("sampleRate")) {
-						attrs.sampleRate = sampleRateFromFloat(floatVal)
-					}
+				if isSampleRateKey(key) && trySetSampleRate(key, floatVal, attrs) {
 					return nil
 				}
 
@@ -1026,7 +1162,7 @@ func unmarshalInstrumentationScope(ctx context.Context, data []byte, attrs *msgp
 func unmarshalSpan(
 	ctx context.Context,
 	data []byte,
-	resourceAttrs,
+	resourceAttrs *msgpAttributes,
 	scopeAttrs *msgpAttributes,
 	batch *BatchMsgp,
 ) error {
@@ -1035,11 +1171,16 @@ func unmarshalSpan(
 	defer eventAttr.recycle()
 
 	var eventsData, linksData [][]byte
-	var name, traceID, spanID []byte
-	var statusCode int64
 	var startTimeUnixNano, endTimeUnixNano uint64
-	kindStr := "unspecified"
 	sampleRate := defaultSampleRate
+
+	// Initialize span attributes struct
+	fields := spanFields{
+		commonFields: commonFields{
+			metaSignalType: "trace",
+		},
+		spanKind: "unspecified",
+	}
 
 	l := len(data)
 	iNdEx := 0
@@ -1052,13 +1193,13 @@ func unmarshalSpan(
 
 		switch fieldNum {
 		case 1: // trace_id
-			traceID, err = decodeWireType2(data, &iNdEx, l, wireType)
+			fields.traceID, err = decodeWireType2(data, &iNdEx, l, wireType)
 			if err != nil {
 				return err
 			}
 
 		case 2: // span_id
-			spanID, err = decodeWireType2(data, &iNdEx, l, wireType)
+			fields.spanID, err = decodeWireType2(data, &iNdEx, l, wireType)
 			if err != nil {
 				return err
 			}
@@ -1069,7 +1210,7 @@ func unmarshalSpan(
 				return err
 			}
 			if len(traceState) > 0 {
-				eventAttr.addString([]byte("trace.trace_state"), traceState)
+				fields.traceState = traceState
 
 				rate, ok := getSampleRateFromOTelSamplingThreshold(string(traceState))
 				if ok {
@@ -1083,22 +1224,21 @@ func unmarshalSpan(
 				return err
 			}
 			if len(parentSpanID) > 0 {
-				eventAttr.addHexID([]byte("trace.parent_id"), parentSpanID)
+				fields.parentID = parentSpanID
 			}
 
 		case 5: // name
-			name, err = decodeWireType2(data, &iNdEx, l, wireType)
+			fields.name, err = decodeWireType2(data, &iNdEx, l, wireType)
 			if err != nil {
 				return err
 			}
-			// Will add name below, to make sure it's always added.
 
 		case 6: // kind
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Kind", wireType)
 			}
 			kind := trace.Span_SpanKind(decodeVarint(data, &iNdEx))
-			kindStr = getSpanKind(kind)
+			fields.spanKind = getSpanKind(kind)
 
 		case 7: // start_time_unix_nano
 			v, err := decodeWireType1(data, &iNdEx, l, wireType)
@@ -1163,19 +1303,18 @@ func unmarshalSpan(
 						return err
 					}
 					if len(messageSlice) > 0 {
-						eventAttr.addString([]byte("status_message"), messageSlice)
+						fields.statusMessage = messageSlice
 					}
 
 				case 3: // code
 					if swireType != 0 {
 						return fmt.Errorf("proto: wrong wireType = %d for field Code", swireType)
 					}
-					statusCode = int64(decodeVarint(slice, &siNdEx))
+					fields.statusCode = int64(decodeVarint(slice, &siNdEx))
 					// Check if this is an error status
 					// Error is only set here for the span, then propagated to child events
-					if statusCode == 2 { // STATUS_CODE_ERROR
-						eventAttr.addBool([]byte("error"), true)
-						eventAttr.isError = true
+					if fields.statusCode == 2 { // STATUS_CODE_ERROR
+						fields.hasError = true
 					}
 
 				default:
@@ -1192,30 +1331,24 @@ func unmarshalSpan(
 		}
 	}
 
-	// Add fields which are always expected, even when they have no encoded value.
-	eventAttr.addTraceID([]byte("trace.trace_id"), traceID)
-	eventAttr.addHexID([]byte("trace.span_id"), spanID)
-	eventAttr.addString([]byte("name"), name)
-	eventAttr.addString([]byte("meta.signal_type"), []byte("trace"))
-	eventAttr.addInt64([]byte("status_code"), statusCode)
-	eventAttr.addInt64([]byte("span.num_events"), int64(len(eventsData)))
-	eventAttr.addInt64([]byte("span.num_links"), int64(len(linksData)))
-	eventAttr.addString([]byte("span.kind"), []byte(kindStr))
-	eventAttr.addString([]byte("type"), []byte(kindStr))
-
-	// Calculate duration
-	duration := float64(0)
+	// Calculate duration directly in spanAttrs
 	if startTimeUnixNano > 0 && endTimeUnixNano > 0 {
 		if endTimeUnixNano >= startTimeUnixNano {
 			durationNs := float64(endTimeUnixNano - startTimeUnixNano)
-			duration = durationNs / float64(time.Millisecond)
+			fields.durationMs = durationNs / float64(time.Millisecond)
 		} else {
 			// Negative duration - endTime is before startTime
-			duration = 0
-			eventAttr.addBool([]byte("meta.invalid_duration"), true)
+			fields.durationMs = 0
+			fields.hasInvalidDuration = true
 		}
 	}
-	eventAttr.addFloat64([]byte("duration_ms"), duration)
+
+	// Populate span attributes struct with remaining fields
+	fields.spanNumEvents = int64(len(eventsData))
+	fields.spanNumLinks = int64(len(linksData))
+
+	// Add all span attributes to eventAttr
+	fields.addToMsgpAttributes(eventAttr)
 
 	timestamp := timestampFromUnixNano(startTimeUnixNano)
 
@@ -1233,14 +1366,14 @@ func unmarshalSpan(
 	for _, eventData := range eventsData {
 		exceptionAttrs, err := unmarshalSpanEvent(ctx,
 			eventData,
-			traceID,
-			spanID,
-			name,
+			fields.traceID,
+			fields.spanID,
+			fields.name,
 			startTimeUnixNano,
 			resourceAttrs,
 			scopeAttrs,
 			sampleRate,
-			eventAttr.isError,
+			fields.hasError,
 			batch,
 		)
 		if err != nil {
@@ -1262,14 +1395,14 @@ func unmarshalSpan(
 		err := unmarshalSpanLink(
 			ctx,
 			linkData,
-			traceID,
-			spanID,
-			name,
+			fields.traceID,
+			fields.spanID,
+			fields.name,
 			timestamp,
 			resourceAttrs,
 			scopeAttrs,
 			sampleRate,
-			eventAttr.isError,
+			fields.hasError,
 			batch,
 		)
 		if err != nil {
@@ -1297,9 +1430,12 @@ func unmarshalSpan(
 func unmarshalSpanEvent(
 	ctx context.Context,
 	data []byte,
-	traceID, parentSpanID, parentName []byte,
+	traceID []byte,
+	parentSpanID []byte,
+	parentName []byte,
 	spanStartTime uint64,
-	resourceAttrs, scopeAttrs *msgpAttributes,
+	resourceAttrs *msgpAttributes,
+	scopeAttrs *msgpAttributes,
 	sampleRate int32,
 	isError bool,
 	batch *BatchMsgp,
@@ -1308,25 +1444,19 @@ func unmarshalSpanEvent(
 	eventAttr := msgpAttributesPool.Get().(*msgpAttributes)
 	defer eventAttr.recycle()
 
-	// Set trace info
-	if len(traceID) > 0 {
-		eventAttr.addTraceID([]byte("trace.trace_id"), traceID)
-	}
-	if len(parentSpanID) > 0 {
-		eventAttr.addHexID([]byte("trace.parent_id"), parentSpanID)
-	}
-
-	// Don't generate a span ID for span events - they only have parent_id
-
-	// Mark as span event
-	eventAttr.addString([]byte("meta.annotation_type"), []byte("span_event"))
-	eventAttr.addString([]byte("meta.signal_type"), []byte("trace"))
-	if len(parentName) > 0 {
-		eventAttr.addString([]byte("parent_name"), parentName)
+	// Initialize span event fields struct
+	fields := spanEventFields{
+		commonFields: commonFields{
+			traceID:            traceID,
+			parentID:           parentSpanID,
+			parentName:         parentName,
+			metaAnnotationType: "span_event",
+			metaSignalType:     "trace",
+			hasError:           isError,
+		},
 	}
 
 	// Parse event fields
-	var name []byte
 	var timeUnixNano uint64
 
 	l := len(data)
@@ -1352,7 +1482,7 @@ func unmarshalSpanEvent(
 			if err != nil {
 				return nil, err
 			}
-			name = slice
+			fields.name = slice
 
 		case 3: // attributes
 			slice, err := decodeWireType2(data, &iNdEx, l, wireType)
@@ -1372,25 +1502,19 @@ func unmarshalSpanEvent(
 		}
 	}
 
-	// Set event name
-	eventAttr.addString([]byte("name"), name)
-
 	// Calculate duration relative to span start
 	if timeUnixNano > 0 && spanStartTime > 0 {
 		if timeUnixNano >= spanStartTime {
-			timeSinceSpanStart := float64(timeUnixNano-spanStartTime) / float64(time.Millisecond)
-			eventAttr.addFloat64([]byte("meta.time_since_span_start_ms"), timeSinceSpanStart)
+			fields.timeSinceSpanStartMs = float64(timeUnixNano-spanStartTime) / float64(time.Millisecond)
 		} else {
 			// Event time is before span start time
-			eventAttr.addFloat64([]byte("meta.time_since_span_start_ms"), float64(0))
-			eventAttr.addBool([]byte("meta.invalid_time_since_span_start"), true)
+			fields.timeSinceSpanStartMs = float64(0)
+			fields.hasInvalidTimeSinceSpanStart = true
 		}
 	}
 
-	// Add error status from parent span if applicable
-	if isError {
-		eventAttr.addBool([]byte("error"), true)
-	}
+	// Add all span event fields to eventAttr
+	fields.addToMsgpAttributes(eventAttr)
 
 	eventAttr.addAttributes(scopeAttrs)
 	eventAttr.addAttributes(resourceAttrs)
@@ -1400,7 +1524,7 @@ func unmarshalSpanEvent(
 
 	// Create exception attributes to return if this is an exception event
 	var exceptionAttrs *msgpAttributes
-	if bytes.Equal(name, []byte("exception")) {
+	if bytes.Equal(fields.name, []byte("exception")) {
 		exceptionAttrs = &msgpAttributes{}
 		// We need to parse attributes again to extract exception-specific ones
 		l := len(data)
@@ -1445,8 +1569,13 @@ func unmarshalSpanEvent(
 	return exceptionAttrs, nil
 }
 
-// parseExceptionAttributesForReturn parses KeyValue attributes and adds exception-specific ones to msgpAttributes
-func parseExceptionAttributesForReturn(ctx context.Context, data []byte, exceptionAttrs *msgpAttributes) error {
+// parseExceptionAttributesForReturn parses KeyValue attributes and adds
+// exception-specific ones to msgpAttributes
+func parseExceptionAttributesForReturn(
+	ctx context.Context,
+	data []byte,
+	exceptionAttrs *msgpAttributes,
+) error {
 	key, valueBytes, err := parseKeyValue(data)
 	if err != nil {
 		return err
@@ -1479,9 +1608,12 @@ func parseExceptionAttributesForReturn(ctx context.Context, data []byte, excepti
 func unmarshalSpanLink(
 	ctx context.Context,
 	data []byte,
-	traceID, parentSpanID, parentName []byte,
+	traceID []byte,
+	parentSpanID []byte,
+	parentName []byte,
 	parentTimestamp time.Time,
-	resourceAttrs, scopeAttrs *msgpAttributes,
+	resourceAttrs *msgpAttributes,
+	scopeAttrs *msgpAttributes,
 	sampleRate int32,
 	isError bool,
 	batch *BatchMsgp,
@@ -1490,25 +1622,19 @@ func unmarshalSpanLink(
 	eventAttr := msgpAttributesPool.Get().(*msgpAttributes)
 	defer eventAttr.recycle()
 
-	// Set trace info
-	if len(traceID) > 0 {
-		eventAttr.addTraceID([]byte("trace.trace_id"), traceID)
-	}
-	if len(parentSpanID) > 0 {
-		eventAttr.addHexID([]byte("trace.parent_id"), parentSpanID)
-	}
-
-	// Don't generate a span ID for span links - they only have parent_id
-
-	// Mark as link
-	eventAttr.addString([]byte("meta.annotation_type"), []byte("link"))
-	eventAttr.addString([]byte("meta.signal_type"), []byte("trace"))
-	if len(parentName) > 0 {
-		eventAttr.addString([]byte("parent_name"), parentName)
+	// Initialize span link fields struct
+	fields := spanLinkFields{
+		commonFields: commonFields{
+			traceID:            traceID,
+			parentID:           parentSpanID,
+			parentName:         parentName,
+			metaAnnotationType: "link",
+			metaSignalType:     "trace",
+			hasError:           isError,
+		},
 	}
 
 	// Parse link fields
-	var linkedTraceID, linkedSpanID []byte
 
 	l := len(data)
 	iNdEx := 0
@@ -1523,14 +1649,14 @@ func unmarshalSpanLink(
 		switch fieldNum {
 		case 1: // trace_id
 			var err error
-			linkedTraceID, err = decodeWireType2(data, &iNdEx, l, wireType)
+			fields.linkedTraceID, err = decodeWireType2(data, &iNdEx, l, wireType)
 			if err != nil {
 				return err
 			}
 
 		case 2: // span_id
 			var err error
-			linkedSpanID, err = decodeWireType2(data, &iNdEx, l, wireType)
+			fields.linkedSpanID, err = decodeWireType2(data, &iNdEx, l, wireType)
 			if err != nil {
 				return err
 			}
@@ -1560,20 +1686,8 @@ func unmarshalSpanLink(
 		}
 	}
 
-	// Set link fields
-	if len(linkedTraceID) > 0 {
-		eventAttr.addTraceID([]byte("trace.link.trace_id"), linkedTraceID)
-	}
-	if len(linkedSpanID) > 0 {
-		eventAttr.addHexID([]byte("trace.link.span_id"), linkedSpanID)
-	}
-	// Note: The original implementation doesn't add trace.link.trace_state
-	// even though it's part of the OTLP spec, so we skip it for compatibility
-
-	// Add error status from parent span if applicable
-	if isError {
-		eventAttr.addBool([]byte("error"), true)
-	}
+	// Add all span link fields to eventAttr
+	fields.addToMsgpAttributes(eventAttr)
 
 	eventAttr.addAttributes(scopeAttrs)
 	eventAttr.addAttributes(resourceAttrs)
@@ -1593,6 +1707,11 @@ func unmarshalSpanLink(
 
 // timestampFromUnixNano converts unix nano timestamp to time.Time
 func timestampFromUnixNano(unixNano uint64) time.Time {
+	// OTLP supports unsigned nanosecond timestamps, but golang doesn't.
+	// Apologies to anyone still running this code in 2262.
+	if unixNano > math.MaxInt64 {
+		unixNano = math.MaxInt64
+	}
 	return time.Unix(0, int64(unixNano)).UTC()
 }
 
@@ -1738,24 +1857,18 @@ func decodeField(data []byte, iNdEx *int) (fieldNum int32, wireType int, err err
 	return
 }
 
-// addAttributeToMapAsJsonDirect converts a value to JSON string, matching the behavior
-// of the legacy addAttributeToMapAsJson function
-func addAttributeToMapAsJsonDirect(val any) string {
-	// Convert bytes to base64 if needed
-	if bytes, ok := val.([]byte); ok {
-		val = base64.StdEncoding.EncodeToString(bytes)
-	}
-
+// marshalAnyToJSON converts a value to JSON string, matching the behavior
+// of the legacy addAttributeToMapAsJson function.
+func marshalAnyToJSON(val any) []byte {
 	// Use json-iterator for consistency with legacy code
-	// fieldSizeMax = math.MaxUint16 from common.go
-	w := newLimitedWriter(math.MaxUint16)
+	w := newLimitedWriter(fieldSizeMax)
 	e := json.NewEncoder(w)
 	e.SetEscapeHTML(false)
 	if err := e.Encode(val); err != nil {
 		// Return empty string on error to match legacy behavior
-		return ""
+		return []byte("")
 	}
-	return w.String()
+	return []byte(w.String())
 }
 
 func getDatasetFromMsgpAttr(ri RequestInfo, attrs *msgpAttributes) string {

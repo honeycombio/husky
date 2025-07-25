@@ -9,6 +9,7 @@ require (
 	github.com/open-telemetry/opentelemetry-collector-contrib/pkg/sampling v0.128.0
 	github.com/stretchr/testify v1.10.0
 	github.com/tinylib/msgp v1.3.0
+	github.com/valyala/fastjson v1.6.4
 	go.opentelemetry.io/proto/otlp v0.19.0
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20250512202823-5a2f75b736a9
 	google.golang.org/grpc v1.72.2
