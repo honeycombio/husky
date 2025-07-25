@@ -183,9 +183,6 @@ func (m *msgpAttributes) addBool(key []byte, value bool) {
 // so it's important to call this first with highest-precedence data, then the least.
 func (m *msgpAttributes) addAttributes(add *msgpAttributes) {
 	m.buf = append(m.buf, add.buf...)
-	if !m.isError {
-		m.isError = add.isError
-	}
 	if m.serviceName == "" {
 		m.serviceName = add.serviceName
 	}
@@ -368,11 +365,6 @@ func (s *spanFields) addToMsgpAttributes(attrs *msgpAttributes) {
 
 	// Add duration
 	attrs.addFloat64([]byte("duration_ms"), s.durationMs)
-
-	// Set error flag in msgpAttributes for propagation to child events
-	if s.hasError {
-		attrs.isError = true
-	}
 
 	// Add invalid duration flag
 	if s.hasInvalidDuration {
@@ -1171,7 +1163,7 @@ func unmarshalInstrumentationScope(ctx context.Context, data []byte, attrs *msgp
 func unmarshalSpan(
 	ctx context.Context,
 	data []byte,
-	resourceAttrs,
+	resourceAttrs *msgpAttributes,
 	scopeAttrs *msgpAttributes,
 	batch *BatchMsgp,
 ) error {
@@ -1383,7 +1375,7 @@ func unmarshalSpan(
 			resourceAttrs,
 			scopeAttrs,
 			sampleRate,
-			eventAttr.isError,
+			fields.hasError,
 			batch,
 		)
 		if err != nil {
@@ -1412,7 +1404,7 @@ func unmarshalSpan(
 			resourceAttrs,
 			scopeAttrs,
 			sampleRate,
-			eventAttr.isError,
+			fields.hasError,
 			batch,
 		)
 		if err != nil {
@@ -1440,9 +1432,12 @@ func unmarshalSpan(
 func unmarshalSpanEvent(
 	ctx context.Context,
 	data []byte,
-	traceID, parentSpanID, parentName []byte,
+	traceID []byte,
+	parentSpanID []byte,
+	parentName []byte,
 	spanStartTime uint64,
-	resourceAttrs, scopeAttrs *msgpAttributes,
+	resourceAttrs *msgpAttributes,
+	scopeAttrs *msgpAttributes,
 	sampleRate int32,
 	isError bool,
 	batch *BatchMsgp,
@@ -1615,9 +1610,12 @@ func parseExceptionAttributesForReturn(
 func unmarshalSpanLink(
 	ctx context.Context,
 	data []byte,
-	traceID, parentSpanID, parentName []byte,
+	traceID []byte,
+	parentSpanID []byte,
+	parentName []byte,
 	parentTimestamp time.Time,
-	resourceAttrs, scopeAttrs *msgpAttributes,
+	resourceAttrs *msgpAttributes,
+	scopeAttrs *msgpAttributes,
 	sampleRate int32,
 	isError bool,
 	batch *BatchMsgp,
