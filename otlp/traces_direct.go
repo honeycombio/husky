@@ -88,7 +88,6 @@ import (
 	"fmt"
 	"io"
 	"math"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -427,6 +426,28 @@ func (s *spanLinkFields) addToMsgpAttributes(attrs *msgpAttributes) {
 	}
 }
 
+// isSampleRateKey returns true if the given key is a sample rate field
+func isSampleRateKey(key []byte) bool {
+	return bytes.Equal(key, []byte("sampleRate")) || bytes.Equal(key, []byte("SampleRate"))
+}
+
+// trySetSampleRate attempts to set the sample rate on attrs if the key is a
+// sample rate field.
+// Returns true of the value was set, false otherwise.
+// Callers must call isSampleRateKey() first. This comes second as a separate
+// call to avoid placing a scalar value in the any parameter and allocating heap.
+// Yes, this does do a single heap allocation which is strictly avoidable, but
+// this saves a lot of verbosity.
+func trySetSampleRate(key []byte, value any, attrs *msgpAttributes) bool {
+	sampleRate := getSampleRateFromAnyValue(value)
+	// Only set if we don't already have a sample rate, or if this is the lowercase "sampleRate" (preferred)
+	if attrs.sampleRate == 0 || bytes.Equal(key, []byte("sampleRate")) {
+		attrs.sampleRate = sampleRate
+		return true
+	}
+	return false
+}
+
 // unmarshalTraceRequestDirectMsgp translates a serialized OTLP trace request directly
 // into a Honeycomb-friendly structure without creating intermediate proto structs,
 // which is EXTREMELY expensive.
@@ -762,13 +783,7 @@ func unmarshalKeyValue(ctx context.Context, data []byte, attrs *msgpAttributes, 
 					return err
 				}
 
-				if bytes.Equal(key, []byte("sampleRate")) || bytes.Equal(key, []byte("SampleRate")) {
-					// Convert string to float for sample rate
-					if f, err := strconv.ParseFloat(string(slice), 64); err == nil {
-						if attrs.sampleRate == 0 || bytes.Equal(key, []byte("sampleRate")) {
-							attrs.sampleRate = sampleRateFromFloat(f)
-						}
-					}
+				if isSampleRateKey(key) && trySetSampleRate(key, string(slice), attrs) {
 					return nil
 				}
 
@@ -794,11 +809,7 @@ func unmarshalKeyValue(ctx context.Context, data []byte, attrs *msgpAttributes, 
 				}
 				v := int64(decodeVarint(valueBytes, &iNdEx))
 
-				if bytes.Equal(key, []byte("sampleRate")) || bytes.Equal(key, []byte("SampleRate")) {
-					v = max(min(v, math.MaxInt32), math.MinInt32)
-					if attrs.sampleRate == 0 || bytes.Equal(key, []byte("sampleRate")) {
-						attrs.sampleRate = max(defaultSampleRate, int32(v))
-					}
+				if isSampleRateKey(key) && trySetSampleRate(key, v, attrs) {
 					return nil
 				}
 
@@ -812,10 +823,7 @@ func unmarshalKeyValue(ctx context.Context, data []byte, attrs *msgpAttributes, 
 				}
 				floatVal := math.Float64frombits(v)
 
-				if bytes.Equal(key, []byte("sampleRate")) || bytes.Equal(key, []byte("SampleRate")) {
-					if attrs.sampleRate == 0 || bytes.Equal(key, []byte("sampleRate")) {
-						attrs.sampleRate = sampleRateFromFloat(floatVal)
-					}
+				if isSampleRateKey(key) && trySetSampleRate(key, floatVal, attrs) {
 					return nil
 				}
 

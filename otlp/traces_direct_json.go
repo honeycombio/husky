@@ -8,7 +8,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
-	"math"
 	"strconv"
 	"time"
 
@@ -218,14 +217,7 @@ func unmarshalAnyValueIntoAttrsJSON(
 			value := v.GetStringBytes()
 
 			// Special handling for sample rate
-			if bytes.Equal(key, []byte("sampleRate")) || bytes.Equal(key, []byte("SampleRate")) {
-				var f float64
-				f, err = strconv.ParseFloat(string(value), 64)
-				if err == nil {
-					if attrs.sampleRate == 0 || bytes.Equal(key, []byte("sampleRate")) {
-						attrs.sampleRate = sampleRateFromFloat(f)
-					}
-				}
+			if isSampleRateKey(key) && trySetSampleRate(key, string(value), attrs) {
 				return
 			}
 
@@ -249,10 +241,7 @@ func unmarshalAnyValueIntoAttrsJSON(
 			}
 
 			// Special handling for sample rate
-			if bytes.Equal(key, []byte("sampleRate")) || bytes.Equal(key, []byte("SampleRate")) {
-				if attrs.sampleRate == 0 || bytes.Equal(key, []byte("sampleRate")) {
-					attrs.sampleRate = int32(max(int64(defaultSampleRate), min(val, math.MaxInt32)))
-				}
+			if isSampleRateKey(key) && trySetSampleRate(key, val, attrs) {
 				return
 			}
 
@@ -262,10 +251,7 @@ func unmarshalAnyValueIntoAttrsJSON(
 			floatVal := v.GetFloat64()
 
 			// Special handling for sample rate
-			if bytes.Equal(key, []byte("sampleRate")) || bytes.Equal(key, []byte("SampleRate")) {
-				if attrs.sampleRate == 0 || bytes.Equal(key, []byte("sampleRate")) {
-					attrs.sampleRate = sampleRateFromFloat(floatVal)
-				}
+			if isSampleRateKey(key) && trySetSampleRate(key, floatVal, attrs) {
 				return
 			}
 
