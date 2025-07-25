@@ -586,7 +586,7 @@ func unmarshalInstrumentationScopeJSON(
 func unmarshalSpanJSON(
 	ctx context.Context,
 	v *fastjson.Value,
-	resourceAttrs,
+	resourceAttrs *msgpAttributes,
 	scopeAttrs *msgpAttributes,
 	batch *BatchMsgp,
 ) error {
@@ -741,7 +741,6 @@ func unmarshalSpanJSON(
 						case "STATUS_CODE_ERROR":
 							fields.statusCode = 2
 							fields.hasError = true
-							eventAttr.isError = true
 						default:
 							fields.statusCode = 0
 						}
@@ -751,7 +750,6 @@ func unmarshalSpanJSON(
 						// Check if this is an error status
 						if fields.statusCode == 2 { // STATUS_CODE_ERROR
 							fields.hasError = true
-							eventAttr.isError = true
 						}
 					}
 				}
@@ -804,7 +802,7 @@ func unmarshalSpanJSON(
 			resourceAttrs,
 			scopeAttrs,
 			sampleRate,
-			eventAttr.isError,
+			fields.hasError,
 			batch,
 		)
 		if err != nil {
@@ -834,7 +832,7 @@ func unmarshalSpanJSON(
 			resourceAttrs,
 			scopeAttrs,
 			sampleRate,
-			eventAttr.isError,
+			fields.hasError,
 			batch,
 		)
 		if err != nil {
@@ -862,11 +860,11 @@ func unmarshalSpanJSON(
 func unmarshalSpanEventJSON(
 	ctx context.Context,
 	v *fastjson.Value,
-	traceID,
-	parentSpanID,
+	traceID []byte,
+	parentSpanID []byte,
 	parentName []byte,
 	spanStartTime uint64,
-	resourceAttrs,
+	resourceAttrs *msgpAttributes,
 	scopeAttrs *msgpAttributes,
 	sampleRate int32,
 	isError bool,
@@ -1013,11 +1011,11 @@ func unmarshalSpanEventJSON(
 func unmarshalSpanLinkJSON(
 	ctx context.Context,
 	v *fastjson.Value,
-	traceID,
-	parentSpanID,
+	traceID []byte,
+	parentSpanID []byte,
 	parentName []byte,
 	parentTimestamp time.Time,
-	resourceAttrs,
+	resourceAttrs *msgpAttributes,
 	scopeAttrs *msgpAttributes,
 	sampleRate int32,
 	isError bool,

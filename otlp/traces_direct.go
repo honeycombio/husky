@@ -138,7 +138,6 @@ type msgpAttributes struct {
 	// memoized metadata fields we'll need internally
 	serviceName string
 	sampleRate  int32
-	isError     bool
 }
 
 // Resets state and returns to the pool. Do not re-use after calling this.
@@ -1316,7 +1315,6 @@ func unmarshalSpan(
 					// Error is only set here for the span, then propagated to child events
 					if fields.statusCode == 2 { // STATUS_CODE_ERROR
 						fields.hasError = true
-						eventAttr.isError = true
 					}
 
 				default:
