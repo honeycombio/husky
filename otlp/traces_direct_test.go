@@ -530,7 +530,7 @@ func TestUnmarshalTraceRequestDirect_Complete(t *testing.T) {
 			serialize: func(req *collectortrace.ExportTraceServiceRequest) ([]byte, error) {
 				return proto.Marshal(req)
 			},
-			unmarshal: unmarshalTraceRequestDirectMsgp,
+			unmarshal: UnmarshalTraceRequestDirectMsgp,
 		},
 		{
 			name:        "json",
@@ -1020,7 +1020,7 @@ func TestUnmarshalTraceRequestDirect_WithUnknownFields(t *testing.T) {
 	}
 
 	// The direct unmarshaling should skip unknown fields gracefully
-	result, err := unmarshalTraceRequestDirectMsgp(context.Background(), data, ri)
+	result, err := UnmarshalTraceRequestDirectMsgp(context.Background(), data, ri)
 	require.NoError(t, err)
 	assert.NotNil(t, result)
 	assert.Len(t, result.Batches, 1)
@@ -1301,7 +1301,7 @@ func TestUnmarshalTraceRequestDirect_NestedMapAttributes(t *testing.T) {
 			serialize: func(req *collectortrace.ExportTraceServiceRequest) ([]byte, error) {
 				return proto.Marshal(req)
 			},
-			unmarshal: unmarshalTraceRequestDirectMsgp,
+			unmarshal: UnmarshalTraceRequestDirectMsgp,
 		},
 		{
 			name:        "json",
@@ -1503,7 +1503,7 @@ func BenchmarkUnmarshalTraceRequestDirectMsgp(b *testing.B) {
 
 		// Run the benchmark
 		for i := 0; i < b.N; i++ {
-			result, err := unmarshalTraceRequestDirectMsgp(ctx, data, ri)
+			result, err := UnmarshalTraceRequestDirectMsgp(ctx, data, ri)
 			if err != nil {
 				b.Fatal(err)
 			}

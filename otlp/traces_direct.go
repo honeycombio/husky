@@ -439,7 +439,7 @@ func trySetSampleRate(key []byte, value any, attrs *msgpAttributes) bool {
 	return false
 }
 
-// unmarshalTraceRequestDirectMsgp translates a serialized OTLP trace request directly
+// UnmarshalTraceRequestDirectMsgp translates a serialized OTLP trace request directly
 // into a Honeycomb-friendly structure without creating intermediate proto structs,
 // which is EXTREMELY expensive.
 // Why does the code look like this? Because it's derived from gogo's generated
@@ -450,7 +450,7 @@ func trySetSampleRate(key []byte, value any, attrs *msgpAttributes) bool {
 // complex than it already is, by adding a new EntityRef field to Resource.
 // https://github.com/open-telemetry/opentelemetry-proto/blob/main/opentelemetry/proto/resource/v1/resource.proto#L43
 // When this is finalized we'll presumably have to add support here.
-func unmarshalTraceRequestDirectMsgp(
+func UnmarshalTraceRequestDirectMsgp(
 	ctx context.Context,
 	data []byte,
 	ri RequestInfo,
