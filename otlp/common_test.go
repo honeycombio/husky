@@ -967,24 +967,14 @@ func TestIsClassicKey(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		t.Run("regex/"+tc.name, func(t *testing.T) {
+		t.Run(tc.name, func(t *testing.T) {
 			result := IsClassicApiKey(tc.key)
 			assert.Equal(t, tc.expected, result, "Expected IsClassicApiKey(%q) to return %v", tc.key, tc.expected)
-		})
-
-		t.Run("slicescans/"+tc.name, func(t *testing.T) {
-			result := IsLegacyAPIKey(tc.key)
-			assert.Equal(t, tc.expected, result, "Expected IsLegacyAPIKey(%q) to return %v", tc.key, tc.expected)
-		})
-
-		t.Run("switchedslicescans/"+tc.name, func(t *testing.T) {
-			result := IsLegacyAPIKeySwitched(tc.key)
-			assert.Equal(t, tc.expected, result, "Expected IsLegacyAPIKey(%q) to return %v", tc.key, tc.expected)
 		})
 	}
 }
 
-func BenchmarkIsLegacyAPIKey(b *testing.B) {
+func BenchmarkIsClassicKey(b *testing.B) {
 	tests := []struct {
 		name string
 		key  string
@@ -996,21 +986,9 @@ func BenchmarkIsLegacyAPIKey(b *testing.B) {
 	}
 
 	for _, tt := range tests {
-		b.Run("regex/"+tt.name, func(b *testing.B) {
+		b.Run("current/"+tt.name, func(b *testing.B) {
 			for i := 0; i < b.N; i++ {
 				_ = IsClassicApiKey(tt.key)
-			}
-		})
-
-		b.Run("slicescan/"+tt.name, func(b *testing.B) {
-			for i := 0; i < b.N; i++ {
-				_ = IsLegacyAPIKey(tt.key)
-			}
-		})
-
-		b.Run("switchedslicescan/"+tt.name, func(b *testing.B) {
-			for i := 0; i < b.N; i++ {
-				_ = IsLegacyAPIKeySwitched(tt.key)
 			}
 		})
 	}
