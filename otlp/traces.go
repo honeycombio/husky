@@ -128,7 +128,7 @@ func TranslateTraceRequestFromReaderSizedWithMsgp(
 		return unmarshalTraceRequestDirectMsgpJSON(ctx, bodyBuffer.Bytes(), ri)
 	default:
 		// protobuf
-		return unmarshalTraceRequestDirectMsgp(ctx, bodyBuffer.Bytes(), ri)
+		return UnmarshalTraceRequestDirectMsgp(ctx, bodyBuffer.Bytes(), ri)
 	}
 }
 
