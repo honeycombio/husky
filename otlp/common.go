@@ -11,7 +11,6 @@ import (
 	"math"
 	"math/rand/v2"
 	"net/http"
-	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -58,8 +57,6 @@ const (
 const fieldSizeMax = math.MaxUint16
 
 var (
-	classicApiKeyPattern    = regexp.MustCompile("^[0-9a-f]*$")
-	classicIngestKeyPattern = regexp.MustCompile("^hc[a-z]ic_[0-9a-z]*$")
 	// Incoming OpenTelemetry HTTP Content-Types (e.g. "application/protobuf") we support
 	supportedContentTypes = []string{
 		"application/protobuf",
@@ -102,11 +99,39 @@ func IsContentTypeSupported(contentType string) bool {
 
 // IsClassicApiKey checks if the given API key is a Classic API key.
 func IsClassicApiKey(key string) bool {
-	if len(key) == 32 {
-		return classicApiKeyPattern.MatchString(key)
-	} else if len(key) == 64 {
-		return classicIngestKeyPattern.MatchString(key)
+	keyLen := len(key)
+
+	switch keyLen {
+	case 32:
+		// Check if all characters are hex digits (0-9, a-f)
+		// formerly: 	classicApiKeyPattern    = regexp.MustCompile("^[0-9a-f]*$")
+		for i := 0; i < keyLen; i++ {
+			c := key[i]
+			if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')) {
+				return false
+			}
+		}
+		return true
+	case 64:
+		// Check the prefix pattern "hc[a-z]ic_"
+		// formerly: classicIngestKeyPattern = regexp.MustCompile("^hc[a-z]ic_[0-9a-z]*$")
+		if key[:2] != "hc" || key[3:6] != "ic_" {
+			return false
+		}
+		if key[2] < 'a' || key[2] > 'z' {
+			return false
+		}
+
+		// Check if the remaining characters are alphanumeric lowercase
+		for i := 6; i < keyLen; i++ {
+			c := key[i]
+			if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'z')) {
+				return false
+			}
+		}
+		return true
 	}
+
 	return false
 }
 
