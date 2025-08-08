@@ -1,5 +1,14 @@
 # Husky Changelog
 
+## 0.38.0 2025-08-08
+
+- feat: export UnmarshalTraceRequestDirectMsgp (#309) | [ianwilkes](https://github.com/ianwilkes)
+- feat: support JSON OTLP in new fast path (#308) | [ianwilkes](https://github.com/ianwilkes)
+- feat: alternative optimized proto -> messagepack path for traces (#307) | [ianwilkes](https://github.com/ianwilkes)
+- perf: optimize API key variant check (#310) | [Robb Kidd](https://github.com/RobbKidd)
+- maint(deps): bump the minor-patch group with 3 updates (#311) | [dependabot[bot]](https://github.com/dependabot[bot])
+- maint(deps): bump the minor-patch group with 2 updates (#306) | [dependabot[bot]](https://github.com/dependabot[bot])
+
 ## 0.37.0 2025-06-24
 
 - feat: Add the JS honeycomb prefix (#304) | @martin308
