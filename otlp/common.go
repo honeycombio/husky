@@ -71,14 +71,15 @@ var (
 
 	// List of per-lang instrumentation library prefixes
 	instrumentationLibraryPrefixes = []string{
-		"io.opentelemetry",                            // Java,
-		"opentelemetry.instrumentation",               // Python
-		"OpenTelemetry.Instrumentation",               // .NET
-		"OpenTelemetry::Instrumentation",              // Ruby
-		"go.opentelemetry.io/contrib/instrumentation", // Go
-		"@opentelemetry/instrumentation",              // JS
-		"io.opentelemetry.contrib.php",                // PHP
-		"@honeycombio/",                               // Honeycomb's own JS instrumentation libraries
+		"io.opentelemetry",                                  // Java,
+		"opentelemetry.instrumentation",                     // Python
+		"OpenTelemetry.Instrumentation",                     // .NET
+		"OpenTelemetry::Instrumentation",                    // Ruby
+		"go.opentelemetry.io/contrib/instrumentation",       // Go
+		"@opentelemetry/instrumentation",                    // JS
+		"io.opentelemetry.contrib.php",                      // PHP
+		"github.com/open-telemetry/opentelemetry-collector", // OTel Collector's telemetry scope prefix
+		"@honeycombio/",                                     // Honeycomb's own JS instrumentation libraries
 	}
 )
 
