@@ -925,60 +925,60 @@ func TestSampleRatePrefersHoneycombAttribute(t *testing.T) {
 
 func TestKnownInstrumentationPrefixesReturnTrue(t *testing.T) {
 	tests := []struct {
-		name                     string
-		libraryName              string
-		isInstrumentationLibrary bool
+		name        string
+		libraryName string
+		isKnown     bool
 	}{
 		{
-			name:                     "empty",
-			libraryName:              "",
-			isInstrumentationLibrary: false,
+			name:        "empty",
+			libraryName: "",
+			isKnown:     false,
 		},
 		{
-			name:                     "unknown",
-			libraryName:              "unknown",
-			isInstrumentationLibrary: false,
+			name:        "unknown",
+			libraryName: "unknown",
+			isKnown:     false,
 		},
 		{
-			name:                     "java",
-			libraryName:              "io.opentelemetry.tomcat-7.0",
-			isInstrumentationLibrary: true,
+			name:        "java",
+			libraryName: "io.opentelemetry.tomcat-7.0",
+			isKnown:     true,
 		},
 		{
-			name:                     "python",
-			libraryName:              "opentelemetry.instrumentation.http",
-			isInstrumentationLibrary: true,
+			name:        "python",
+			libraryName: "opentelemetry.instrumentation.http",
+			isKnown:     true,
 		},
 		{
-			name:                     ".net",
-			libraryName:              "OpenTelemetry.Instrumentation.AspNetCore",
-			isInstrumentationLibrary: true,
+			name:        ".net",
+			libraryName: "OpenTelemetry.Instrumentation.AspNetCore",
+			isKnown:     true,
 		},
 		{
-			name:                     "ruby",
-			libraryName:              "OpenTelemetry::Instrumentation::HTTP",
-			isInstrumentationLibrary: true,
+			name:        "ruby",
+			libraryName: "OpenTelemetry::Instrumentation::HTTP",
+			isKnown:     true,
 		},
 		{
-			name:                     "go",
-			libraryName:              "go.opentelemetry.io/contrib/instrumentation/http",
-			isInstrumentationLibrary: true,
+			name:        "go",
+			libraryName: "go.opentelemetry.io/contrib/instrumentation/http",
+			isKnown:     true,
 		},
 		{
-			name:                     "js",
-			libraryName:              "@opentelemetry/instrumentation/http",
-			isInstrumentationLibrary: true,
+			name:        "js",
+			libraryName: "@opentelemetry/instrumentation/http",
+			isKnown:     true,
 		},
 		{
-			name:                     "php",
-			libraryName:              "io.opentelemetry.contrib.php.slim",
-			isInstrumentationLibrary: true,
+			name:        "php",
+			libraryName: "io.opentelemetry.contrib.php.slim",
+			isKnown:     true,
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			assert.Equal(t, test.isInstrumentationLibrary, isInstrumentationLibrary(test.libraryName))
+			assert.Equal(t, test.isKnown, isInstrumentationLibrary(test.libraryName))
 		})
 	}
 }
