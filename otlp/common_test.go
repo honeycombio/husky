@@ -974,6 +974,11 @@ func TestKnownInstrumentationPrefixesReturnTrue(t *testing.T) {
 			libraryName: "io.opentelemetry.contrib.php.slim",
 			isKnown:     true,
 		},
+		{
+			name:        "collector telemetry scopes prefix",
+			libraryName: "github.com/open-telemetry/opentelemetry-collector",
+			isKnown:     true,
+		},
 	}
 
 	for _, test := range tests {
