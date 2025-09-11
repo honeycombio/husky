@@ -1241,66 +1241,6 @@ func TestInstrumentationLibrarySpansHaveAttributeAdded(t *testing.T) {
 	assert.Equal(t, true, second_event.Attributes["telemetry.instrumentation_library"])
 }
 
-func TestKnownInstrumentationPrefixesReturnTrue(t *testing.T) {
-	tests := []struct {
-		name                     string
-		libraryName              string
-		isInstrumentationLibrary bool
-	}{
-		{
-			name:                     "empty",
-			libraryName:              "",
-			isInstrumentationLibrary: false,
-		},
-		{
-			name:                     "unknown",
-			libraryName:              "unknown",
-			isInstrumentationLibrary: false,
-		},
-		{
-			name:                     "java",
-			libraryName:              "io.opentelemetry.tomcat-7.0",
-			isInstrumentationLibrary: true,
-		},
-		{
-			name:                     "python",
-			libraryName:              "opentelemetry.instrumentation.http",
-			isInstrumentationLibrary: true,
-		},
-		{
-			name:                     ".net",
-			libraryName:              "OpenTelemetry.Instrumentation.AspNetCore",
-			isInstrumentationLibrary: true,
-		},
-		{
-			name:                     "ruby",
-			libraryName:              "OpenTelemetry::Instrumentation::HTTP",
-			isInstrumentationLibrary: true,
-		},
-		{
-			name:                     "go",
-			libraryName:              "go.opentelemetry.io/contrib/instrumentation/http",
-			isInstrumentationLibrary: true,
-		},
-		{
-			name:                     "js",
-			libraryName:              "@opentelemetry/instrumentation/http",
-			isInstrumentationLibrary: true,
-		},
-		{
-			name:                     "php",
-			libraryName:              "io.opentelemetry.contrib.php.slim",
-			isInstrumentationLibrary: true,
-		},
-	}
-
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			assert.Equal(t, test.isInstrumentationLibrary, isInstrumentationLibrary(test.libraryName))
-		})
-	}
-}
-
 func TestOtlpAttributesRecordsAttribueType(t *testing.T) {
 	testCases := []struct {
 		name            string
@@ -1464,49 +1404,49 @@ func TestCompressedTraceRequests(t *testing.T) {
 						ContentEncoding: encoding,
 					}
 
-			// Test TranslateTraceRequestFromReader
-			t.Run("TranslateTraceRequestFromReader", func(t *testing.T) {
-				body := io.NopCloser(strings.NewReader(compressedBody))
-				result, err := TranslateTraceRequestFromReader(context.Background(), body, ri)
-				require.NoError(t, err)
-				require.NotNil(t, result)
-				// Note: For JSON input, TranslateTraceRequest returns proto.Size() of the parsed
-				// protobuf, not the original JSON size. This is a known issue.
-				if ct.contentType == "application/json" {
-					// For JSON, the returned size is the protobuf size, not the JSON size
-					assert.Greater(t, result.RequestSize, 0)
-				} else {
-					assert.Equal(t, len(bodyBytes), result.RequestSize)
-				}
-				assert.Len(t, result.Batches, 1)
-				assert.Equal(t, "test-service", result.Batches[0].Dataset)
-				assert.Len(t, result.Batches[0].Events, 1)
-				assert.Equal(t, "test-span", result.Batches[0].Events[0].Attributes["name"])
-			})
+					// Test TranslateTraceRequestFromReader
+					t.Run("TranslateTraceRequestFromReader", func(t *testing.T) {
+						body := io.NopCloser(strings.NewReader(compressedBody))
+						result, err := TranslateTraceRequestFromReader(context.Background(), body, ri)
+						require.NoError(t, err)
+						require.NotNil(t, result)
+						// Note: For JSON input, TranslateTraceRequest returns proto.Size() of the parsed
+						// protobuf, not the original JSON size. This is a known issue.
+						if ct.contentType == "application/json" {
+							// For JSON, the returned size is the protobuf size, not the JSON size
+							assert.Greater(t, result.RequestSize, 0)
+						} else {
+							assert.Equal(t, len(bodyBytes), result.RequestSize)
+						}
+						assert.Len(t, result.Batches, 1)
+						assert.Equal(t, "test-service", result.Batches[0].Dataset)
+						assert.Len(t, result.Batches[0].Events, 1)
+						assert.Equal(t, "test-span", result.Batches[0].Events[0].Attributes["name"])
+					})
 
-			// Test TranslateOTLPTraceRequestFromReaderSizedWithMsgp
-			t.Run("TranslateOTLPTraceRequestFromReaderSizedWithMsgp", func(t *testing.T) {
-				body := io.NopCloser(strings.NewReader(compressedBody))
-				result, err := TranslateTraceRequestFromReaderSizedWithMsgp(
-					context.Background(),
-					body,
-					ri,
-					int64(len(compressedBody)*2), // Give it plenty of space
-				)
-				require.NoError(t, err)
-				require.NotNil(t, result)
-				assert.Equal(t, len(bodyBytes), result.RequestSize)
-				assert.Len(t, result.Batches, 1)
-				assert.Equal(t, "test-service", result.Batches[0].Dataset)
-				assert.Len(t, result.Batches[0].Events, 1)
+					// Test TranslateOTLPTraceRequestFromReaderSizedWithMsgp
+					t.Run("TranslateOTLPTraceRequestFromReaderSizedWithMsgp", func(t *testing.T) {
+						body := io.NopCloser(strings.NewReader(compressedBody))
+						result, err := TranslateTraceRequestFromReaderSizedWithMsgp(
+							context.Background(),
+							body,
+							ri,
+							int64(len(compressedBody)*2), // Give it plenty of space
+						)
+						require.NoError(t, err)
+						require.NotNil(t, result)
+						assert.Equal(t, len(bodyBytes), result.RequestSize)
+						assert.Len(t, result.Batches, 1)
+						assert.Equal(t, "test-service", result.Batches[0].Dataset)
+						assert.Len(t, result.Batches[0].Events, 1)
 
-				// Verify the msgpack attributes are valid
-				event := result.Batches[0].Events[0]
-				attrs := decodeMessagePackAttributes(t, event.Attributes)
-				assert.Equal(t, "test-span", attrs["name"])
-				assert.Equal(t, BytesToTraceID(traceID), attrs["trace.trace_id"])
-				assert.Equal(t, hex.EncodeToString(spanID), attrs["trace.span_id"])
-			})
+						// Verify the msgpack attributes are valid
+						event := result.Batches[0].Events[0]
+						attrs := decodeMessagePackAttributes(t, event.Attributes)
+						assert.Equal(t, "test-span", attrs["name"])
+						assert.Equal(t, BytesToTraceID(traceID), attrs["trace.trace_id"])
+						assert.Equal(t, hex.EncodeToString(spanID), attrs["trace.span_id"])
+					})
 				})
 			}
 		})

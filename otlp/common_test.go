@@ -923,6 +923,71 @@ func TestSampleRatePrefersHoneycombAttribute(t *testing.T) {
 	assert.Equal(t, int32(10), sampleRate)
 }
 
+func TestKnownInstrumentationPrefixesReturnTrue(t *testing.T) {
+	tests := []struct {
+		name        string
+		libraryName string
+		isKnown     bool
+	}{
+		{
+			name:        "empty",
+			libraryName: "",
+			isKnown:     false,
+		},
+		{
+			name:        "unknown",
+			libraryName: "unknown",
+			isKnown:     false,
+		},
+		{
+			name:        "java",
+			libraryName: "io.opentelemetry.tomcat-7.0",
+			isKnown:     true,
+		},
+		{
+			name:        "python",
+			libraryName: "opentelemetry.instrumentation.http",
+			isKnown:     true,
+		},
+		{
+			name:        ".net",
+			libraryName: "OpenTelemetry.Instrumentation.AspNetCore",
+			isKnown:     true,
+		},
+		{
+			name:        "ruby",
+			libraryName: "OpenTelemetry::Instrumentation::HTTP",
+			isKnown:     true,
+		},
+		{
+			name:        "go",
+			libraryName: "go.opentelemetry.io/contrib/instrumentation/http",
+			isKnown:     true,
+		},
+		{
+			name:        "js",
+			libraryName: "@opentelemetry/instrumentation/http",
+			isKnown:     true,
+		},
+		{
+			name:        "php",
+			libraryName: "io.opentelemetry.contrib.php.slim",
+			isKnown:     true,
+		},
+		{
+			name:        "collector telemetry scopes prefix",
+			libraryName: "github.com/open-telemetry/opentelemetry-collector",
+			isKnown:     true,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			assert.Equal(t, test.isKnown, isInstrumentationLibrary(test.libraryName))
+		})
+	}
+}
+
 func TestIsClassicKey(t *testing.T) {
 	testCases := []struct {
 		name     string
