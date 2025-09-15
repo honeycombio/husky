@@ -152,7 +152,7 @@ List of transformations that Husky performs while translating from OTLP to Honey
   <tr>
     <td></td>
     <td>meta.annotation_type</td>
-    <td>Added by husky based</td>
+    <td>Added by husky based on object type (span event or span link)</td>
   </tr>
   <tr>
     <td></td>
@@ -224,7 +224,7 @@ List of transformations that Husky performs while translating from OTLP to Honey
   <tr>
     <td></td>
     <td>meta.annotation_type</td>
-    <td>Added by husky based</td>
+    <td>Added by husky based on object type (span event or span link)</td>
   </tr>
   <tr>
     <td></td>
