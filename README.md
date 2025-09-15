@@ -288,6 +288,6 @@ List of transformations that Husky performs while translating from OTLP to Honey
   <tr>
     <td>body</td>
     <td>body</td>
-    <td>We use the field "body" to record the body when it is a string. If the body is a Map in the OTLP payload, we flatten it into the honeycomb event. After flattening if the field "body" does not exist, we set the field with a json string representation of the map.</td>
+    <td>We use the field "body" to record the body when it is a string. If the body is a Map in the OTLP payload, we flatten it into the honeycomb event. It flattens to a dept of 5, using the original "body" field as a prefix for the key, and then appending each subsequent field name to the key, delimited with a dot ("."). Anything deeper is converted to a json string and used as the final value for that field. After flattening, if the field "body" does not exist, we set the field with a json string representation of the map. This was Husky's original behavior for OTLP maps and was kept to ensure that the addition of this flattening feature was not a breaking change.</td>
   </tr>
 </table>
