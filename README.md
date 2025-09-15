@@ -239,7 +239,7 @@ List of transformations that Husky performs while translating from OTLP to Honey
   <tr>
     <td></td>
     <td>meta.time_since_span_start_ms</td>
-    <td>Calculated as difference betweeen spen link time and span start time. Converted from nanoseconds to milliseconds</td>
+    <td>Calculated as difference betweeen span link time and span start time. Converted from nanoseconds to milliseconds</td>
   </tr>
   <tr>
     <td></td>
