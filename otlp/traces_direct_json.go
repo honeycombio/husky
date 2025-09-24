@@ -812,22 +812,23 @@ func unmarshalSpanJSON(
 					case fastjson.TypeNumber:
 						fields.statusCode = int64(v.GetInt())
 						// Check if this is an error status
-						if fields.statusCode == 2 { // STATUS_CODE_ERROR
+						if fields.statusCode == int64(trace.Status_STATUS_CODE_ERROR) {
 							fields.hasError = true
 						}
 					case fastjson.TypeString:
-						// String enum like "STATUS_CODE_OK"
 						codeBytes := v.GetStringBytes()
+						// cases based on trace.Status_StatusCode enum
 						switch string(codeBytes) {
 						case "STATUS_CODE_UNSET":
-							fields.statusCode = 0
+							fields.statusCode = int64(trace.Status_STATUS_CODE_UNSET)
 						case "STATUS_CODE_OK":
-							fields.statusCode = 1
+							fields.statusCode = int64(trace.Status_STATUS_CODE_OK)
 						case "STATUS_CODE_ERROR":
-							fields.statusCode = 2
+							fields.statusCode = int64(trace.Status_STATUS_CODE_ERROR)
 							fields.hasError = true
 						default:
-							fields.statusCode = 0
+							// if the status string is unrecognizable, we assume UNSET
+							fields.statusCode = int64(trace.Status_STATUS_CODE_UNSET)
 						}
 					default:
 						err = errors.New("parse error: expected value as a string or a number.")
