@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
+	"errors"
 	"strconv"
 	"time"
 
@@ -232,11 +233,19 @@ func unmarshalAnyValueIntoAttrsJSON(
 			attrs.addBool(key, v.GetBool())
 
 		case "intValue":
-			// JSON encodes int64 as string
-			strBytes := v.GetStringBytes()
+			// In JSON, code can be either string enum or integer
 			var val int64
-			val, err = strconv.ParseInt(string(strBytes), 10, 64)
-			if err != nil {
+			switch v.Type() {
+			case fastjson.TypeNumber:
+				val = int64(v.GetInt())
+			case fastjson.TypeString:
+				strBytes := v.GetStringBytes()
+				val, err = strconv.ParseInt(string(strBytes), 10, 64)
+				if err != nil {
+					return
+				}
+			default:
+				err = errors.New("parse error: expected value as a string or a number.")
 				return
 			}
 
@@ -729,8 +738,14 @@ func unmarshalSpanJSON(
 					}
 
 				case "code":
-					// In JSON, code can be either string enum or integer
-					if v.Type() == fastjson.TypeString {
+					switch v.Type() {
+					case fastjson.TypeNumber:
+						fields.statusCode = int64(v.GetInt())
+						// Check if this is an error status
+						if fields.statusCode == 2 { // STATUS_CODE_ERROR
+							fields.hasError = true
+						}
+					case fastjson.TypeString:
 						// String enum like "STATUS_CODE_OK"
 						codeBytes := v.GetStringBytes()
 						switch string(codeBytes) {
@@ -744,13 +759,9 @@ func unmarshalSpanJSON(
 						default:
 							fields.statusCode = 0
 						}
-					} else {
-						// Integer value
-						fields.statusCode = int64(v.GetInt())
-						// Check if this is an error status
-						if fields.statusCode == 2 { // STATUS_CODE_ERROR
-							fields.hasError = true
-						}
+					default:
+						err = errors.New("parse error: expected value as a string or a number.")
+						return
 					}
 				}
 			})
