@@ -1555,48 +1555,6 @@ func generateComprehensiveOTLPTraceJSON(errorLocation string, invalidValue strin
 		return validValue
 	}
 
-	getBoolValue := func(location string, validValue bool) interface{} {
-		if errorLocation == location {
-			return invalidValue
-		}
-		return validValue
-	}
-
-	getDoubleValue := func(location string, validValue float64) interface{} {
-		if errorLocation == location {
-			return invalidValue
-		}
-		return validValue
-	}
-
-	getStringValue := func(location, validValue string) string {
-		if errorLocation == location {
-			return invalidValue
-		}
-		return validValue
-	}
-
-	getTraceId := func(location, validValue string) string {
-		if errorLocation == location {
-			return invalidValue
-		}
-		return validValue
-	}
-
-	getSpanId := func(location, validValue string) string {
-		if errorLocation == location {
-			return invalidValue
-		}
-		return validValue
-	}
-
-	getTimestamp := func(location, validValue string) string {
-		if errorLocation == location {
-			return invalidValue
-		}
-		return validValue
-	}
-
 	// Build the JSON structure programmatically to handle different data types correctly
 	data := map[string]interface{}{
 		"resourceSpans": []map[string]interface{}{
@@ -1604,20 +1562,20 @@ func generateComprehensiveOTLPTraceJSON(errorLocation string, invalidValue strin
 				"resource": map[string]interface{}{
 					"attributes": []map[string]interface{}{
 						{
-							"key":   "process.pid",
-							"value": map[string]interface{}{"intValue": getIntValue("resource.process.pid", 12345)},
+							"key":   "int.attr",
+							"value": map[string]interface{}{"intValue": getIntValue("resource.int.attr", 12345)},
 						},
 						{
 							"key":   "bool.attr",
-							"value": map[string]interface{}{"boolValue": getBoolValue("resource.bool.attr", true)},
+							"value": true,
 						},
 						{
 							"key":   "double.attr",
-							"value": map[string]interface{}{"doubleValue": getDoubleValue("resource.double.attr", 123.456)},
+							"value": 123.456,
 						},
 						{
 							"key":   "bytes.attr",
-							"value": map[string]interface{}{"bytesValue": getStringValue("resource.bytes.attr", "aGVsbG8gd29ybGQ=")},
+							"value": "aGVsbG8gd29ybGQ=",
 						},
 					},
 				},
@@ -1633,73 +1591,73 @@ func generateComprehensiveOTLPTraceJSON(errorLocation string, invalidValue strin
 								},
 								{
 									"key":   "attribute.bool",
-									"value": map[string]interface{}{"boolValue": getBoolValue("scope.attribute.bool", false)},
+									"value": map[string]interface{}{"boolValue": false},
 								},
 								{
 									"key":   "attribute.double",
-									"value": map[string]interface{}{"doubleValue": getDoubleValue("scope.attribute.double", 789.123)},
+									"value": map[string]interface{}{"doubleValue": 789.123},
 								},
 							},
 						},
 						"spans": []map[string]interface{}{
 							{
-								"traceId":           getTraceId("span.traceId", "AQIDBAUGAAAAAAAAAAAAAAAAAA=="),
-								"spanId":            getSpanId("span.spanId", "AQIDBAUGAA=="),
-								"parentSpanId":      getSpanId("span.parentSpanId", "ERERFREUAAAAAA=="),
+								"traceId":           "AQIDBAUGAAAAAAAAAAAAAAAAAA==",
+								"spanId":            "AQIDBAUGAA==",
+								"parentSpanId":      "ERERFREUAAAAAA==",
 								"name":              "test-span",
 								"kind":              getIntValue("span.kind", 2),
-								"startTimeUnixNano": getTimestamp("span.startTime", "1234567890123456789"),
-								"endTimeUnixNano":   getTimestamp("span.endTime", "1234567890987654321"),
+								"startTimeUnixNano": "1234567890123456789",
+								"endTimeUnixNano":   "1234567890987654321",
 								"attributes": []map[string]interface{}{
 									{
-										"key":   "http.status_code",
-										"value": map[string]interface{}{"intValue": getIntValue("span.http.status_code", 200)},
+										"key":   "attributes.int",
+										"value": map[string]interface{}{"intValue": getIntValue("span.attributes.int", 200)},
 									},
 									{
-										"key":   "custom.bool",
-										"value": map[string]interface{}{"boolValue": getBoolValue("span.custom.bool", true)},
+										"key":   "attributes.bool",
+										"value": map[string]interface{}{"boolValue": true},
 									},
 									{
-										"key":   "custom.double",
-										"value": map[string]interface{}{"doubleValue": getDoubleValue("span.custom.double", 12.34)},
+										"key":   "attributes.double",
+										"value": map[string]interface{}{"doubleValue": 12.34},
 									},
 								},
 								"events": []map[string]interface{}{
 									{
-										"timeUnixNano": getTimestamp("event1.time", "1234567890223456789"),
-										"name":         "cache.hit",
+										"timeUnixNano": "1234567890223456789",
+										"name":         "test-event-1",
 										"attributes": []map[string]interface{}{
 											{
-												"key":   "cache.ttl",
-												"value": map[string]interface{}{"intValue": getIntValue("event1.cache.ttl", 3600)},
+												"key":   "event.int",
+												"value": map[string]interface{}{"intValue": getIntValue("event1.int", 3600)},
 											},
 											{
-												"key":   "cache.hit_ratio",
-												"value": map[string]interface{}{"doubleValue": getDoubleValue("event1.cache.hit_ratio", 0.85)},
+												"key":   "event.double",
+												"value": map[string]interface{}{"doubleValue": 0.85},
 											},
 											{
-												"key":   "cache.enabled",
-												"value": map[string]interface{}{"boolValue": getBoolValue("event1.cache.enabled", true)},
+												"key":   "event.bool",
+												"value": map[string]interface{}{"boolValue": true},
 											},
 										},
 									},
 								},
 								"links": []map[string]interface{}{
 									{
-										"traceId": getTraceId("link1.traceId", "MTIzNDU2Nzg5OnV7PD0+P0E="),
-										"spanId":  getSpanId("link1.spanId", "QUJDREVGRkg="),
+										"traceId": "MTIzNDU2Nzg5OnV7PD0+P0E=",
+										"spanId":  "QUJDREVGRkg=",
 										"attributes": []map[string]interface{}{
 											{
-												"key":   "priority",
-												"value": map[string]interface{}{"intValue": getIntValue("link1.priority", 5)},
+												"key":   "links.int",
+												"value": map[string]interface{}{"intValue": getIntValue("link1.int", 5)},
 											},
 											{
-												"key":   "weight",
-												"value": map[string]interface{}{"doubleValue": getDoubleValue("link1.weight", 0.75)},
+												"key":   "links.double",
+												"value": map[string]interface{}{"doubleValue": 0.75},
 											},
 											{
-												"key":   "active",
-												"value": map[string]interface{}{"boolValue": getBoolValue("link1.active", true)},
+												"key":   "links.bool",
+												"value": map[string]interface{}{"boolValue": true},
 											},
 										},
 									},
@@ -1788,7 +1746,7 @@ func TestUnmarshalTraceRequestDirectJSON_ErrorHandling(t *testing.T) {
 		},
 		{
 			name:     "resource_int_error",
-			jsonData: generateComprehensiveOTLPTraceJSON("resource.process.pid", "not-a-number"),
+			jsonData: generateComprehensiveOTLPTraceJSON("resource.int.attr", "not-a-number"),
 			errorMsg: "invalid syntax",
 		},
 		{
@@ -1798,17 +1756,17 @@ func TestUnmarshalTraceRequestDirectJSON_ErrorHandling(t *testing.T) {
 		},
 		{
 			name:     "span_attribute_int_error",
-			jsonData: generateComprehensiveOTLPTraceJSON("span.http.status_code", "not-a-number"),
+			jsonData: generateComprehensiveOTLPTraceJSON("span.attributes.int", "not-a-number"),
 			errorMsg: "invalid syntax",
 		},
 		{
 			name:     "event_int_error",
-			jsonData: generateComprehensiveOTLPTraceJSON("event1.cache.ttl", "invalid-int"),
+			jsonData: generateComprehensiveOTLPTraceJSON("event1.int", "invalid-int"),
 			errorMsg: "invalid syntax",
 		},
 		{
 			name:     "link_int_error",
-			jsonData: generateComprehensiveOTLPTraceJSON("link1.priority", "invalid-int"),
+			jsonData: generateComprehensiveOTLPTraceJSON("link1.int", "invalid-int"),
 			errorMsg: "invalid syntax",
 		},
 	}
