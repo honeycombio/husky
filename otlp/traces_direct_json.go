@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
+	"errors"
 	"strconv"
 	"time"
 
@@ -54,6 +55,11 @@ func unmarshalTraceRequestDirectMsgpJSON(
 	}
 
 	obj.Visit(func(key []byte, v *fastjson.Value) {
+		// Closure-based error handling
+		// if err is set, all subsequent visits are no-ops
+		if err != nil {
+			return
+		}
 		switch string(key) {
 		case "resourceSpans":
 			resourceSpansArray := v.GetArray()
@@ -86,6 +92,11 @@ func unmarshalResourceSpansJSON(
 
 	var scopeSpansArray []*fastjson.Value
 	obj.Visit(func(key []byte, v *fastjson.Value) {
+		// Closure-based error handling
+		// if err is set, all subsequent visits are no-ops
+		if err != nil {
+			return
+		}
 		switch string(key) {
 		case "resource":
 			err = unmarshalResourceJSON(ctx, v, resourceAttrs)
@@ -130,6 +141,11 @@ func unmarshalResourceJSON(
 	}
 
 	obj.Visit(func(key []byte, v *fastjson.Value) {
+		// Closure-based error handling
+		// if err is set, all subsequent visits are no-ops
+		if err != nil {
+			return
+		}
 		switch string(key) {
 		case "attributes":
 			attributes := v.GetArray()
@@ -175,6 +191,11 @@ func unmarshalKeyValueJSON(
 	var keyBytes []byte
 	var valueObj *fastjson.Value
 	obj.Visit(func(k []byte, v *fastjson.Value) {
+		// Closure-based error handling
+		// if err is set, all subsequent visits are no-ops
+		if err != nil {
+			return
+		}
 		switch string(k) {
 		case "key":
 			// CAUTION: GetStringBytes() returns references to the input buffer.
@@ -212,6 +233,12 @@ func unmarshalAnyValueIntoAttrsJSON(
 
 	// Visit the object once to find the value type
 	obj.Visit(func(k []byte, v *fastjson.Value) {
+		// Closure-based error handling
+		// if err is set, all subsequent visits are no-ops
+		if err != nil {
+			return
+		}
+
 		switch string(k) {
 		case "stringValue":
 			value := v.GetStringBytes()
@@ -232,11 +259,19 @@ func unmarshalAnyValueIntoAttrsJSON(
 			attrs.addBool(key, v.GetBool())
 
 		case "intValue":
-			// JSON encodes int64 as string
-			strBytes := v.GetStringBytes()
+			// In JSON, code can be either string or integer
 			var val int64
-			val, err = strconv.ParseInt(string(strBytes), 10, 64)
-			if err != nil {
+			switch v.Type() {
+			case fastjson.TypeNumber:
+				val = int64(v.GetInt())
+			case fastjson.TypeString:
+				strBytes := v.GetStringBytes()
+				val, err = strconv.ParseInt(string(strBytes), 10, 64)
+				if err != nil {
+					return
+				}
+			default:
+				err = errors.New("parse error: expected value as a string or a number.")
 				return
 			}
 
@@ -314,6 +349,11 @@ func unmarshalArrayValueJSON(ctx context.Context, v *fastjson.Value) ([]any, err
 	var values []any
 
 	obj.Visit(func(key []byte, v *fastjson.Value) {
+		// Closure-based error handling
+		// if err is set, all subsequent visits are no-ops
+		if err != nil {
+			return
+		}
 		switch string(key) {
 		case "values":
 			valuesArray := v.GetArray()
@@ -346,6 +386,11 @@ func unmarshalAnyValueJSON(ctx context.Context, v *fastjson.Value) (any, error) 
 
 	var result any
 	obj.Visit(func(key []byte, v *fastjson.Value) {
+		// Closure-based error handling
+		// if err is set, all subsequent visits are no-ops
+		if err != nil {
+			return
+		}
 		switch string(key) {
 		case "stringValue":
 			result = string(v.GetStringBytes())
@@ -403,6 +448,11 @@ func unmarshalKvlistValueJSON(ctx context.Context, v *fastjson.Value) (map[strin
 
 	result := make(map[string]any)
 	obj.Visit(func(key []byte, v *fastjson.Value) {
+		// Closure-based error handling
+		// if err is set, all subsequent visits are no-ops
+		if err != nil {
+			return
+		}
 		switch string(key) {
 		case "values":
 			valuesArray := v.GetArray()
@@ -457,6 +507,11 @@ func unmarshalKvlistValueFlattenJSON(
 	}
 
 	obj.Visit(func(key []byte, v *fastjson.Value) {
+		// Closure-based error handling
+		// if err is set, all subsequent visits are no-ops
+		if err != nil {
+			return
+		}
 		switch string(key) {
 		case "values":
 			valuesArray := v.GetArray()
@@ -471,6 +526,9 @@ func unmarshalKvlistValueFlattenJSON(
 				var valueObj *fastjson.Value
 
 				valueObject.Visit(func(k []byte, v *fastjson.Value) {
+					if err != nil {
+						return
+					}
 					switch string(k) {
 					case "key":
 						keyBytes = v.GetStringBytes()
@@ -518,6 +576,11 @@ func unmarshalScopeSpansJSON(
 
 	var spansArray []*fastjson.Value
 	obj.Visit(func(key []byte, v *fastjson.Value) {
+		// Closure-based error handling
+		// if err is set, all subsequent visits are no-ops
+		if err != nil {
+			return
+		}
 		switch string(key) {
 		case "scope":
 			if err = unmarshalInstrumentationScopeJSON(ctx, v, scopeAttrs); err != nil {
@@ -553,6 +616,11 @@ func unmarshalInstrumentationScopeJSON(
 	}
 
 	obj.Visit(func(key []byte, v *fastjson.Value) {
+		// Closure-based error handling
+		// if err is set, all subsequent visits are no-ops
+		if err != nil {
+			return
+		}
 		switch string(key) {
 		case "name":
 			nameBytes := v.GetStringBytes()
@@ -612,6 +680,12 @@ func unmarshalSpanJSON(
 	}
 
 	obj.Visit(func(key []byte, v *fastjson.Value) {
+		// Closure-based error handling
+		// if err is set, all subsequent visits are no-ops
+		if err != nil {
+			return
+		}
+
 		switch string(key) {
 		case "traceId":
 			// Trace ID is base64 encoded in JSON
@@ -721,6 +795,11 @@ func unmarshalSpanJSON(
 				return
 			}
 			statusObj.Visit(func(k []byte, v *fastjson.Value) {
+				// Closure-based error handling
+				// if err is set, all subsequent visits are no-ops
+				if err != nil {
+					return
+				}
 				switch string(k) {
 				case "message":
 					messageBytes := v.GetStringBytes()
@@ -729,28 +808,31 @@ func unmarshalSpanJSON(
 					}
 
 				case "code":
-					// In JSON, code can be either string enum or integer
-					if v.Type() == fastjson.TypeString {
-						// String enum like "STATUS_CODE_OK"
-						codeBytes := v.GetStringBytes()
-						switch string(codeBytes) {
-						case "STATUS_CODE_UNSET":
-							fields.statusCode = 0
-						case "STATUS_CODE_OK":
-							fields.statusCode = 1
-						case "STATUS_CODE_ERROR":
-							fields.statusCode = 2
-							fields.hasError = true
-						default:
-							fields.statusCode = 0
-						}
-					} else {
-						// Integer value
+					switch v.Type() {
+					case fastjson.TypeNumber:
 						fields.statusCode = int64(v.GetInt())
 						// Check if this is an error status
-						if fields.statusCode == 2 { // STATUS_CODE_ERROR
+						if fields.statusCode == int64(trace.Status_STATUS_CODE_ERROR) {
 							fields.hasError = true
 						}
+					case fastjson.TypeString:
+						codeBytes := v.GetStringBytes()
+						// cases based on trace.Status_StatusCode enum
+						switch string(codeBytes) {
+						case "STATUS_CODE_UNSET":
+							fields.statusCode = int64(trace.Status_STATUS_CODE_UNSET)
+						case "STATUS_CODE_OK":
+							fields.statusCode = int64(trace.Status_STATUS_CODE_OK)
+						case "STATUS_CODE_ERROR":
+							fields.statusCode = int64(trace.Status_STATUS_CODE_ERROR)
+							fields.hasError = true
+						default:
+							// if the status string is unrecognizable, we assume UNSET
+							fields.statusCode = int64(trace.Status_STATUS_CODE_UNSET)
+						}
+					default:
+						err = errors.New("parse error: expected value as a string or a number.")
+						return
 					}
 				}
 			})
@@ -895,6 +977,11 @@ func unmarshalSpanEventJSON(
 	}
 
 	obj.Visit(func(key []byte, v *fastjson.Value) {
+		// Closure-based error handling
+		// if err is set, all subsequent visits are no-ops
+		if err != nil {
+			return
+		}
 		switch string(key) {
 		case "timeUnixNano":
 			// Time is encoded as string in JSON
@@ -1043,6 +1130,12 @@ func unmarshalSpanLinkJSON(
 	}
 
 	obj.Visit(func(key []byte, v *fastjson.Value) {
+		// Closure-based error handling
+		// if err is set, all subsequent visits are no-ops
+		if err != nil {
+			return
+		}
+
 		switch string(key) {
 		case "traceId":
 			// Trace ID is base64 encoded in JSON

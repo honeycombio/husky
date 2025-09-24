@@ -1543,6 +1543,139 @@ func BenchmarkUnmarshalTraceRequestDirectMsgp(b *testing.B) {
 	})
 }
 
+// generateComprehensiveOTLPTraceJSON generates a comprehensive OTLP trace request JSON
+// with all possible fields populated. The errorLocation parameter specifies where
+// to inject an invalid field that should cause parsing to fail.
+func generateComprehensiveOTLPTraceJSON(errorLocation string, invalidValue string) string {
+	// Helper functions to inject errors based on location and data type
+	getIntValue := func(location string, validValue int) interface{} {
+		if errorLocation == location {
+			return invalidValue
+		}
+		return validValue
+	}
+
+	// Build the JSON structure programmatically to handle different data types correctly
+	data := map[string]interface{}{
+		"resourceSpans": []map[string]interface{}{
+			{
+				"resource": map[string]interface{}{
+					"attributes": []map[string]interface{}{
+						{
+							"key":   "int.attr",
+							"value": map[string]interface{}{"intValue": getIntValue("resource.int.attr", 12345)},
+						},
+						{
+							"key":   "bool.attr",
+							"value": true,
+						},
+						{
+							"key":   "double.attr",
+							"value": 123.456,
+						},
+						{
+							"key":   "bytes.attr",
+							"value": "aGVsbG8gd29ybGQ=",
+						},
+					},
+				},
+				"scopeSpans": []map[string]interface{}{
+					{
+						"scope": map[string]interface{}{
+							"name":    "test-scope",
+							"version": "1.2.3",
+							"attributes": []map[string]interface{}{
+								{
+									"key":   "attribute.int",
+									"value": map[string]interface{}{"intValue": getIntValue("scope.attribute.int", 456)},
+								},
+								{
+									"key":   "attribute.bool",
+									"value": map[string]interface{}{"boolValue": false},
+								},
+								{
+									"key":   "attribute.double",
+									"value": map[string]interface{}{"doubleValue": 789.123},
+								},
+							},
+						},
+						"spans": []map[string]interface{}{
+							{
+								"traceId":           "AQIDBAUGAAAAAAAAAAAAAAAAAA==",
+								"spanId":            "AQIDBAUGAA==",
+								"parentSpanId":      "ERERFREUAAAAAA==",
+								"name":              "test-span",
+								"kind":              getIntValue("span.kind", 2),
+								"startTimeUnixNano": "1234567890123456789",
+								"endTimeUnixNano":   "1234567890987654321",
+								"attributes": []map[string]interface{}{
+									{
+										"key":   "attributes.int",
+										"value": map[string]interface{}{"intValue": getIntValue("span.attributes.int", 200)},
+									},
+									{
+										"key":   "attributes.bool",
+										"value": map[string]interface{}{"boolValue": true},
+									},
+									{
+										"key":   "attributes.double",
+										"value": map[string]interface{}{"doubleValue": 12.34},
+									},
+								},
+								"events": []map[string]interface{}{
+									{
+										"timeUnixNano": "1234567890223456789",
+										"name":         "test-event-1",
+										"attributes": []map[string]interface{}{
+											{
+												"key":   "event.int",
+												"value": map[string]interface{}{"intValue": getIntValue("event1.int", 3600)},
+											},
+											{
+												"key":   "event.double",
+												"value": map[string]interface{}{"doubleValue": 0.85},
+											},
+											{
+												"key":   "event.bool",
+												"value": map[string]interface{}{"boolValue": true},
+											},
+										},
+									},
+								},
+								"links": []map[string]interface{}{
+									{
+										"traceId": "MTIzNDU2Nzg5OnV7PD0+P0E=",
+										"spanId":  "QUJDREVGRkg=",
+										"attributes": []map[string]interface{}{
+											{
+												"key":   "links.int",
+												"value": map[string]interface{}{"intValue": getIntValue("link1.int", 5)},
+											},
+											{
+												"key":   "links.double",
+												"value": map[string]interface{}{"doubleValue": 0.75},
+											},
+											{
+												"key":   "links.bool",
+												"value": map[string]interface{}{"boolValue": true},
+											},
+										},
+									},
+								},
+								"status": map[string]interface{}{
+									"code": getIntValue("status.code", 1),
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	jsonBytes, _ := json.Marshal(data)
+	return string(jsonBytes)
+}
 func TestUnmarshalTraceRequestDirectJSON_ErrorHandling(t *testing.T) {
 	ctx := context.Background()
 	ri := RequestInfo{
@@ -1611,12 +1744,37 @@ func TestUnmarshalTraceRequestDirectJSON_ErrorHandling(t *testing.T) {
 			}`,
 			errorMsg: "", // fastjson will return a parse error
 		},
+		{
+			name:     "resource_int_error",
+			jsonData: generateComprehensiveOTLPTraceJSON("resource.int.attr", "not-a-number"),
+			errorMsg: "invalid syntax",
+		},
+		{
+			name:     "scope_int_error",
+			jsonData: generateComprehensiveOTLPTraceJSON("scope.attribute.int", "invalid-int"),
+			errorMsg: "invalid syntax",
+		},
+		{
+			name:     "span_attribute_int_error",
+			jsonData: generateComprehensiveOTLPTraceJSON("span.attributes.int", "not-a-number"),
+			errorMsg: "invalid syntax",
+		},
+		{
+			name:     "event_int_error",
+			jsonData: generateComprehensiveOTLPTraceJSON("event1.int", "invalid-int"),
+			errorMsg: "invalid syntax",
+		},
+		{
+			name:     "link_int_error",
+			jsonData: generateComprehensiveOTLPTraceJSON("link1.int", "invalid-int"),
+			errorMsg: "invalid syntax",
+		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := unmarshalTraceRequestDirectMsgpJSON(ctx, []byte(tc.jsonData), ri)
-			assert.Error(t, err)
+			require.Error(t, err)
 			assert.Contains(t, err.Error(), tc.errorMsg)
 		})
 	}
