@@ -55,6 +55,11 @@ func unmarshalTraceRequestDirectMsgpJSON(
 	}
 
 	obj.Visit(func(key []byte, v *fastjson.Value) {
+		// Closure-based error handling
+		// if err is set, all subsequent visits are no-ops
+		if err != nil {
+			return
+		}
 		switch string(key) {
 		case "resourceSpans":
 			resourceSpansArray := v.GetArray()
@@ -87,6 +92,8 @@ func unmarshalResourceSpansJSON(
 
 	var scopeSpansArray []*fastjson.Value
 	obj.Visit(func(key []byte, v *fastjson.Value) {
+		// Closure-based error handling
+		// if err is set, all subsequent visits are no-ops
 		if err != nil {
 			return
 		}
@@ -134,6 +141,8 @@ func unmarshalResourceJSON(
 	}
 
 	obj.Visit(func(key []byte, v *fastjson.Value) {
+		// Closure-based error handling
+		// if err is set, all subsequent visits are no-ops
 		if err != nil {
 			return
 		}
@@ -182,6 +191,8 @@ func unmarshalKeyValueJSON(
 	var keyBytes []byte
 	var valueObj *fastjson.Value
 	obj.Visit(func(k []byte, v *fastjson.Value) {
+		// Closure-based error handling
+		// if err is set, all subsequent visits are no-ops
 		if err != nil {
 			return
 		}
@@ -222,6 +233,8 @@ func unmarshalAnyValueIntoAttrsJSON(
 
 	// Visit the object once to find the value type
 	obj.Visit(func(k []byte, v *fastjson.Value) {
+		// Closure-based error handling
+		// if err is set, all subsequent visits are no-ops
 		if err != nil {
 			return
 		}
@@ -246,7 +259,7 @@ func unmarshalAnyValueIntoAttrsJSON(
 			attrs.addBool(key, v.GetBool())
 
 		case "intValue":
-			// In JSON, code can be either string enum or integer
+			// In JSON, code can be either string or integer
 			var val int64
 			switch v.Type() {
 			case fastjson.TypeNumber:
@@ -336,6 +349,8 @@ func unmarshalArrayValueJSON(ctx context.Context, v *fastjson.Value) ([]any, err
 	var values []any
 
 	obj.Visit(func(key []byte, v *fastjson.Value) {
+		// Closure-based error handling
+		// if err is set, all subsequent visits are no-ops
 		if err != nil {
 			return
 		}
@@ -371,6 +386,8 @@ func unmarshalAnyValueJSON(ctx context.Context, v *fastjson.Value) (any, error) 
 
 	var result any
 	obj.Visit(func(key []byte, v *fastjson.Value) {
+		// Closure-based error handling
+		// if err is set, all subsequent visits are no-ops
 		if err != nil {
 			return
 		}
@@ -431,6 +448,8 @@ func unmarshalKvlistValueJSON(ctx context.Context, v *fastjson.Value) (map[strin
 
 	result := make(map[string]any)
 	obj.Visit(func(key []byte, v *fastjson.Value) {
+		// Closure-based error handling
+		// if err is set, all subsequent visits are no-ops
 		if err != nil {
 			return
 		}
@@ -488,6 +507,8 @@ func unmarshalKvlistValueFlattenJSON(
 	}
 
 	obj.Visit(func(key []byte, v *fastjson.Value) {
+		// Closure-based error handling
+		// if err is set, all subsequent visits are no-ops
 		if err != nil {
 			return
 		}
@@ -555,6 +576,8 @@ func unmarshalScopeSpansJSON(
 
 	var spansArray []*fastjson.Value
 	obj.Visit(func(key []byte, v *fastjson.Value) {
+		// Closure-based error handling
+		// if err is set, all subsequent visits are no-ops
 		if err != nil {
 			return
 		}
@@ -593,6 +616,11 @@ func unmarshalInstrumentationScopeJSON(
 	}
 
 	obj.Visit(func(key []byte, v *fastjson.Value) {
+		// Closure-based error handling
+		// if err is set, all subsequent visits are no-ops
+		if err != nil {
+			return
+		}
 		switch string(key) {
 		case "name":
 			nameBytes := v.GetStringBytes()
@@ -652,6 +680,8 @@ func unmarshalSpanJSON(
 	}
 
 	obj.Visit(func(key []byte, v *fastjson.Value) {
+		// Closure-based error handling
+		// if err is set, all subsequent visits are no-ops
 		if err != nil {
 			return
 		}
@@ -765,6 +795,8 @@ func unmarshalSpanJSON(
 				return
 			}
 			statusObj.Visit(func(k []byte, v *fastjson.Value) {
+				// Closure-based error handling
+				// if err is set, all subsequent visits are no-ops
 				if err != nil {
 					return
 				}
@@ -944,6 +976,8 @@ func unmarshalSpanEventJSON(
 	}
 
 	obj.Visit(func(key []byte, v *fastjson.Value) {
+		// Closure-based error handling
+		// if err is set, all subsequent visits are no-ops
 		if err != nil {
 			return
 		}
@@ -1095,6 +1129,8 @@ func unmarshalSpanLinkJSON(
 	}
 
 	obj.Visit(func(key []byte, v *fastjson.Value) {
+		// Closure-based error handling
+		// if err is set, all subsequent visits are no-ops
 		if err != nil {
 			return
 		}
