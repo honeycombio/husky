@@ -87,6 +87,9 @@ func unmarshalResourceSpansJSON(
 
 	var scopeSpansArray []*fastjson.Value
 	obj.Visit(func(key []byte, v *fastjson.Value) {
+		if err != nil {
+			return
+		}
 		switch string(key) {
 		case "resource":
 			err = unmarshalResourceJSON(ctx, v, resourceAttrs)
@@ -131,6 +134,9 @@ func unmarshalResourceJSON(
 	}
 
 	obj.Visit(func(key []byte, v *fastjson.Value) {
+		if err != nil {
+			return
+		}
 		switch string(key) {
 		case "attributes":
 			attributes := v.GetArray()
@@ -176,6 +182,9 @@ func unmarshalKeyValueJSON(
 	var keyBytes []byte
 	var valueObj *fastjson.Value
 	obj.Visit(func(k []byte, v *fastjson.Value) {
+		if err != nil {
+			return
+		}
 		switch string(k) {
 		case "key":
 			// CAUTION: GetStringBytes() returns references to the input buffer.
@@ -213,6 +222,10 @@ func unmarshalAnyValueIntoAttrsJSON(
 
 	// Visit the object once to find the value type
 	obj.Visit(func(k []byte, v *fastjson.Value) {
+		if err != nil {
+			return
+		}
+
 		switch string(k) {
 		case "stringValue":
 			value := v.GetStringBytes()
@@ -323,6 +336,9 @@ func unmarshalArrayValueJSON(ctx context.Context, v *fastjson.Value) ([]any, err
 	var values []any
 
 	obj.Visit(func(key []byte, v *fastjson.Value) {
+		if err != nil {
+			return
+		}
 		switch string(key) {
 		case "values":
 			valuesArray := v.GetArray()
@@ -355,6 +371,9 @@ func unmarshalAnyValueJSON(ctx context.Context, v *fastjson.Value) (any, error) 
 
 	var result any
 	obj.Visit(func(key []byte, v *fastjson.Value) {
+		if err != nil {
+			return
+		}
 		switch string(key) {
 		case "stringValue":
 			result = string(v.GetStringBytes())
@@ -412,6 +431,9 @@ func unmarshalKvlistValueJSON(ctx context.Context, v *fastjson.Value) (map[strin
 
 	result := make(map[string]any)
 	obj.Visit(func(key []byte, v *fastjson.Value) {
+		if err != nil {
+			return
+		}
 		switch string(key) {
 		case "values":
 			valuesArray := v.GetArray()
@@ -466,6 +488,9 @@ func unmarshalKvlistValueFlattenJSON(
 	}
 
 	obj.Visit(func(key []byte, v *fastjson.Value) {
+		if err != nil {
+			return
+		}
 		switch string(key) {
 		case "values":
 			valuesArray := v.GetArray()
@@ -480,6 +505,9 @@ func unmarshalKvlistValueFlattenJSON(
 				var valueObj *fastjson.Value
 
 				valueObject.Visit(func(k []byte, v *fastjson.Value) {
+					if err != nil {
+						return
+					}
 					switch string(k) {
 					case "key":
 						keyBytes = v.GetStringBytes()
@@ -527,6 +555,9 @@ func unmarshalScopeSpansJSON(
 
 	var spansArray []*fastjson.Value
 	obj.Visit(func(key []byte, v *fastjson.Value) {
+		if err != nil {
+			return
+		}
 		switch string(key) {
 		case "scope":
 			if err = unmarshalInstrumentationScopeJSON(ctx, v, scopeAttrs); err != nil {
@@ -621,6 +652,10 @@ func unmarshalSpanJSON(
 	}
 
 	obj.Visit(func(key []byte, v *fastjson.Value) {
+		if err != nil {
+			return
+		}
+
 		switch string(key) {
 		case "traceId":
 			// Trace ID is base64 encoded in JSON
@@ -730,6 +765,9 @@ func unmarshalSpanJSON(
 				return
 			}
 			statusObj.Visit(func(k []byte, v *fastjson.Value) {
+				if err != nil {
+					return
+				}
 				switch string(k) {
 				case "message":
 					messageBytes := v.GetStringBytes()
@@ -906,6 +944,9 @@ func unmarshalSpanEventJSON(
 	}
 
 	obj.Visit(func(key []byte, v *fastjson.Value) {
+		if err != nil {
+			return
+		}
 		switch string(key) {
 		case "timeUnixNano":
 			// Time is encoded as string in JSON
@@ -1054,6 +1095,10 @@ func unmarshalSpanLinkJSON(
 	}
 
 	obj.Visit(func(key []byte, v *fastjson.Value) {
+		if err != nil {
+			return
+		}
+
 		switch string(key) {
 		case "traceId":
 			// Trace ID is base64 encoded in JSON

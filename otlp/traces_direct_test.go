@@ -1786,67 +1786,31 @@ func TestUnmarshalTraceRequestDirectJSON_ErrorHandling(t *testing.T) {
 			}`,
 			errorMsg: "", // fastjson will return a parse error
 		},
-	}
-
-	// Add comprehensive test cases using the helper function - organized by level with one test per data type
-	comprehensiveTestCases := []struct {
-		name          string
-		errorLocation string
-		invalidValue  string
-		expectedError string
-	}{
-		//		// Resource level - one test per data type
-		//		{"resource_int_error", "resource.process.pid", "not-a-number", "invalid syntax"},
-		//		{"resource_bool_error", "resource.bool.attr", "not-a-bool", "invalid syntax"},
-		//		{"resource_double_error", "resource.double.attr", "not-a-double", "invalid syntax"},
-		//		{"resource_bytes_error", "resource.bytes.attr", "invalid-base64!", "invalid syntax"},
-		//
-		//		// Scope level - one test per data type
-		//		{"scope_int_error", "scope.attribute.int", "invalid-int", "invalid syntax"},
-		//		{"scope_bool_error", "scope.attribute.bool", "invalid-bool", "invalid syntax"},
-		//		{"scope_double_error", "scope.attribute.double", "invalid-double", "invalid syntax"},
-		//
-		//		// Span core fields - one test per field type
-		//		{"span_traceId_error", "span.traceId", "invalid-trace-id", "invalid syntax"},
-		//		{"span_spanId_error", "span.spanId", "invalid-span-id", "invalid syntax"},
-		//		{"span_parentSpanId_error", "span.parentSpanId", "invalid-parent-id", "invalid syntax"},
-		//		{"span_kind_error", "span.kind", "invalid-kind", "invalid syntax"},
-		//		{"span_startTime_error", "span.startTime", "invalid-timestamp", "invalid syntax"},
-		//		{"span_endTime_error", "span.endTime", "invalid-timestamp", "invalid syntax"},
-
-		// Span attributes - one test per data type
-		{"span_attribute_int_error", "span.http.status_code", "not-a-number", "invalid syntax"},
-		//		{"span_attribute_bool_error", "span.custom.bool", "not-a-bool", "invalid syntax"},
-		//		{"span_attribute_double_error", "span.custom.double", "not-a-double", "invalid syntax"},
-		//
-		//		// Event - one test per data type
-		//		{"event_timestamp_error", "event1.time", "invalid-timestamp", "invalid syntax"},
-		//		{"event_int_error", "event1.cache.ttl", "invalid-int", "invalid syntax"},
-		//		{"event_double_error", "event1.cache.hit_ratio", "invalid-double", "invalid syntax"},
-		//		{"event_bool_error", "event1.cache.enabled", "invalid-bool", "invalid syntax"},
-		//
-		//		// Link - one test per data type
-		//		{"link_traceId_error", "link1.traceId", "invalid-trace-id", "invalid syntax"},
-		//		{"link_spanId_error", "link1.spanId", "invalid-span-id", "invalid syntax"},
-		//		{"link_int_error", "link1.priority", "invalid-int", "invalid syntax"},
-		//		{"link_double_error", "link1.weight", "invalid-double", "invalid syntax"},
-		//		{"link_bool_error", "link1.active", "invalid-bool", "invalid syntax"},
-		//
-		//		// Status - one test per field type
-		//		{"status_code_error", "status.code", "invalid-status", "invalid syntax"},
-	}
-
-	// Add comprehensive test cases to the main test cases slice
-	for _, ctc := range comprehensiveTestCases {
-		testCases = append(testCases, struct {
-			name     string
-			jsonData string
-			errorMsg string
-		}{
-			name:     ctc.name,
-			jsonData: generateComprehensiveOTLPTraceJSON(ctc.errorLocation, ctc.invalidValue),
-			errorMsg: ctc.expectedError,
-		})
+		{
+			name:     "resource_int_error",
+			jsonData: generateComprehensiveOTLPTraceJSON("resource.process.pid", "not-a-number"),
+			errorMsg: "invalid syntax",
+		},
+		{
+			name:     "scope_int_error",
+			jsonData: generateComprehensiveOTLPTraceJSON("scope.attribute.int", "invalid-int"),
+			errorMsg: "invalid syntax",
+		},
+		{
+			name:     "span_attribute_int_error",
+			jsonData: generateComprehensiveOTLPTraceJSON("span.http.status_code", "not-a-number"),
+			errorMsg: "invalid syntax",
+		},
+		{
+			name:     "event_int_error",
+			jsonData: generateComprehensiveOTLPTraceJSON("event1.cache.ttl", "invalid-int"),
+			errorMsg: "invalid syntax",
+		},
+		{
+			name:     "link_int_error",
+			jsonData: generateComprehensiveOTLPTraceJSON("link1.priority", "invalid-int"),
+			errorMsg: "invalid syntax",
+		},
 	}
 
 	for _, tc := range testCases {
