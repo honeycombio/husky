@@ -1,5 +1,12 @@
 # Husky Changelog
 
+## 0.39.0 2025-09-25
+
+- fix: parse intValue from json as either a number or a string (#316) | [Yingrong Zhao](https://github.com/vinozzz)
+- maint: document husky data transformantions (#315) | [Tyler Helmuth](https://github.com/TylerHelmuth)
+- maint(deps): bump the minor-patch group with 6 updates (#313) | [dependabot[bot]](https://github.com/dependabot[bot])
+- feat: add prefix used by Collector telemetry scopes to recognized list (#314) | [Robb Kidd](https://github.com/RobbKidd)
+
 ## 0.38.0 2025-08-08
 
 - feat: export UnmarshalTraceRequestDirectMsgp (#309) | [ianwilkes](https://github.com/ianwilkes)
