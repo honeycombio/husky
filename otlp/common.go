@@ -451,6 +451,9 @@ func getMarshallableValue(value *common.AnyValue) interface{} {
 // kvlist attributes are flattened to a depth of (maxDepth), if the depth is exceeded, the attribute is added as a JSON string.
 // Bytes and array values are always added as JSON strings.
 func addAttributeToMap(ctx context.Context, result map[string]interface{}, key string, value *common.AnyValue, depth int) {
+	if value == nil {
+		return
+	}
 	switch value.Value.(type) {
 	case *common.AnyValue_StringValue:
 		result[key] = value.GetStringValue()
@@ -477,6 +480,9 @@ func addAttributeToMap(ctx context.Context, result map[string]interface{}, key s
 		} else {
 			// Otherwise, continue flattening
 			for _, entry := range value.GetKvlistValue().Values {
+				if entry.Value == nil {
+					continue
+				}
 				k := key + "." + entry.Key
 				addAttributeToMap(ctx, result, k, entry.Value, depth+1)
 			}
