@@ -1,5 +1,9 @@
 # Husky Changelog
 
+## v0.39.1 2025-09-29
+
+- fix(otlp): fix nil pointer in addAttributeToMap (#318) | @asdvalenzuela
+
 ## 0.39.0 2025-09-25
 
 - fix: parse intValue from json as either a number or a string (#316) | [Yingrong Zhao](https://github.com/vinozzz)
