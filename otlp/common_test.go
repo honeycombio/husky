@@ -395,6 +395,20 @@ func Test_getValue(t *testing.T) {
 				"body.nest.mom": "hi mom",
 			},
 		},
+		{"nil value", nil, map[string]interface{}{}},
+		{"kvlist with nil entry values", &common.AnyValue{
+			Value: &common.AnyValue_KvlistValue{KvlistValue: &common.KeyValueList{
+				Values: []*common.KeyValue{
+					{Key: "valid", Value: &common.AnyValue{Value: &common.AnyValue_StringValue{StringValue: "test"}}},
+					{Key: "nil_value", Value: nil},
+					{Key: "another_valid", Value: &common.AnyValue{Value: &common.AnyValue_IntValue{IntValue: 42}}},
+				},
+			}}},
+			map[string]interface{}{
+				"body.valid":         "test",
+				"body.another_valid": int64(42),
+			},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
