@@ -1072,3 +1072,100 @@ func BenchmarkIsClassicKey(b *testing.B) {
 		})
 	}
 }
+
+func TestGetMarshallableValue(t *testing.T) {
+	tests := []struct {
+		name  string
+		value *common.AnyValue
+		want  interface{}
+	}{
+		{
+			name:  "nil value",
+			value: nil,
+			want:  nil,
+		},
+		{
+			name:  "string value",
+			value: &common.AnyValue{Value: &common.AnyValue_StringValue{StringValue: "test"}},
+			want:  "test",
+		},
+		{
+			name:  "int value",
+			value: &common.AnyValue{Value: &common.AnyValue_IntValue{IntValue: 42}},
+			want:  int64(42),
+		},
+		{
+			name:  "bool value",
+			value: &common.AnyValue{Value: &common.AnyValue_BoolValue{BoolValue: true}},
+			want:  true,
+		},
+		{
+			name:  "double value",
+			value: &common.AnyValue{Value: &common.AnyValue_DoubleValue{DoubleValue: 3.14}},
+			want:  float64(3.14),
+		},
+		{
+			name:  "bytes value",
+			value: &common.AnyValue{Value: &common.AnyValue_BytesValue{BytesValue: []byte{1, 2, 3}}},
+			want:  []byte{1, 2, 3},
+		},
+		{
+			name: "array value",
+			value: &common.AnyValue{Value: &common.AnyValue_ArrayValue{
+				ArrayValue: &common.ArrayValue{Values: []*common.AnyValue{
+					{Value: &common.AnyValue_StringValue{StringValue: "a"}},
+					{Value: &common.AnyValue_IntValue{IntValue: 1}},
+				}},
+			}},
+			want: []interface{}{"a", int64(1)},
+		},
+		{
+			name: "kvlist value",
+			value: &common.AnyValue{
+				Value: &common.AnyValue_KvlistValue{KvlistValue: &common.KeyValueList{
+					Values: []*common.KeyValue{
+						{Key: "key1", Value: &common.AnyValue{Value: &common.AnyValue_StringValue{StringValue: "value1"}}},
+						{Key: "key2", Value: &common.AnyValue{Value: &common.AnyValue_IntValue{IntValue: 2}}},
+					},
+				}},
+			},
+			want: map[string]interface{}{
+				"key1": "value1",
+				"key2": int64(2),
+			},
+		},
+		{
+			name: "array with nil element",
+			value: &common.AnyValue{Value: &common.AnyValue_ArrayValue{
+				ArrayValue: &common.ArrayValue{Values: []*common.AnyValue{
+					{Value: &common.AnyValue_StringValue{StringValue: "a"}},
+					nil,
+					{Value: &common.AnyValue_IntValue{IntValue: 1}},
+				}},
+			}},
+			want: []interface{}{"a", nil, int64(1)},
+		},
+		{
+			name: "kvlist with nil value",
+			value: &common.AnyValue{
+				Value: &common.AnyValue_KvlistValue{KvlistValue: &common.KeyValueList{
+					Values: []*common.KeyValue{
+						{Key: "key1", Value: &common.AnyValue{Value: &common.AnyValue_StringValue{StringValue: "value1"}}},
+						{Key: "key2", Value: nil},
+					},
+				}},
+			},
+			want: map[string]interface{}{
+				"key1": "value1",
+				"key2": nil,
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := getMarshallableValue(tt.value)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}

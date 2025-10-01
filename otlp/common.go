@@ -417,6 +417,9 @@ func (l *limitedWriter) String() string {
 // are returned as native Go aggregates (maps and slices), rather than marshalled
 // strings (we expect the caller to do the marshalling).
 func getMarshallableValue(value *common.AnyValue) interface{} {
+	if value == nil {
+		return nil
+	}
 	switch value.Value.(type) {
 	case *common.AnyValue_StringValue:
 		return value.GetStringValue()
