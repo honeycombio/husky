@@ -1,5 +1,9 @@
 # Husky Changelog
 
+## v0.39.2 2025-10-02
+
+- fix(otlp): add nil check in getMarshallableValue to prevent panic (#320) | @MikeGoldsmith
+
 ## v0.39.1 2025-09-29
 
 - fix(otlp): fix nil pointer in addAttributeToMap (#318) | @asdvalenzuela
