@@ -1,9 +1,45 @@
 version: 2.1
 
+# enable a job when tag created (tag create is ignored by default)
+filters_always: &filters_always
+  filters:
+    tags:
+      only: /.*/
+
+# restrict a job to only run when a version tag (vNNNN) is created
+filters_publish: &filters_publish
+  filters:
+    tags:
+      only: /^v[0-9].*/
+    branches:
+      ignore: /.*/
+
+matrix_goversions: &matrix_goversions
+  matrix:
+    parameters:
+      goversion: ["24", "25"]
+
+# Default version of Go to use for Go steps
+default_goversion: &default_goversion "25"
+
+executors:
+  go:
+    parameters:
+      goversion:
+        type: string
+        default: *default_goversion
+    docker:
+      - image: cimg/go:1.<< parameters.goversion >>
+
 jobs:
   test:
-    docker:
-      - image: cimg/go:1.21
+    parameters:
+      goversion:
+        type: string
+        default: *default_goversion
+    executor:
+      name: go
+      goversion: "<< parameters.goversion >>"
     steps:
       - checkout
       - restore_cache:
@@ -31,15 +67,10 @@ workflows:
   build:
     jobs:
       - test:
-          filters:
-            tags:
-              only: /.*/
+          <<: *matrix_goversions
+          <<: *filters_always
       - publish_github:
+          <<: *filters_publish
           context: Honeycomb Secrets for Public Repos
           requires:
             - test
-          filters:
-            tags:
-              only: /^v[0-9].*/
-            branches:
-              ignore: /.*/
