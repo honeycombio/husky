@@ -170,12 +170,20 @@ func TestLogs_DetermineDestinationDataset(t *testing.T) {
 				ApiKey string
 			}{
 				{
-					Name:   "Classic",
+					Name:   "old-style/Classic",
 					ApiKey: "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
 				},
 				{
-					Name:   "E&S",
+					Name:   "old-style/E&S",
 					ApiKey: "abc123DEF456ghi789jklm",
+				},
+				{
+					Name:   "prefixed/Classic Ingest",
+					ApiKey: "hkaic_12345678901234567890123456",
+				},
+				{
+					Name:   "prefixed/E&S Ingest",
+					ApiKey: "hkaik_12345678901234567890123456",
 				},
 			}
 

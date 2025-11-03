@@ -213,6 +213,9 @@ func (ri *RequestInfo) ValidateLogsHeaders() error {
 	if len(ri.ApiKey) == 0 {
 		return ErrMissingAPIKeyHeader
 	}
+	// Intentially not requiring a dataset header for classic keys
+	// because we settled on a fallback destination for logs
+	// in honeycombio/husky#118.
 	return nil
 }
 
