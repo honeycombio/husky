@@ -54,6 +54,11 @@ func TestTranslateGrpcTraceRequest(t *testing.T) {
 						Value: &common.AnyValue_StringValue{StringValue: testServiceName},
 					},
 				}, {
+					Key: "sampleRate",
+					Value: &common.AnyValue{
+						Value: &common.AnyValue_IntValue{IntValue: 100},
+					},
+				}, {
 					Key: "bytes_attr",
 					Value: &common.AnyValue{
 						Value: &common.AnyValue_BytesValue{BytesValue: []byte{0x01, 0x02, 0x03, 0x04}},
@@ -122,12 +127,6 @@ func TestTranslateGrpcTraceRequest(t *testing.T) {
 							Key: "span_attr",
 							Value: &common.AnyValue{
 								Value: &common.AnyValue_StringValue{StringValue: "span_attr_val"},
-							},
-						},
-						{
-							Key: "sampleRate",
-							Value: &common.AnyValue{
-								Value: &common.AnyValue_IntValue{IntValue: 100},
 							},
 						},
 					},
@@ -272,6 +271,11 @@ func TestTranslateException(t *testing.T) {
 					Value: &common.AnyValue{
 						Value: &common.AnyValue_StringValue{StringValue: testServiceName},
 					},
+				}, {
+					Key: "sampleRate",
+					Value: &common.AnyValue{
+						Value: &common.AnyValue_IntValue{IntValue: 100},
+					},
 				}},
 			},
 			ScopeSpans: []*trace.ScopeSpans{{
@@ -300,12 +304,6 @@ func TestTranslateException(t *testing.T) {
 							Key: "span_attr",
 							Value: &common.AnyValue{
 								Value: &common.AnyValue_StringValue{StringValue: "span_attr_val"},
-							},
-						},
-						{
-							Key: "sampleRate",
-							Value: &common.AnyValue{
-								Value: &common.AnyValue_IntValue{IntValue: 100},
 							},
 						},
 					},

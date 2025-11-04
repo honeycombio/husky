@@ -87,92 +87,102 @@ func TestUnmarshalTraceRequestDirect_Complete(t *testing.T) {
 	errorStartTime := uint64(1234567890987654321)
 	errorEndTime := uint64(1234567890123456789) // end before start
 
-	dbSpanThreshold, err := sampling.ProbabilityToThreshold(1.0 / 7.0)
+	expectedDbSpanSampleRate := 7
+	dbSpanThreshold, err := sampling.ProbabilityToThreshold(1.0 / float64(expectedDbSpanSampleRate))
 	require.NoError(t, err)
+
+	expectedService1SampleRate := 10
+	service1Resource := &resource.Resource{
+		Attributes: []*common.KeyValue{
+			{
+				Key: "service.name",
+				Value: &common.AnyValue{
+					Value: &common.AnyValue_StringValue{StringValue: "service1"},
+				},
+			},
+			{
+				Key: "sampleRate",
+				Value: &common.AnyValue{
+					Value: &common.AnyValue_IntValue{IntValue: int64(expectedService1SampleRate)},
+				},
+			},
+			{
+				Key: "deployment.environment",
+				Value: &common.AnyValue{
+					Value: &common.AnyValue_StringValue{StringValue: "production"},
+				},
+			},
+			{
+				Key: "bytes_attr",
+				Value: &common.AnyValue{
+					Value: &common.AnyValue_BytesValue{BytesValue: []byte{0x01, 0x02, 0x03, 0x04}},
+				},
+			},
+			{
+				Key: "array_attr",
+				Value: &common.AnyValue{
+					Value: &common.AnyValue_ArrayValue{
+						ArrayValue: &common.ArrayValue{
+							Values: []*common.AnyValue{
+								{Value: &common.AnyValue_StringValue{StringValue: "item1"}},
+								{Value: &common.AnyValue_IntValue{IntValue: 42}},
+								{Value: &common.AnyValue_BoolValue{BoolValue: true}},
+								{Value: &common.AnyValue_DoubleValue{DoubleValue: 3.14}},
+							},
+						},
+					},
+				},
+			},
+			{
+				Key: "kvlist_attr",
+				Value: &common.AnyValue{
+					Value: &common.AnyValue_KvlistValue{
+						KvlistValue: &common.KeyValueList{
+							Values: []*common.KeyValue{
+								{
+									Key: "nested_string",
+									Value: &common.AnyValue{
+										Value: &common.AnyValue_StringValue{StringValue: "nested_value"},
+									},
+								},
+								{
+									Key: "nested_int",
+									Value: &common.AnyValue{
+										Value: &common.AnyValue_IntValue{IntValue: 123},
+									},
+								},
+								{
+									Key: "nested_bool",
+									Value: &common.AnyValue{
+										Value: &common.AnyValue_BoolValue{BoolValue: false},
+									},
+								},
+								{
+									Key: "nested_double",
+									Value: &common.AnyValue{
+										Value: &common.AnyValue_DoubleValue{DoubleValue: 456.789},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			{
+				// Present at multiple levels, to test field precedence.
+				Key: "conflicting",
+				Value: &common.AnyValue{
+					Value: &common.AnyValue_StringValue{StringValue: "resource"},
+				},
+			},
+		},
+	}
 
 	req := &collectortrace.ExportTraceServiceRequest{
 		ResourceSpans: []*trace.ResourceSpans{
 			// First ResourceSpan - service1 with comprehensive attributes
 			{
-				Resource: &resource.Resource{
-					Attributes: []*common.KeyValue{
-						{
-							Key: "service.name",
-							Value: &common.AnyValue{
-								Value: &common.AnyValue_StringValue{StringValue: "service1"},
-							},
-						},
-						{
-							Key: "deployment.environment",
-							Value: &common.AnyValue{
-								Value: &common.AnyValue_StringValue{StringValue: "production"},
-							},
-						},
-						{
-							Key: "bytes_attr",
-							Value: &common.AnyValue{
-								Value: &common.AnyValue_BytesValue{BytesValue: []byte{0x01, 0x02, 0x03, 0x04}},
-							},
-						},
-						{
-							Key: "array_attr",
-							Value: &common.AnyValue{
-								Value: &common.AnyValue_ArrayValue{
-									ArrayValue: &common.ArrayValue{
-										Values: []*common.AnyValue{
-											{Value: &common.AnyValue_StringValue{StringValue: "item1"}},
-											{Value: &common.AnyValue_IntValue{IntValue: 42}},
-											{Value: &common.AnyValue_BoolValue{BoolValue: true}},
-											{Value: &common.AnyValue_DoubleValue{DoubleValue: 3.14}},
-										},
-									},
-								},
-							},
-						},
-						{
-							Key: "kvlist_attr",
-							Value: &common.AnyValue{
-								Value: &common.AnyValue_KvlistValue{
-									KvlistValue: &common.KeyValueList{
-										Values: []*common.KeyValue{
-											{
-												Key: "nested_string",
-												Value: &common.AnyValue{
-													Value: &common.AnyValue_StringValue{StringValue: "nested_value"},
-												},
-											},
-											{
-												Key: "nested_int",
-												Value: &common.AnyValue{
-													Value: &common.AnyValue_IntValue{IntValue: 123},
-												},
-											},
-											{
-												Key: "nested_bool",
-												Value: &common.AnyValue{
-													Value: &common.AnyValue_BoolValue{BoolValue: false},
-												},
-											},
-											{
-												Key: "nested_double",
-												Value: &common.AnyValue{
-													Value: &common.AnyValue_DoubleValue{DoubleValue: 456.789},
-												},
-											},
-										},
-									},
-								},
-							},
-						},
-						{
-							// Present at multiple levels, to test field precedence.
-							Key: "conflicting",
-							Value: &common.AnyValue{
-								Value: &common.AnyValue_StringValue{StringValue: "resource"},
-							},
-						},
-					},
-				},
+				Resource: service1Resource,
 				ScopeSpans: []*trace.ScopeSpans{
 					{
 						Scope: &common.InstrumentationScope{
@@ -233,12 +243,6 @@ func TestUnmarshalTraceRequestDirect_Complete(t *testing.T) {
 										Key: "success",
 										Value: &common.AnyValue{
 											Value: &common.AnyValue_BoolValue{BoolValue: true},
-										},
-									},
-									{
-										Key: "sampleRate",
-										Value: &common.AnyValue{
-											Value: &common.AnyValue_IntValue{IntValue: 10},
 										},
 									},
 									{
@@ -475,16 +479,7 @@ func TestUnmarshalTraceRequestDirect_Complete(t *testing.T) {
 			},
 			// Third ResourceSpan - service1 again, should create a new batch
 			{
-				Resource: &resource.Resource{
-					Attributes: []*common.KeyValue{
-						{
-							Key: "service.name",
-							Value: &common.AnyValue{
-								Value: &common.AnyValue_StringValue{StringValue: "service1"},
-							},
-						},
-					},
-				},
+				Resource: service1Resource,
 				ScopeSpans: []*trace.ScopeSpans{
 					{
 						Spans: []*trace.Span{
@@ -619,7 +614,7 @@ func TestUnmarshalTraceRequestDirect_Complete(t *testing.T) {
 			}), mainAttrs)
 
 			// Sample rate and timestamp
-			assert.Equal(t, int32(10), mainSpan.SampleRate)
+			assert.Equal(t, int32(expectedService1SampleRate), mainSpan.SampleRate)
 			assert.Equal(t, time.Unix(0, int64(startTime)).UTC(), mainSpan.Timestamp)
 
 			// Verify span events
@@ -642,7 +637,7 @@ func TestUnmarshalTraceRequestDirect_Complete(t *testing.T) {
 				"telemetry.instrumentation_library": true,
 				"scope.attr":                        "scope_value",
 			}), cacheAttrs)
-			assert.Equal(t, int32(10), cacheEvent.SampleRate)
+			assert.Equal(t, int32(expectedService1SampleRate), cacheEvent.SampleRate)
 			assert.Equal(t, time.Unix(0, int64(event1Time)).UTC(), cacheEvent.Timestamp)
 
 			// Exception event at index 1
@@ -667,7 +662,7 @@ func TestUnmarshalTraceRequestDirect_Complete(t *testing.T) {
 				"telemetry.instrumentation_library": true,
 				"scope.attr":                        "scope_value",
 			}), exceptionAttrs)
-			assert.Equal(t, int32(10), exceptionEvent.SampleRate)
+			assert.Equal(t, int32(expectedService1SampleRate), exceptionEvent.SampleRate)
 			assert.Equal(t, time.Unix(0, int64(event2Time)).UTC(), exceptionEvent.Timestamp)
 
 			// Link at index 2
@@ -689,8 +684,8 @@ func TestUnmarshalTraceRequestDirect_Complete(t *testing.T) {
 				"telemetry.instrumentation_library": true,
 				"scope.attr":                        "scope_value",
 			}), linkAttrs)
-			assert.Equal(t, int32(10), linkEvent.SampleRate)
-			assert.Equal(t, time.Unix(0, int64(startTime)).UTC(), linkEvent.Timestamp) // Links use parent span timestamp
+			assert.Equal(t, int32(expectedService1SampleRate), linkEvent.SampleRate)
+			assert.Equal(t, time.Unix(0, int64(startTime)).UTC(), linkEvent.Timestamp, "Links use parent span timestamp")
 
 			// DB Query span at index 4
 			dbSpan := &batch1.Events[4]
@@ -716,7 +711,7 @@ func TestUnmarshalTraceRequestDirect_Complete(t *testing.T) {
 				"telemetry.instrumentation_library": true,
 				"scope.attr":                        "scope_value",
 			}), dbAttrs)
-			assert.Equal(t, int32(7), dbSpan.SampleRate) // DB Query span gets sample rate from trace state.
+			assert.Equal(t, int32(expectedDbSpanSampleRate), dbSpan.SampleRate, "DB Query span gets sample rate from trace state.")
 			assert.Equal(t, time.Unix(0, int64(startTime+50_000_000)).UTC(), dbSpan.Timestamp)
 
 			// Error span's link at index 7
@@ -737,8 +732,8 @@ func TestUnmarshalTraceRequestDirect_Complete(t *testing.T) {
 				"library.name":    "custom-library",
 				"library.version": "2.0.0",
 			}), errorLinkAttrs)
-			assert.Equal(t, int32(1), errorLinkEvent.SampleRate)
-			assert.Equal(t, time.Unix(0, int64(errorStartTime)).UTC(), errorLinkEvent.Timestamp) // Links use parent span timestamp
+			assert.Equal(t, int32(expectedService1SampleRate), errorLinkEvent.SampleRate)
+			assert.Equal(t, time.Unix(0, int64(errorStartTime)).UTC(), errorLinkEvent.Timestamp, "Links use parent span timestamp")
 
 			// Error span at index 8
 			errorSpan := &batch1.Events[8]
@@ -764,7 +759,7 @@ func TestUnmarshalTraceRequestDirect_Complete(t *testing.T) {
 				"library.name":    "custom-library",
 				"library.version": "2.0.0",
 			}), errorAttrs)
-			assert.Equal(t, int32(1), errorSpan.SampleRate) // Default sample rate
+			assert.Equal(t, int32(expectedService1SampleRate), errorSpan.SampleRate)
 			assert.Equal(t, time.Unix(0, int64(errorStartTime)).UTC(), errorSpan.Timestamp)
 
 			// Error span's exception events at indices 5 and 6
@@ -787,7 +782,7 @@ func TestUnmarshalTraceRequestDirect_Complete(t *testing.T) {
 				"library.name":    "custom-library",
 				"library.version": "2.0.0",
 			}), firstExceptionAttrs)
-			assert.Equal(t, int32(1), firstExceptionEvent.SampleRate)
+			assert.Equal(t, int32(expectedService1SampleRate), firstExceptionEvent.SampleRate)
 			assert.Equal(t, time.Unix(0, int64(errorStartTime-100_000_000)).UTC(), firstExceptionEvent.Timestamp)
 
 			// Second exception event at index 6 (only first exception was copied to error span)
@@ -810,13 +805,13 @@ func TestUnmarshalTraceRequestDirect_Complete(t *testing.T) {
 				"library.name":    "custom-library",
 				"library.version": "2.0.0",
 			}), secondExceptionAttrs)
-			assert.Equal(t, int32(1), secondExceptionEvent.SampleRate)
+			assert.Equal(t, int32(expectedService1SampleRate), secondExceptionEvent.SampleRate)
 			assert.Equal(t, time.Unix(0, int64(errorStartTime+100_000_000)).UTC(), secondExceptionEvent.Timestamp)
 
 			// Batch 2: service2
 			batch2 := result.Batches[1]
 			assert.Equal(t, "service2", batch2.Dataset)
-			assert.Len(t, batch2.Events, 1) // Just the producer span
+			assert.Len(t, batch2.Events, 1, "Should only contain the producer span")
 
 			producerEvent := batch2.Events[0]
 			producerAttrs := decodeMessagePackAttributes(t, producerEvent.Attributes)
@@ -845,7 +840,7 @@ func TestUnmarshalTraceRequestDirect_Complete(t *testing.T) {
 			// Since this is an effectively empty message, confirm all of our default field values here.
 			batch3Event := batch3.Events[0]
 			batch3Attrs := decodeMessagePackAttributes(t, batch3Event.Attributes)
-			assert.Equal(t, map[string]any{
+			assert.Equal(t, addService1CommonAttributes(map[string]any{
 				"trace.trace_id":   "",
 				"trace.span_id":    "",
 				"span.kind":        "unspecified",
@@ -857,8 +852,9 @@ func TestUnmarshalTraceRequestDirect_Complete(t *testing.T) {
 				"span.num_links":   int64(0),
 				"meta.signal_type": "trace",
 				"service.name":     "service1",
-			}, batch3Attrs)
-			assert.Equal(t, int32(1), batch3Event.SampleRate) // Default sample rate
+				"conflicting":      "resource",
+			}), batch3Attrs)
+			assert.Equal(t, int32(expectedService1SampleRate), batch3Event.SampleRate)
 			assert.Equal(t, time.Unix(0, 0).UTC(), batch3Event.Timestamp)
 
 			t.Run("ErrorHandling", func(t *testing.T) {
