@@ -887,11 +887,11 @@ func TestUnmarshalTraceRequestDirect_Complete(t *testing.T) {
 
 				// RequestSize will be different for JSON vs protobuf
 				if tc.contentType == "application/json" {
-					assert.Greater(t, result.RequestSize, regularResult.RequestSize)
+					assert.Less(t, regularResult.RequestSize, result.RequestSize)
 				} else {
-					assert.Equal(t, result.RequestSize, regularResult.RequestSize)
+					assert.Equal(t, regularResult.RequestSize, result.RequestSize)
 				}
-				assert.Equal(t, len(result.Batches), len(regularResult.Batches))
+				assert.Equal(t, len(regularResult.Batches), len(result.Batches))
 
 				// Convert msgpack batches to regular batches for comparison
 				directBatches := make([]Batch, len(result.Batches))
@@ -904,8 +904,8 @@ func TestUnmarshalTraceRequestDirect_Complete(t *testing.T) {
 					directBatch := directBatches[i]
 					regularBatch := regularResult.Batches[i]
 
-					assert.Equal(t, directBatch.Dataset, regularBatch.Dataset, "Batch %d dataset mismatch", i)
-					assert.Equal(t, len(directBatch.Events), len(regularBatch.Events), "Batch %d event count mismatch", i)
+					assert.Equal(t, regularBatch.Dataset, directBatch.Dataset, "Batch %d dataset mismatch", i)
+					assert.Equal(t, len(regularBatch.Events), len(directBatch.Events), "Batch %d event count mismatch", i)
 
 					// Compare each event
 					for j := range directBatch.Events {
@@ -913,8 +913,8 @@ func TestUnmarshalTraceRequestDirect_Complete(t *testing.T) {
 						regularEvent := regularBatch.Events[j]
 
 						// Compare timestamps and sample rates
-						assert.Equal(t, directEvent.Timestamp, regularEvent.Timestamp, "Batch %d Event %d timestamp mismatch", i, j)
-						assert.Equal(t, directEvent.SampleRate, regularEvent.SampleRate, "Batch %d Event %d sample rate mismatch", i, j)
+						assert.Equal(t, regularEvent.Timestamp, directEvent.Timestamp, "Batch %d Event %d timestamp mismatch", i, j)
+						assert.Equal(t, regularEvent.SampleRate, directEvent.SampleRate, "Batch %d Event %d sample rate mismatch", i, j)
 
 						// Compare attributes
 						// Check for known discrepancies that are actually improvements in the direct implementation
