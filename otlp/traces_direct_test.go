@@ -87,10 +87,12 @@ func TestUnmarshalTraceRequestDirect_Complete(t *testing.T) {
 	errorStartTime := uint64(1234567890987654321)
 	errorEndTime := uint64(1234567890123456789) // end before start
 
+	// Threshold used in some test spans' tracestate. Only expected if sampleRate attr not set.
 	const expectedSampleRateFromThreshold = 7
 	samplingThreshold, err := sampling.ProbabilityToThreshold(1.0 / float64(expectedSampleRateFromThreshold))
 	require.NoError(t, err)
 
+	// Service1's sampleRate resource attribute should win on every service1 event.
 	const expectedService1SampleRate = 10
 	service1Resource := &resource.Resource{
 		Attributes: []*common.KeyValue{
