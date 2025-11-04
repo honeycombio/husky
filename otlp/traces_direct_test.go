@@ -87,11 +87,11 @@ func TestUnmarshalTraceRequestDirect_Complete(t *testing.T) {
 	errorStartTime := uint64(1234567890987654321)
 	errorEndTime := uint64(1234567890123456789) // end before start
 
-	expectedDbSpanSampleRate := 7
+	const expectedDbSpanSampleRate = 7
 	dbSpanThreshold, err := sampling.ProbabilityToThreshold(1.0 / float64(expectedDbSpanSampleRate))
 	require.NoError(t, err)
 
-	expectedService1SampleRate := 10
+	const expectedService1SampleRate = 10
 	service1Resource := &resource.Resource{
 		Attributes: []*common.KeyValue{
 			{
