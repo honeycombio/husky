@@ -87,8 +87,8 @@ func TestUnmarshalTraceRequestDirect_Complete(t *testing.T) {
 	errorStartTime := uint64(1234567890987654321)
 	errorEndTime := uint64(1234567890123456789) // end before start
 
-	const expectedDbSpanSampleRate = 7
-	dbSpanThreshold, err := sampling.ProbabilityToThreshold(1.0 / float64(expectedDbSpanSampleRate))
+	const expectedSampleRateFromThreshold = 7
+	samplingThreshold, err := sampling.ProbabilityToThreshold(1.0 / float64(expectedSampleRateFromThreshold))
 	require.NoError(t, err)
 
 	const expectedService1SampleRate = 10
@@ -357,7 +357,7 @@ func TestUnmarshalTraceRequestDirect_Complete(t *testing.T) {
 								Kind:              trace.Span_SPAN_KIND_CLIENT,
 								StartTimeUnixNano: startTime + 50_000_000,
 								EndTimeUnixNano:   endTime - 50_000_000,
-								TraceState:        "w3c=false;th=" + dbSpanThreshold.TValue(),
+								TraceState:        "w3c=false;th=" + samplingThreshold.TValue(),
 								Attributes: []*common.KeyValue{
 									{
 										Key: "db.statement",
@@ -468,6 +468,7 @@ func TestUnmarshalTraceRequestDirect_Complete(t *testing.T) {
 							{
 								TraceId:           hexToBin(traceID2),
 								SpanId:            hexToBin(spanID2),
+								TraceState:        "w3c=false;th=" + samplingThreshold.TValue(),
 								Name:              "Publish Message",
 								Kind:              trace.Span_SPAN_KIND_PRODUCER,
 								StartTimeUnixNano: startTime,
@@ -570,8 +571,8 @@ func TestUnmarshalTraceRequestDirect_Complete(t *testing.T) {
 			// 0: cache_miss event (from span1)
 			// 1: exception event (from span1)
 			// 2: link (from span1)
-			// 3: HTTP GET /api/users span (span1 itself)
-			// 4: DB Query span (span2)
+			// 3: Server span, HTTP GET /api/users (span1 itself)
+			// 4: Client span, DB Query (span2)
 			// 5: First exception event (from error span)
 			// 6: Second exception event (from error span)
 			// 7: link (from error span)
@@ -711,7 +712,8 @@ func TestUnmarshalTraceRequestDirect_Complete(t *testing.T) {
 				"telemetry.instrumentation_library": true,
 				"scope.attr":                        "scope_value",
 			}), dbAttrs)
-			assert.Equal(t, int32(expectedDbSpanSampleRate), dbSpan.SampleRate, "DB Query span gets sample rate from trace state.")
+			assert.Equal(t, int32(expectedService1SampleRate), dbSpan.SampleRate,
+				"Service1's sampleRate resource attr overrides the tracestate sampling threshold.")
 			assert.Equal(t, time.Unix(0, int64(startTime+50_000_000)).UTC(), dbSpan.Timestamp)
 
 			// Error span's link at index 7
@@ -816,19 +818,21 @@ func TestUnmarshalTraceRequestDirect_Complete(t *testing.T) {
 			producerEvent := batch2.Events[0]
 			producerAttrs := decodeMessagePackAttributes(t, producerEvent.Attributes)
 			assert.Equal(t, map[string]any{
-				"trace.trace_id":   "1a2b3c4d5e6f7089",
-				"trace.span_id":    spanID2,
-				"name":             "Publish Message",
-				"span.kind":        "producer",
-				"type":             "producer",
-				"status_code":      int64(0),
-				"duration_ms":      float64(864.197532),
-				"span.num_events":  int64(0),
-				"span.num_links":   int64(0),
-				"meta.signal_type": "trace",
-				"service.name":     "service2",
+				"trace.trace_id":    "1a2b3c4d5e6f7089",
+				"trace.span_id":     spanID2,
+				"trace.trace_state": "w3c=false;th=db6db6db6db6dc",
+				"name":              "Publish Message",
+				"span.kind":         "producer",
+				"type":              "producer",
+				"status_code":       int64(0),
+				"duration_ms":       float64(864.197532),
+				"span.num_events":   int64(0),
+				"span.num_links":    int64(0),
+				"meta.signal_type":  "trace",
+				"service.name":      "service2",
 			}, producerAttrs)
-			assert.Equal(t, int32(1), producerEvent.SampleRate) // Default sample rate
+			assert.Equal(t, int32(expectedSampleRateFromThreshold), producerEvent.SampleRate,
+				"Producer span with no sampleRate attr set, final sampleRate should be based on OTel sampling threshold.")
 			assert.Equal(t, time.Unix(0, int64(startTime)).UTC(), producerEvent.Timestamp)
 
 			// Batch 3: service1 is batched seperately due to arriving in a different
@@ -942,7 +946,8 @@ func TestUnmarshalTraceRequestDirect_Complete(t *testing.T) {
 						}
 
 						// Now compare the remaining attributes
-						assert.Equal(t, regularEvent.Attributes, directEvent.Attributes, "Batch %d Event %d attributes mismatch (after removing known improvements)", i, j)
+						assert.Equal(t, regularEvent.Attributes, directEvent.Attributes,
+							"Batch %d Event %d attributes mismatch (after removing known improvements)", i, j)
 					}
 				}
 			})
