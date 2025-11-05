@@ -1355,14 +1355,13 @@ func unmarshalSpan(
 	fields.addToMsgpAttributes(eventAttr)
 	eventAttr.addAttributes(scopeAttrs)
 	eventAttr.addAttributes(resourceAttrs)
-
-	timestamp := timestampFromUnixNano(startTimeUnixNano)
-
-	// If the memoized sampleRate value from attributes is something interesting ...
+	// If we've discovered a non-zero sampleRate in the incoming attributes ...
 	if eventAttr.sampleRate != 0 {
 		// ... it wins for setting the event sample rate.
 		sampleRate = eventAttr.sampleRate
 	}
+
+	timestamp := timestampFromUnixNano(startTimeUnixNano)
 
 	// Process span events first (before the main span)
 	var firstExceptionAttrs *msgpAttributes
