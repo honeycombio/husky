@@ -135,9 +135,10 @@ type msgpAttributes struct {
 	buf       []byte
 	keyHashes map[uint64]struct{}
 
-	// memoized metadata fields we'll need internally
+	// memoized for internal use - first call to set to non-blank wins
 	serviceName string
-	sampleRate  int32
+	// memoized for internal use - first call to set to non-zero wins
+	sampleRate int32
 }
 
 // Resets state and returns to the pool. Do not re-use after calling this.
@@ -775,6 +776,9 @@ func unmarshalKeyValue(ctx context.Context, data []byte, attrs *msgpAttributes, 
 				}
 
 				if isSampleRateKey(key) && trySetSampleRate(key, string(slice), attrs) {
+					// Despite sampleRate in telemetry often coming in as an attribute, we don't record
+					// the sampleRate in attrs destined for the EventMsgp struct's Attributes field.
+					// The sample rate is recorded on the EventMsgp struct's SampleRate field
 					return nil
 				}
 
@@ -1349,17 +1353,15 @@ func unmarshalSpan(
 
 	// Add all span attributes to eventAttr
 	fields.addToMsgpAttributes(eventAttr)
-
-	timestamp := timestampFromUnixNano(startTimeUnixNano)
-
-	// Get the final sample rate and isError state
+	eventAttr.addAttributes(scopeAttrs)
+	eventAttr.addAttributes(resourceAttrs)
+	// If we've discovered a non-zero sampleRate in the incoming attributes ...
 	if eventAttr.sampleRate != 0 {
-		// Prefer Honeycomb's sampleRate attribute if it exists
+		// ... it wins for setting the event sample rate.
 		sampleRate = eventAttr.sampleRate
 	}
 
-	eventAttr.addAttributes(scopeAttrs)
-	eventAttr.addAttributes(resourceAttrs)
+	timestamp := timestampFromUnixNano(startTimeUnixNano)
 
 	// Process span events first (before the main span)
 	var firstExceptionAttrs *msgpAttributes
