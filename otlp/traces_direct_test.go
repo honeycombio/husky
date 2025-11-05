@@ -1047,6 +1047,7 @@ func TestUnmarshalTraceRequestDirect_WithUnknownFields(t *testing.T) {
 	assert.Equal(t, traceID, attrs["trace.trace_id"])
 	assert.Equal(t, spanID, attrs["trace.span_id"])
 	assert.Equal(t, "test-span", attrs["name"])
+	assert.Equal(t, defaultSampleRate, event.SampleRate, "We still set a default sample rate.")
 }
 
 // Helper to create nested kvlist attributes with any value type at the leaf
