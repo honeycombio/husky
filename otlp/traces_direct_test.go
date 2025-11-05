@@ -907,50 +907,54 @@ func TestUnmarshalTraceRequestDirect_Complete(t *testing.T) {
 
 				// Compare each batch
 				for i := range directBatches {
-					directBatch := directBatches[i]
-					regularBatch := regularResult.Batches[i]
+					t.Run("Batch "+fmt.Sprint(i), func(t *testing.T) {
+						directBatch := directBatches[i]
+						regularBatch := regularResult.Batches[i]
 
-					assert.Equal(t, regularBatch.Dataset, directBatch.Dataset, "Batch %d dataset mismatch", i)
-					assert.Equal(t, len(regularBatch.Events), len(directBatch.Events), "Batch %d event count mismatch", i)
+						assert.Equal(t, regularBatch.Dataset, directBatch.Dataset, "Batch %d dataset mismatch", i)
+						assert.Equal(t, len(regularBatch.Events), len(directBatch.Events), "Batch %d event count mismatch", i)
 
-					// Compare each event
-					for j := range directBatch.Events {
-						directEvent := directBatch.Events[j]
-						regularEvent := regularBatch.Events[j]
+						// Compare each event
+						for j := range directBatch.Events {
+							t.Run("Event "+fmt.Sprint(j), func(t *testing.T) {
+								directEvent := directBatch.Events[j]
+								regularEvent := regularBatch.Events[j]
 
-						// Compare timestamps and sample rates
-						assert.Equal(t, regularEvent.Timestamp, directEvent.Timestamp, "Batch %d Event %d timestamp mismatch", i, j)
-						assert.Equal(t, regularEvent.SampleRate, directEvent.SampleRate, "Batch %d Event %d sample rate mismatch", i, j)
+								// Compare timestamps and sample rates
+								assert.Equal(t, regularEvent.Timestamp, directEvent.Timestamp, "Batch %d Event %d timestamp mismatch", i, j)
+								assert.Equal(t, regularEvent.SampleRate, directEvent.SampleRate, "Batch %d Event %d sample rate mismatch", i, j)
 
-						// Compare attributes
-						// Check for known discrepancies that are actually improvements in the direct implementation
-						if i == 0 && j == 5 { // First exception event
-							// The direct implementation correctly handles negative time_since_span_start
-							// Regular: meta.time_since_span_start_ms = 1.844674407360955e+13 (overflow)
-							// Direct: meta.time_since_span_start_ms = 0 + meta.invalid_time_since_span_start = true
-							assert.Equal(t, float64(0), directEvent.Attributes["meta.time_since_span_start_ms"])
-							assert.Equal(t, true, directEvent.Attributes["meta.invalid_time_since_span_start"])
-							// Remove the fields that differ to check the rest
-							delete(regularEvent.Attributes, "meta.time_since_span_start_ms")
-							delete(directEvent.Attributes, "meta.time_since_span_start_ms")
-							delete(directEvent.Attributes, "meta.invalid_time_since_span_start")
+								// Compare attributes
+								// Check for known discrepancies that are actually improvements in the direct implementation
+								if i == 0 && j == 5 { // First exception event
+									// The direct implementation correctly handles negative time_since_span_start
+									// Regular: meta.time_since_span_start_ms = 1.844674407360955e+13 (overflow)
+									// Direct: meta.time_since_span_start_ms = 0 + meta.invalid_time_since_span_start = true
+									assert.Equal(t, float64(0), directEvent.Attributes["meta.time_since_span_start_ms"])
+									assert.Equal(t, true, directEvent.Attributes["meta.invalid_time_since_span_start"])
+									// Remove the fields that differ to check the rest
+									delete(regularEvent.Attributes, "meta.time_since_span_start_ms")
+									delete(directEvent.Attributes, "meta.time_since_span_start_ms")
+									delete(directEvent.Attributes, "meta.invalid_time_since_span_start")
+								}
+								if i == 0 && j == 8 { // Error span with negative duration
+									// The direct implementation correctly handles negative duration
+									// Regular: duration_ms = 1.8446744072845355e+13 (overflow)
+									// Direct: duration_ms = 0 + meta.invalid_duration = true
+									assert.Equal(t, float64(0), directEvent.Attributes["duration_ms"])
+									assert.Equal(t, true, directEvent.Attributes["meta.invalid_duration"])
+									// Remove the fields that differ to check the rest
+									delete(regularEvent.Attributes, "duration_ms")
+									delete(directEvent.Attributes, "duration_ms")
+									delete(directEvent.Attributes, "meta.invalid_duration")
+								}
+
+								// Now compare the remaining attributes
+								assert.Equal(t, regularEvent.Attributes, directEvent.Attributes,
+									"Batch %d Event %d attributes mismatch (after removing known improvements)", i, j)
+							})
 						}
-						if i == 0 && j == 8 { // Error span with negative duration
-							// The direct implementation correctly handles negative duration
-							// Regular: duration_ms = 1.8446744072845355e+13 (overflow)
-							// Direct: duration_ms = 0 + meta.invalid_duration = true
-							assert.Equal(t, float64(0), directEvent.Attributes["duration_ms"])
-							assert.Equal(t, true, directEvent.Attributes["meta.invalid_duration"])
-							// Remove the fields that differ to check the rest
-							delete(regularEvent.Attributes, "duration_ms")
-							delete(directEvent.Attributes, "duration_ms")
-							delete(directEvent.Attributes, "meta.invalid_duration")
-						}
-
-						// Now compare the remaining attributes
-						assert.Equal(t, regularEvent.Attributes, directEvent.Attributes,
-							"Batch %d Event %d attributes mismatch (after removing known improvements)", i, j)
-					}
+					})
 				}
 			})
 		})
