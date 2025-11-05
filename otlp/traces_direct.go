@@ -776,6 +776,9 @@ func unmarshalKeyValue(ctx context.Context, data []byte, attrs *msgpAttributes, 
 				}
 
 				if isSampleRateKey(key) && trySetSampleRate(key, string(slice), attrs) {
+					// Despite sampleRate in telemetry often coming in as an attribute, we don't record
+					// the sampleRate in attrs destined for the EventMsgp struct's Attributes field.
+					// The sample rate is recorded on the EventMsgp struct's SampleRate field
 					return nil
 				}
 

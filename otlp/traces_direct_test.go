@@ -923,6 +923,12 @@ func TestUnmarshalTraceRequestDirect_Complete(t *testing.T) {
 								// Compare timestamps and sample rates
 								assert.Equal(t, regularEvent.Timestamp, directEvent.Timestamp, "Batch %d Event %d timestamp mismatch", i, j)
 								assert.Equal(t, regularEvent.SampleRate, directEvent.SampleRate, "Batch %d Event %d sample rate mismatch", i, j)
+								// Having confirmed SampleRate field matches on both events,
+								// omit the sampleRate Attribute from regularEvent because the
+								// direct implementation intentionally does not record sampleRate
+								// in Attributes because it is ignored during ingest in favor of the
+								// Event struct's SampleRate field.
+								delete(regularEvent.Attributes, "sampleRate")
 
 								// Compare attributes
 								// Check for known discrepancies that are actually improvements in the direct implementation
