@@ -83,7 +83,7 @@ List of transformations that Husky performs while translating from OTLP to Honey
   <tr>
     <td></td>
     <td>duration_ms</td>
-    <td>Calculated as difference betweeen end time and start time. Converted from nanoseconds to milliseconds</td>
+    <td>Calculated as difference between end time and start time. Converted from nanoseconds to milliseconds</td>
   </tr>
   <tr>
     <td>parent_span_id</td>
