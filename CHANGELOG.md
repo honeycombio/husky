@@ -4,12 +4,12 @@
 
 ### 🐛 Fixes
 
-* fix: new "direct" traces transform incorrectly ignores a sampleRate set as a resource attribute ([#326](https://github.com/honeycombio/husky/pull/326)) | [@robbkidd](https://github.com/robbkidd)
+- fix: new "direct" traces transform incorrectly ignores a sampleRate set as a resource attribute ([#326](https://github.com/honeycombio/husky/pull/326)) | [@robbkidd](https://github.com/robbkidd)
 
 ### 🛠 Maintenance
 
-* ci: test w/ latest Go versions ([#323](https://github.com/honeycombio/husky/pull/323)) | [@robbkidd](https://github.com/robbkidd)
-* maint(deps): bump the minor-patch group across 1 directory with 6 updates ([#324](https://github.com/honeycombio/husky/pull/324)) | [dependabot[bot]](https://github.com/dependabot)
+- ci: test w/ latest Go versions ([#323](https://github.com/honeycombio/husky/pull/323)) | [@robbkidd](https://github.com/robbkidd)
+- maint(deps): bump the minor-patch group across 1 directory with 6 updates ([#324](https://github.com/honeycombio/husky/pull/324)) | [dependabot[bot]](https://github.com/dependabot)
 
 ## v0.39.2 2025-10-02
 
