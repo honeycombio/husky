@@ -1078,6 +1078,12 @@ func unmarshalSpanEventJSON(
 	eventAttr.addAttributes(scopeAttrs)
 	eventAttr.addAttributes(resourceAttrs)
 
+	// If the SpanEvent has a non-zero sampleRate
+	if eventAttr.sampleRate != 0 {
+		// the event sampleRate should be set to it.
+		sampleRate = eventAttr.sampleRate
+	}
+
 	// Set timestamp
 	timestamp := timestampFromUnixNano(timeUnixNano)
 
