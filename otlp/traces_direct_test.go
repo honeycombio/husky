@@ -115,6 +115,16 @@ func TestUnmarshalTraceRequestDirect_Complete(t *testing.T) {
 				},
 			},
 			{
+				Key: "empty_attr",
+				Value: &common.AnyValue{
+					Value: nil,
+				},
+			},
+			{
+				Key: "nil_attr",
+				Value: nil,
+			},
+			{
 				Key: "bytes_attr",
 				Value: &common.AnyValue{
 					Value: &common.AnyValue_BytesValue{BytesValue: []byte{0x01, 0x02, 0x03, 0x04}},

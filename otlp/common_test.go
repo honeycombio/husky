@@ -109,6 +109,12 @@ func TestAddAttributesToMap(t *testing.T) {
 			expected:  map[string]interface{}{},
 			attribute: &common.KeyValue{Key: "kv-attr", Value: nil},
 		},
+		{
+			expected: map[string]interface{}{},
+			attribute: &common.KeyValue{
+				Key: "empty-attr", Value: &common.AnyValue{Value: nil},
+			},
+		},
 	}
 
 	for _, tc := range testCases {
