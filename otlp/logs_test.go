@@ -76,6 +76,7 @@ func TestTranslateLogsRequest(t *testing.T) {
 			assert.Equal(t, "span_attr_val", ev.Attributes["span_attr"])
 			assert.Equal(t, int32(100), ev.SampleRate)
 			assert.Equal(t, "resource_attr_val", ev.Attributes["resource_attr"])
+			assert.Equal(t, "event_name", ev.Attributes["name"])
 		})
 	}
 }
@@ -598,6 +599,7 @@ func buildExportLogsServiceRequest(traceID []byte, spanID []byte, startTimestamp
 					TimeUnixNano:   uint64(startTimestamp.Nanosecond()),
 					SeverityText:   "test_severity_text",
 					SeverityNumber: logs.SeverityNumber_SEVERITY_NUMBER_DEBUG,
+					EventName:      "event_name",
 					Attributes: []*common.KeyValue{
 						{
 							Key: "span_attr",
