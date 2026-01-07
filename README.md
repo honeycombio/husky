@@ -45,6 +45,11 @@ List of transformations that Husky performs while translating from OTLP to Honey
     <td></td>
   </tr>
   <tr>
+    <td>name</td>
+    <td>name</td>
+    <td>The span's name becomes the event name</td>
+  </tr>
+  <tr>
     <td rowspan="2">kind</td>
     <td>type</td>
     <td rowspan="2">kind is used to set both these fields. Also, Husky converts the OTLP numeric enum to a string</td>
@@ -83,7 +88,7 @@ List of transformations that Husky performs while translating from OTLP to Honey
   <tr>
     <td></td>
     <td>duration_ms</td>
-    <td>Calculated as difference between end time and start time. Converted from nanoseconds to milliseconds</td>
+    <td>Calculated as difference betweeen end time and start time. Converted from nanoseconds to milliseconds</td>
   </tr>
   <tr>
     <td>parent_span_id</td>
@@ -115,7 +120,7 @@ List of transformations that Husky performs while translating from OTLP to Honey
     <td>exception.escaped</td>
   </tr>
   <tr>
-    <td>name</td>
+    <td>instrumentation_scope.name</td>
     <td>library.name</td>
     <td>Specifically the instrumentation scope name, not the span name</td>
   </tr>
@@ -147,7 +152,7 @@ List of transformations that Husky performs while translating from OTLP to Honey
   <tr>
     <td>name</td>
     <td>name</td>
-    <td></td>
+    <td>The span event's name becomes the event name</td>
   </tr>
   <tr>
     <td></td>
@@ -289,11 +294,6 @@ List of transformations that Husky performs while translating from OTLP to Honey
     <td>severity_number</td>
     <td>severity_code</td>
     <td></td>
-  </tr>
-  <tr>
-    <td>event_name</td>
-    <td>event.name</td>
-    <td>The event name, if this is a Log Event.</td>
   </tr>
   <tr>
     <td>body</td>
