@@ -145,6 +145,11 @@ List of transformations that Husky performs while translating from OTLP to Honey
     <td></td>
   </tr>
   <tr>
+    <td>name</td>
+    <td>name</td>
+    <td></td>
+  </tr>
+  <tr>
     <td></td>
     <td>parent_name</td>
     <td>Husky uses the span's name to set this field on all its span events</td>
@@ -284,6 +289,11 @@ List of transformations that Husky performs while translating from OTLP to Honey
     <td>severity_number</td>
     <td>severity_code</td>
     <td></td>
+  </tr>
+  <tr>
+    <td>event_name</td>
+    <td>event.name</td>
+    <td>The event name, if this is a Log Event.</td>
   </tr>
   <tr>
     <td>body</td>
