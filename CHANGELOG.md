@@ -1,5 +1,22 @@
 # Husky Changelog
 
+## v0.40.0 2026-01-09
+
+### ✨ Added
+
+- feat: add log EventName as "name" attribute (#333) | [Bee Klimt](https://github.com/beekhc)
+
+### 🐛 Fixes
+
+- fix: update log event field to event.name (#335) | [Bee Klimt](https://github.com/beekhc)
+
+### 🛠 Maintenance
+
+- maint(deps): bump the minor-patch group with 2 updates (#334) | [dependabot[bot]](https://github.com/dependabot)
+- maint: add more notes about translations (#336) | [Tyler Helmuth](https://github.com/TylerHelmuth)
+- maint(deps): bump the minor-patch group across 1 directory with 7 updates (#332) | [dependabot[bot]](https://github.com/dependabot)
+- maint: Update OTLP to v1.9.0 (#331) | [Mike Goldsmith](https://github.com/MikeGoldsmith)
+
 ## v0.39.3 2025-11-06
 
 ### 🐛 Fixes
@@ -13,11 +30,11 @@
 
 ## v0.39.2 2025-10-02
 
-- fix(otlp): add nil check in getMarshallableValue to prevent panic (#320) | @MikeGoldsmith
+- fix(otlp): add nil check in getMarshallableValue to prevent panic (#320) | [Mike Goldsmith](https://github.com/MikeGoldsmith)
 
 ## v0.39.1 2025-09-29
 
-- fix(otlp): fix nil pointer in addAttributeToMap (#318) | @asdvalenzuela
+- fix(otlp): fix nil pointer in addAttributeToMap (#318) |  [Alaina](https://github.com/asdvalenzuela)
 
 ## 0.39.0 2025-09-25
 
@@ -42,7 +59,7 @@
 
 ## 0.36.0 2025-05-13
 
-- feat: Add support for OTel sampling probability (#301) | @MikeGoldsmith
+- feat: Add support for OTel sampling probability (#301) | [Mike Goldsmith](https://github.com/MikeGoldsmith)
 
 ## 0.35.0 2025-05-01
 
@@ -53,8 +70,8 @@
 
 ## 0.34.0 2024-12-11
 
-- fix: Disable HTML escaping when JSON encoding values (#288) | @MikeGoldsmith
-- maint(deps): bump the minor-patch group with 3 updates (#287) | @dependabot
+- fix: Disable HTML escaping when JSON encoding values (#288) | [Mike Goldsmith](https://github.com/MikeGoldsmith)
+- maint(deps): bump the minor-patch group with 3 updates (#287) | [dependabot[bot]](https://github.com/dependabot[bot])
 
 ## 0.33.0 2024-11-14
 
