@@ -219,6 +219,18 @@ func (ri *RequestInfo) ValidateLogsHeaders() error {
 	return nil
 }
 
+// ValidateProfilesHeaders validates required headers/metadata for a profiles OTLP request
+func (ri *RequestInfo) ValidateProfilesHeaders() error {
+	if !IsContentTypeSupported(ri.ContentType) {
+		return ErrInvalidContentType
+	}
+	if len(ri.ApiKey) == 0 {
+		return ErrMissingAPIKeyHeader
+	}
+	// Profiles go to __profiles__ dataset by default, no dataset header required
+	return nil
+}
+
 // GetRequestInfoFromGrpcMetadata parses relevant gRPC metadata from an incoming request context
 func GetRequestInfoFromGrpcMetadata(ctx context.Context) RequestInfo {
 	ri := RequestInfo{
