@@ -5,13 +5,13 @@ go 1.24.0
 require (
 	github.com/dgryski/go-wyhash v0.0.0-20191203203029-c4841ae36371
 	github.com/json-iterator/go v1.1.12
-	github.com/klauspost/compress v1.18.2
-	github.com/open-telemetry/opentelemetry-collector-contrib/pkg/sampling v0.142.0
+	github.com/klauspost/compress v1.18.3
+	github.com/open-telemetry/opentelemetry-collector-contrib/pkg/sampling v0.144.0
 	github.com/stretchr/testify v1.11.1
-	github.com/tinylib/msgp v1.6.2
+	github.com/tinylib/msgp v1.6.3
 	github.com/valyala/fastjson v1.6.7
 	go.opentelemetry.io/proto/otlp v1.9.0
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20251029180050-ab9386a59fda
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20251222181119-0a764e51fe1b
 	google.golang.org/grpc v1.78.0
 	google.golang.org/protobuf v1.36.11
 )
@@ -24,8 +24,8 @@ require (
 	github.com/modern-go/reflect2 v1.0.3-0.20250322232337-35a7c28c31ee // indirect
 	github.com/philhofer/fwd v1.2.0 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
-	go.opentelemetry.io/collector/featuregate v1.48.0 // indirect
-	go.opentelemetry.io/collector/pdata v1.48.0 // indirect
+	go.opentelemetry.io/collector/featuregate v1.50.0 // indirect
+	go.opentelemetry.io/collector/pdata v1.50.0 // indirect
 	go.opentelemetry.io/proto/otlp/collector/profiles/v1development v0.2.0
 	go.opentelemetry.io/proto/otlp/profiles/v1development v0.2.0
 	go.uber.org/multierr v1.11.0 // indirect
