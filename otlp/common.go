@@ -738,8 +738,8 @@ func parseOTelTraceStateEntry(traceState string) (string, bool) {
 			pairs := strings.Split(otValue, ";")
 			for _, pair := range pairs {
 				kv := strings.Split(pair, ":")
-				if len(kv) == 2 && strings.TrimSpace(kv[0]) == "th" {
-					return strings.TrimSpace(kv[1]), true
+				if len(kv) == 2 && kv[0] == "th" {
+					return kv[1], true
 				}
 			}
 		}
