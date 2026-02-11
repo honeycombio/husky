@@ -1042,13 +1042,6 @@ func TestOTelSamplingThreshold_NewFormat(t *testing.T) {
 			expectedMax: math.MaxInt32,
 		},
 		{
-			name:        "weird stuff/whitespace around th value is trimmed",
-			traceState:  "ot=th: c ",
-			expectFound: true,
-			expectedMin: 4,
-			expectedMax: 4,
-		},
-		{
 			name:        "weird stuff/multiple ot entries (first wins)",
 			traceState:  "ot=th:c,ot=th:8",
 			expectFound: true,
@@ -1092,6 +1085,11 @@ func TestOTelSamplingThreshold_NewFormat(t *testing.T) {
 		{
 			name:        "rejects/empty th value",
 			traceState:  "ot=th:",
+			expectFound: false,
+		},
+		{
+			name:        "rejects/whitespace in the the value",
+			traceState:  "ot=th: c ",
 			expectFound: false,
 		},
 		{
