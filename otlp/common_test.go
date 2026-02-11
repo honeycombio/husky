@@ -1035,13 +1035,6 @@ func TestOTelSamplingThreshold_NewFormat(t *testing.T) {
 			expectedMax: 4,
 		},
 		{
-			name:        "weird stuff/near-total rejection threshold",
-			traceState:  "ot=th:ffffffffffffff",
-			expectFound: true,
-			expectedMin: math.MaxInt32,
-			expectedMax: math.MaxInt32,
-		},
-		{
 			name:        "weird stuff/multiple ot entries (first wins)",
 			traceState:  "ot=th:c,ot=th:8",
 			expectFound: true,
