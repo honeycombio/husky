@@ -755,11 +755,8 @@ func parseOTelTraceStateEntry(traceState string) (string, bool) {
 //
 // See https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/trace/tracestate-handling.md
 func getSampleRateFromOTelSamplingThreshold(traceState string) (int32, bool) {
-	var th string
-	var ok bool
-
 	// Try new OTel spec format first: ot=th:value
-	th, ok = parseOTelTraceStateEntry(traceState)
+	th, ok := parseOTelTraceStateEntry(traceState)
 
 	// Fall back to legacy format: th=value
 	if !ok {
