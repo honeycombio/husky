@@ -1000,6 +1000,13 @@ func TestOTelSamplingThreshold_NewFormat(t *testing.T) {
 			expectedMax: 4,
 		},
 		{
+			name:        "multiple vendors with ot with multiple sub-keys",
+			traceState:  "vendor1=value1,ot=th:c;p:8;r:62,vendor2=value2",
+			expectFound: true,
+			expectedMin: 4,
+			expectedMax: 4,
+		},
+		{
 			name:        "ot entry without th sub-key",
 			traceState:  "ot=p:8;r:62",
 			expectFound: false,
