@@ -1881,3 +1881,120 @@ func TestSampleRateFromFloat(t *testing.T) {
 		})
 	}
 }
+
+func TestSpanEventSampleRateAttribute(t *testing.T) {
+	ctx := context.Background()
+
+	tests := []struct {
+		name              string
+		spanRate          int64
+		eventRate         int64
+		expectedSpanRate  int32
+		expectedEventRate int32
+	}{
+		{
+			name:              "event with own rate",
+			spanRate:          2,
+			eventRate:         10,
+			expectedSpanRate:  2,
+			expectedEventRate: 10,
+		},
+		{
+			name:              "event inherits from span",
+			spanRate:          5,
+			eventRate:         0,
+			expectedSpanRate:  5,
+			expectedEventRate: 5,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			traceID := []byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16}
+			spanID := []byte{1, 2, 3, 4, 5, 6, 7, 8}
+
+			spanAttrs := []*common.KeyValue{{
+				Key: "SampleRate",
+				Value: &common.AnyValue{
+					Value: &common.AnyValue_IntValue{IntValue: tt.spanRate},
+				},
+			}}
+
+			eventAttrs := []*common.KeyValue{{
+				Key: "event.data",
+				Value: &common.AnyValue{
+					Value: &common.AnyValue_StringValue{StringValue: "test"},
+				},
+			}}
+			if tt.eventRate > 0 {
+				eventAttrs = append(eventAttrs, &common.KeyValue{
+					Key: "SampleRate",
+					Value: &common.AnyValue{
+						Value: &common.AnyValue_IntValue{IntValue: tt.eventRate},
+					},
+				})
+			}
+
+			req := &collectortrace.ExportTraceServiceRequest{
+				ResourceSpans: []*trace.ResourceSpans{{
+					Resource: &resource.Resource{
+						Attributes: []*common.KeyValue{{
+							Key: "service.name",
+							Value: &common.AnyValue{
+								Value: &common.AnyValue_StringValue{StringValue: "test"},
+							},
+						}},
+					},
+					ScopeSpans: []*trace.ScopeSpans{{
+						Spans: []*trace.Span{{
+							TraceId:           traceID,
+							SpanId:            spanID,
+							Name:              "test-span",
+							StartTimeUnixNano: uint64(time.Now().UnixNano()),
+							EndTimeUnixNano:   uint64(time.Now().UnixNano()),
+							Attributes:        spanAttrs,
+							Events: []*trace.Span_Event{{
+								TimeUnixNano: uint64(time.Now().UnixNano()),
+								Name:         "test-event",
+								Attributes:   eventAttrs,
+							}},
+						}},
+					}},
+				}},
+			}
+
+			data, err := proto.Marshal(req)
+			require.NoError(t, err)
+
+			ri := RequestInfo{
+				ApiKey:      "test",
+				Dataset:     "test",
+				ContentType: "application/protobuf",
+			}
+
+			result, err := UnmarshalTraceRequestDirectMsgp(ctx, data, ri)
+			require.NoError(t, err)
+			require.Len(t, result.Batches, 1)
+
+			batch := result.Batches[0]
+			require.Len(t, batch.Events, 2) // span + event
+
+			// Find span and event
+			var spanEvent, span *EventMsgp
+			for i := range batch.Events {
+				attrs := decodeMessagePackAttributes(t, batch.Events[i].Attributes)
+				if attrs["meta.annotation_type"] == "span_event" {
+					spanEvent = &batch.Events[i]
+				} else {
+					span = &batch.Events[i]
+				}
+			}
+
+			require.NotNil(t, span)
+			require.NotNil(t, spanEvent)
+
+			assert.Equal(t, tt.expectedSpanRate, span.SampleRate)
+			assert.Equal(t, tt.expectedEventRate, spanEvent.SampleRate)
+		})
+	}
+}
