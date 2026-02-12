@@ -720,26 +720,61 @@ func getSampleRateFromAnyValue(sampleRateVal any) int32 {
 	return sampleRate
 }
 
+// parseOTelTraceStateEntry extracts the th (sampling threshold) value from an OTel tracestate entry.
+// Expected format: "ot=key1:val1;key2:val2;th:hexvalue"
+// Example: "policy=Bidder,ot=th:ff04298fdf6760" or "ot=p:8;r:62;th:c"
+// Returns the th value if found.
+func parseOTelTraceStateEntry(traceState string) (string, bool) {
+	// Split by comma to get vendor entries
+	entries := strings.Split(traceState, ",")
+
+	// Find the ot= entry
+	for _, entry := range entries {
+		if strings.HasPrefix(entry, "ot=") {
+			// Extract value after "ot="
+			otValue := entry[3:]
+
+			// Split by semicolon to get key:value pairs
+			pairs := strings.Split(otValue, ";")
+			for _, pair := range pairs {
+				kv := strings.Split(pair, ":")
+				if len(kv) == 2 && kv[0] == "th" {
+					return kv[1], true
+				}
+			}
+		}
+	}
+	return "", false
+}
+
 // getSampleRateFromOTelSamplingThreshold returns the sampling threshold from the OpenTelemetry
 // trace state. Sampling threshold is a string that represents the sampling
 // probability using the OpenTelemetry sampling probability format.
 //
-// See https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/trace/tracestate-probability-sampling.md
+// Supports both the new OTel spec format (ot=th:value) and the legacy format (th=value).
+//
+// See https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/trace/tracestate-handling.md
 func getSampleRateFromOTelSamplingThreshold(traceState string) (int32, bool) {
-	// split the trace state into key-value pairs
-	kvPairs := strings.Split(traceState, ";")
-	pairs := make(map[string]string, len(kvPairs))
-	for _, kv := range kvPairs {
-		kvPair := strings.Split(kv, "=")
-		if len(kvPair) != 2 {
-			continue
-		}
-		pairs[kvPair[0]] = kvPair[1]
-	}
-	// get the tvalue from the trace state pairs
-	th, ok := pairs["th"]
+	// Try new OTel spec format first: ot=th:value
+	th, ok := parseOTelTraceStateEntry(traceState)
+
+	// Fall back to legacy format: th=value
 	if !ok {
-		return defaultSampleRate, false
+		// split the trace state into key-value pairs
+		kvPairs := strings.Split(traceState, ";")
+		pairs := make(map[string]string, len(kvPairs))
+		for _, kv := range kvPairs {
+			kvPair := strings.Split(kv, "=")
+			if len(kvPair) != 2 {
+				continue
+			}
+			pairs[kvPair[0]] = kvPair[1]
+		}
+		// get the tvalue from the trace state pairs
+		th, ok = pairs["th"]
+		if !ok {
+			return defaultSampleRate, false
+		}
 	}
 	// get the sampling threshold
 	t, err := sampling.TValueToThreshold(th)
@@ -772,10 +807,9 @@ func getSampleRateFromOTelSamplingThreshold(traceState string) (int32, bool) {
 	if rand.Float64() < prob {
 		// return the higher count
 		return hicount, true
-	} else {
-		// return the lower count
-		return locount, true
 	}
+	// return the lower count
+	return locount, true
 }
 
 // getSampleRateKey determines if a map of attributes includes

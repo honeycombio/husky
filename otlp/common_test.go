@@ -935,6 +935,188 @@ func TestOTelSamplingThreshold(t *testing.T) {
 	}
 }
 
+func TestOTelSamplingThreshold_NewFormat(t *testing.T) {
+	tests := []struct {
+		name        string
+		traceState  string
+		expectFound bool
+		expectedMin int32
+		expectedMax int32
+	}{
+		{
+			name:        "simple format/th:c (25%)",
+			traceState:  "ot=th:c",
+			expectFound: true,
+			expectedMin: 4,
+			expectedMax: 4,
+		},
+		{
+			name:        "simple format/th:8 (50%)",
+			traceState:  "ot=th:8",
+			expectFound: true,
+			expectedMin: 2,
+			expectedMax: 2,
+		},
+		{
+			name:        "simple format/th:0 (100% always sample)",
+			traceState:  "ot=th:0",
+			expectFound: true,
+			expectedMin: 1,
+			expectedMax: 1,
+		},
+		{
+			name:        "customer format/policy with ot=th",
+			traceState:  "policy=Bidder,ot=th:ff04298fdf6760",
+			expectFound: true,
+			expectedMin: 259,
+			expectedMax: 260,
+		},
+		{
+			name:        "customer format/variant 1",
+			traceState:  "policy=Bidder,ot=th:fedd37f08bc7f0",
+			expectFound: true,
+			expectedMin: 224,
+			expectedMax: 225,
+		},
+		{
+			name:        "customer format/variant 2",
+			traceState:  "policy=Bidder,ot=th:ff0d27d434fe50",
+			expectFound: true,
+			expectedMin: 268,
+			expectedMax: 269,
+		},
+		{
+			name:        "ot with multiple sub-keys/th in middle",
+			traceState:  "ot=p:8;th:c;r:62",
+			expectFound: true,
+			expectedMin: 4,
+			expectedMax: 4,
+		},
+		{
+			name:        "ot with multiple sub-keys/th at end",
+			traceState:  "ot=p:8;r:62;th:c",
+			expectFound: true,
+			expectedMin: 4,
+			expectedMax: 4,
+		},
+		{
+			name:        "ot with multiple sub-keys/th at start",
+			traceState:  "ot=th:c;p:8;r:62",
+			expectFound: true,
+			expectedMin: 4,
+			expectedMax: 4,
+		},
+		{
+			name:        "multiple vendors/with ot",
+			traceState:  "vendor1=value1,ot=th:c,vendor2=value2",
+			expectFound: true,
+			expectedMin: 4,
+			expectedMax: 4,
+		},
+		{
+			name:        "multiple vendors/with ot and multiple sub-keys",
+			traceState:  "vendor1=value1,ot=th:c;p:8;r:62,vendor2=value2",
+			expectFound: true,
+			expectedMin: 4,
+			expectedMax: 4,
+		},
+		{
+			name:        "weird stuff/uppercase hex in th value accepted by OTel library",
+			traceState:  "ot=th:C",
+			expectFound: true,
+			expectedMin: 4,
+			expectedMax: 4,
+		},
+		{
+			name:        "weird stuff/both formats present - new format wins",
+			traceState:  "ot=th:c,th=8",
+			expectFound: true,
+			expectedMin: 4,
+			expectedMax: 4,
+		},
+		{
+			name:        "weird stuff/multiple ot entries (first wins)",
+			traceState:  "ot=th:c,ot=th:8",
+			expectFound: true,
+			expectedMin: 4,
+			expectedMax: 4,
+		},
+		{
+			name:        "legacy format/th=c",
+			traceState:  "th=c",
+			expectFound: true,
+			expectedMin: 4,
+			expectedMax: 4,
+		},
+		{
+			name:        "legacy format/with semicolons",
+			traceState:  "th=c;other=value",
+			expectFound: true,
+			expectedMin: 4,
+			expectedMax: 4,
+		},
+		{
+			name:        "legacy format/with comma separators",
+			traceState:  "th=c,other=value",
+			expectFound: false,
+		},
+		{
+			name:        "rejects/ot entry without th sub-key",
+			traceState:  "ot=p:8;r:62",
+			expectFound: false,
+		},
+		{
+			name:        "rejects/no ot entry",
+			traceState:  "policy=Bidder",
+			expectFound: false,
+		},
+		{
+			name:        "rejects/empty tracestate",
+			traceState:  "",
+			expectFound: false,
+		},
+		{
+			name:        "rejects/empty th value",
+			traceState:  "ot=th:",
+			expectFound: false,
+		},
+		{
+			name:        "rejects/whitespace in the the value",
+			traceState:  "ot=th: c ",
+			expectFound: false,
+		},
+		{
+			name:        "rejects/invalid hex characters in th value",
+			traceState:  "ot=th:xyz",
+			expectFound: false,
+		},
+		{
+			name:        "rejects/th value with too many hex digits",
+			traceState:  "ot=th:123456789012345",
+			expectFound: false,
+		},
+		{
+			name:        "rejects/tenant-prefixed ot entry not matched, unspecified behavior",
+			traceState:  "tenant@ot=th:c",
+			expectFound: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			sampleRate, ok := getSampleRateFromOTelSamplingThreshold(tt.traceState)
+			assert.Equal(t, tt.expectFound, ok, "expectFound mismatch")
+
+			if tt.expectFound {
+				assert.GreaterOrEqual(t, sampleRate, tt.expectedMin)
+				assert.LessOrEqual(t, sampleRate, tt.expectedMax)
+			} else {
+				assert.Equal(t, int32(1), sampleRate, "should return default sample rate when not found")
+			}
+		})
+	}
+}
+
 func TestSampleRatePrefersHoneycombAttribute(t *testing.T) {
 	attrs := map[string]interface{}{
 		"sampleRate": 10,
