@@ -5,6 +5,7 @@ import (
 	"io"
 	"time"
 
+	"github.com/honeycombio/husky"
 	collectorProfiles "go.opentelemetry.io/proto/otlp/collector/profiles/v1development"
 	profiles "go.opentelemetry.io/proto/otlp/profiles/v1development"
 	"google.golang.org/protobuf/proto"
@@ -21,10 +22,14 @@ func TranslateProfilesRequestFromReader(ctx context.Context, body io.ReadCloser,
 // maxSize is the maximum size of the request body in bytes
 func TranslateProfilesRequestFromReaderSized(ctx context.Context, body io.ReadCloser, ri RequestInfo, maxSize int64) (*TranslateOTLPRequestResult, error) {
 	if err := ri.ValidateProfilesHeaders(); err != nil {
+		husky.AddTelemetryAttribute(ctx, "error", true)
+		husky.AddTelemetryAttribute(ctx, "error_reason", err.Error())
 		return nil, err
 	}
 	request := &collectorProfiles.ExportProfilesServiceRequest{}
 	if err := parseOtlpRequestBody(body, ri.ContentType, ri.ContentEncoding, request, maxSize); err != nil {
+		husky.AddTelemetryAttribute(ctx, "error", true)
+		husky.AddTelemetryAttribute(ctx, "error_reason", err.Error())
 		return nil, ErrFailedParseBody
 	}
 	return TranslateProfilesRequest(ctx, request, ri)
@@ -41,11 +46,13 @@ func TranslateProfilesRequestFromReaderSized(ctx context.Context, body io.ReadCl
 //  4. Finalization: Merge dictionaries, optimize storage
 func TranslateProfilesRequest(ctx context.Context, request *collectorProfiles.ExportProfilesServiceRequest, ri RequestInfo) (*TranslateOTLPRequestResult, error) {
 	if err := ri.ValidateProfilesHeaders(); err != nil {
+		husky.AddTelemetryAttribute(ctx, "error", true)
+		husky.AddTelemetryAttribute(ctx, "error_reason", err.Error())
 		return nil, err
 	}
 
 	batches := []Batch{}
-	dataset := getProfilesDataset(ri)
+	dataset := getProfilesDataset()
 
 	// Create ProfilesData from request (ResourceProfiles + Dictionary)
 	profilesData := &profiles.ProfilesData{
@@ -83,6 +90,6 @@ func TranslateProfilesRequest(ctx context.Context, request *collectorProfiles.Ex
 
 // getProfilesDataset returns the target dataset for profile data
 // Always returns __profiles__ - this is a system dataset, not user-configurable
-func getProfilesDataset(ri RequestInfo) string {
+func getProfilesDataset() string {
 	return "__profiles__"
 }

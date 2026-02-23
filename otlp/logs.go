@@ -5,6 +5,7 @@ import (
 	"io"
 	"time"
 
+	"github.com/honeycombio/husky"
 	collectorLogs "go.opentelemetry.io/proto/otlp/collector/logs/v1"
 	logs "go.opentelemetry.io/proto/otlp/logs/v1"
 	"google.golang.org/protobuf/proto"
@@ -25,6 +26,8 @@ func TranslateLogsRequestFromReaderSized(ctx context.Context, body io.ReadCloser
 	}
 	request := &collectorLogs.ExportLogsServiceRequest{}
 	if err := parseOtlpRequestBody(body, ri.ContentType, ri.ContentEncoding, request, maxSize); err != nil {
+		husky.AddTelemetryAttribute(ctx, "error", true)
+		husky.AddTelemetryAttribute(ctx, "error_reason", err.Error())
 		return nil, ErrFailedParseBody
 	}
 	return TranslateLogsRequest(ctx, request, ri)
@@ -34,6 +37,8 @@ func TranslateLogsRequestFromReaderSized(ctx context.Context, body io.ReadCloser
 // RequestInfo is the parsed information from the gRPC metadata
 func TranslateLogsRequest(ctx context.Context, request *collectorLogs.ExportLogsServiceRequest, ri RequestInfo) (*TranslateOTLPRequestResult, error) {
 	if err := ri.ValidateLogsHeaders(); err != nil {
+		husky.AddTelemetryAttribute(ctx, "error", true)
+		husky.AddTelemetryAttribute(ctx, "error_reason", err.Error())
 		return nil, err
 	}
 	batches := []Batch{}
