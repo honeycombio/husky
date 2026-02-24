@@ -108,7 +108,7 @@ func TranslateTraceRequestFromReaderSizedWithMsgp(
 	case "":
 		// cool
 	default:
-		return nil, ErrFailedParseBody
+		return nil, fmt.Errorf("%w: unsupported content encoding %q", ErrFailedParseBody, ri.ContentEncoding)
 	}
 
 	bodyBuffer := httpBodyBufferPool.Get().(*bytes.Buffer)
@@ -125,10 +125,18 @@ func TranslateTraceRequestFromReaderSizedWithMsgp(
 	// Unmarshal based on content type
 	switch ri.ContentType {
 	case "application/json":
-		return unmarshalTraceRequestDirectMsgpJSON(ctx, bodyBuffer.Bytes(), ri)
+		result, err := unmarshalTraceRequestDirectMsgpJSON(ctx, bodyBuffer.Bytes(), ri)
+		if err != nil {
+			return nil, fmt.Errorf("%w: %s", ErrFailedParseBody, err)
+		}
+		return result, nil
 	default:
 		// protobuf
-		return UnmarshalTraceRequestDirectMsgp(ctx, bodyBuffer.Bytes(), ri)
+		result, err := UnmarshalTraceRequestDirectMsgp(ctx, bodyBuffer.Bytes(), ri)
+		if err != nil {
+			return nil, fmt.Errorf("%w: %s", ErrFailedParseBody, err)
+		}
+		return result, nil
 	}
 }
 
