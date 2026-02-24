@@ -1,6 +1,7 @@
 package otlp
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -16,10 +17,10 @@ type OTLPError struct {
 }
 
 var (
-	ErrInvalidContentType   = OTLPError{"unsupported content-type, valid types are: " + strings.Join(GetSupportedContentTypes(), ", "), http.StatusUnsupportedMediaType, codes.Unimplemented}
-	ErrFailedParseBody      = OTLPError{"failed to parse OTLP request body", http.StatusBadRequest, codes.Internal}
-	ErrMissingAPIKeyHeader  = OTLPError{"missing 'x-honeycomb-team' header", http.StatusUnauthorized, codes.Unauthenticated}
-	ErrMissingDatasetHeader = OTLPError{"missing 'x-honeycomb-dataset' header", http.StatusUnauthorized, codes.Unauthenticated}
+	ErrInvalidContentType   = OTLPError{Message: "unsupported content-type, valid types are: " + strings.Join(GetSupportedContentTypes(), ", "), HTTPStatusCode: http.StatusUnsupportedMediaType, GRPCStatusCode: codes.Unimplemented}
+	ErrFailedParseBody      = OTLPError{Message: "failed to parse OTLP request body", HTTPStatusCode: http.StatusBadRequest, GRPCStatusCode: codes.Internal}
+	ErrMissingAPIKeyHeader  = OTLPError{Message: "missing 'x-honeycomb-team' header", HTTPStatusCode: http.StatusUnauthorized, GRPCStatusCode: codes.Unauthenticated}
+	ErrMissingDatasetHeader = OTLPError{Message: "missing 'x-honeycomb-dataset' header", HTTPStatusCode: http.StatusUnauthorized, GRPCStatusCode: codes.Unauthenticated}
 )
 
 func (e OTLPError) Error() string {
@@ -31,8 +32,9 @@ func AsJson(e error) string {
 }
 
 func AsGRPCError(e error) error {
-	if otlpErr, ok := e.(OTLPError); ok {
-		return status.Error(otlpErr.GRPCStatusCode, otlpErr.Message)
+	var otlpErr OTLPError
+	if errors.As(e, &otlpErr) {
+		return status.Error(otlpErr.GRPCStatusCode, e.Error())
 	}
 	return status.Error(codes.Internal, "")
 }

@@ -2,6 +2,7 @@ package otlp
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"time"
 
@@ -25,7 +26,7 @@ func TranslateLogsRequestFromReaderSized(ctx context.Context, body io.ReadCloser
 	}
 	request := &collectorLogs.ExportLogsServiceRequest{}
 	if err := parseOtlpRequestBody(body, ri.ContentType, ri.ContentEncoding, request, maxSize); err != nil {
-		return nil, ErrFailedParseBody
+		return nil, fmt.Errorf("%w: %s", ErrFailedParseBody, err)
 	}
 	return TranslateLogsRequest(ctx, request, ri)
 }

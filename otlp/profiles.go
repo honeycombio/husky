@@ -2,6 +2,7 @@ package otlp
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"time"
 
@@ -25,7 +26,7 @@ func TranslateProfilesRequestFromReaderSized(ctx context.Context, body io.ReadCl
 	}
 	request := &collectorProfiles.ExportProfilesServiceRequest{}
 	if err := parseOtlpRequestBody(body, ri.ContentType, ri.ContentEncoding, request, maxSize); err != nil {
-		return nil, ErrFailedParseBody
+		return nil, fmt.Errorf("%w: %s", ErrFailedParseBody, err)
 	}
 	return TranslateProfilesRequest(ctx, request, ri)
 }
@@ -45,7 +46,7 @@ func TranslateProfilesRequest(ctx context.Context, request *collectorProfiles.Ex
 	}
 
 	batches := []Batch{}
-	dataset := getProfilesDataset(ri)
+	dataset := getProfilesDataset()
 
 	// Create ProfilesData from request (ResourceProfiles + Dictionary)
 	profilesData := &profiles.ProfilesData{
@@ -83,6 +84,6 @@ func TranslateProfilesRequest(ctx context.Context, request *collectorProfiles.Ex
 
 // getProfilesDataset returns the target dataset for profile data
 // Always returns __profiles__ - this is a system dataset, not user-configurable
-func getProfilesDataset(ri RequestInfo) string {
+func getProfilesDataset() string {
 	return "__profiles__"
 }

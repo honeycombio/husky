@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"fmt"
 	"io"
 	"sync"
 	"time"
@@ -36,7 +37,7 @@ func TranslateTraceRequestFromReaderSized(ctx context.Context, body io.ReadClose
 	}
 	request := &collectorTrace.ExportTraceServiceRequest{}
 	if err := parseOtlpRequestBody(body, ri.ContentType, ri.ContentEncoding, request, maxSize); err != nil {
-		return nil, ErrFailedParseBody
+		return nil, fmt.Errorf("%w: %s", ErrFailedParseBody, err)
 	}
 	return TranslateTraceRequest(ctx, request, ri)
 }
@@ -85,7 +86,7 @@ func TranslateTraceRequestFromReaderSizedWithMsgp(
 	case "gzip":
 		gzipReader, err := gzip.NewReader(reader)
 		if err != nil {
-			return nil, ErrFailedParseBody
+			return nil, fmt.Errorf("%w: %s", ErrFailedParseBody, err)
 		}
 		defer gzipReader.Close()
 		reader = gzipReader
@@ -100,14 +101,14 @@ func TranslateTraceRequestFromReaderSizedWithMsgp(
 
 		err := zstdReader.Reset(reader)
 		if err != nil {
-			return nil, ErrFailedParseBody
+			return nil, fmt.Errorf("%w: %s", ErrFailedParseBody, err)
 		}
 
 		reader = zstdReader
 	case "":
 		// cool
 	default:
-		return nil, ErrFailedParseBody
+		return nil, fmt.Errorf("%w: unsupported content encoding %q", ErrFailedParseBody, ri.ContentEncoding)
 	}
 
 	bodyBuffer := httpBodyBufferPool.Get().(*bytes.Buffer)
@@ -118,16 +119,24 @@ func TranslateTraceRequestFromReaderSizedWithMsgp(
 
 	_, err := bodyBuffer.ReadFrom(reader)
 	if err != nil {
-		return nil, ErrFailedParseBody
+		return nil, fmt.Errorf("%w: %s", ErrFailedParseBody, err)
 	}
 
 	// Unmarshal based on content type
 	switch ri.ContentType {
 	case "application/json":
-		return unmarshalTraceRequestDirectMsgpJSON(ctx, bodyBuffer.Bytes(), ri)
+		result, err := unmarshalTraceRequestDirectMsgpJSON(ctx, bodyBuffer.Bytes(), ri)
+		if err != nil {
+			return nil, fmt.Errorf("%w: %s", ErrFailedParseBody, err)
+		}
+		return result, nil
 	default:
 		// protobuf
-		return UnmarshalTraceRequestDirectMsgp(ctx, bodyBuffer.Bytes(), ri)
+		result, err := UnmarshalTraceRequestDirectMsgp(ctx, bodyBuffer.Bytes(), ri)
+		if err != nil {
+			return nil, fmt.Errorf("%w: %s", ErrFailedParseBody, err)
+		}
+		return result, nil
 	}
 }
 
