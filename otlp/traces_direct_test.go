@@ -1881,3 +1881,77 @@ func TestSampleRateFromFloat(t *testing.T) {
 		})
 	}
 }
+
+func TestUnmarshalTraceRequestDirect_SchemaURL(t *testing.T) {
+	const (
+		resourceSchemaURL = "https://opentelemetry.io/schemas/1.21.0"
+		scopeSchemaURL    = "https://opentelemetry.io/schemas/1.20.0"
+	)
+	now := time.Now()
+
+	req := &collectortrace.ExportTraceServiceRequest{
+		ResourceSpans: []*trace.ResourceSpans{{
+			SchemaUrl: resourceSchemaURL,
+			Resource: &resource.Resource{
+				Attributes: []*common.KeyValue{{
+					Key:   "service.name",
+					Value: &common.AnyValue{Value: &common.AnyValue_StringValue{StringValue: "test-service"}},
+				}},
+			},
+			ScopeSpans: []*trace.ScopeSpans{{
+				SchemaUrl: scopeSchemaURL,
+				Scope:     &common.InstrumentationScope{Name: "test-lib"},
+				Spans: []*trace.Span{{
+					TraceId:           hexToBin("0102030405060708090a0b0c0d0e0f10"),
+					SpanId:            hexToBin("0102030405060708"),
+					Name:              "test-span",
+					StartTimeUnixNano: uint64(now.UnixNano()),
+					EndTimeUnixNano:   uint64(now.Add(time.Millisecond).UnixNano()),
+				}},
+			}},
+		}},
+	}
+
+	testCases := []struct {
+		name        string
+		contentType string
+		serialize   func() ([]byte, error)
+		unmarshal   func(context.Context, []byte, RequestInfo) (*TranslateOTLPRequestResultMsgp, error)
+	}{
+		{
+			name:        "protobuf",
+			contentType: "application/protobuf",
+			serialize:   func() ([]byte, error) { return proto.Marshal(req) },
+			unmarshal:   UnmarshalTraceRequestDirectMsgp,
+		},
+		{
+			name:        "json",
+			contentType: "application/json",
+			serialize: func() ([]byte, error) {
+				b, err := protojson.Marshal(req)
+				return b, err
+			},
+			unmarshal: func(ctx context.Context, data []byte, ri RequestInfo) (*TranslateOTLPRequestResultMsgp, error) {
+				return unmarshalTraceRequestDirectMsgpJSON(ctx, data, ri)
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			ri := RequestInfo{ApiKey: "abc123DEF456ghi789jklm", Dataset: "test", ContentType: tc.contentType}
+			data, err := tc.serialize()
+			require.NoError(t, err)
+
+			result, err := tc.unmarshal(context.Background(), data, ri)
+			require.NoError(t, err)
+			require.Len(t, result.Batches, 1)
+			require.Len(t, result.Batches[0].Events, 1)
+
+			batch := convertBatchMsgpToBatch(t, result.Batches[0])
+			attrs := batch.Events[0].Attributes
+			assert.Equal(t, resourceSchemaURL, attrs["resource.schema_url"])
+			assert.Equal(t, scopeSchemaURL, attrs["scope.schema_url"])
+		})
+	}
+}

@@ -141,10 +141,16 @@ func TranslateTraceRequest(ctx context.Context, request *collectorTrace.ExportTr
 	for _, resourceSpan := range request.ResourceSpans {
 		var events []Event
 		resourceAttrs := getResourceAttributes(ctx, resourceSpan.Resource)
+		if resourceSpan.SchemaUrl != "" {
+			resourceAttrs["resource.schema_url"] = resourceSpan.SchemaUrl
+		}
 		dataset := getDataset(ri, resourceAttrs)
 
 		for _, scopeSpan := range resourceSpan.ScopeSpans {
 			scopeAttrs := getScopeAttributes(ctx, scopeSpan.Scope)
+			if scopeSpan.SchemaUrl != "" {
+				scopeAttrs["scope.schema_url"] = scopeSpan.SchemaUrl
+			}
 
 			for _, span := range scopeSpan.GetSpans() {
 				traceID := BytesToTraceID(span.TraceId)

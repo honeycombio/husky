@@ -1450,3 +1450,46 @@ func TestCompressedTraceRequests(t *testing.T) {
 		})
 	}
 }
+
+func TestTranslateTraceRequest_SchemaURL(t *testing.T) {
+	const (
+		resourceSchemaURL = "https://opentelemetry.io/schemas/1.21.0"
+		scopeSchemaURL    = "https://opentelemetry.io/schemas/1.20.0"
+	)
+	traceID := test.RandomBytes(16)
+	spanID := test.RandomBytes(8)
+	now := time.Now()
+
+	req := &collectortrace.ExportTraceServiceRequest{
+		ResourceSpans: []*trace.ResourceSpans{{
+			SchemaUrl: resourceSchemaURL,
+			Resource: &resource.Resource{
+				Attributes: []*common.KeyValue{{
+					Key:   "service.name",
+					Value: &common.AnyValue{Value: &common.AnyValue_StringValue{StringValue: "test-service"}},
+				}},
+			},
+			ScopeSpans: []*trace.ScopeSpans{{
+				SchemaUrl: scopeSchemaURL,
+				Scope:     &common.InstrumentationScope{Name: "test-lib"},
+				Spans: []*trace.Span{{
+					TraceId:           traceID,
+					SpanId:            spanID,
+					Name:              "test-span",
+					StartTimeUnixNano: uint64(now.UnixNano()),
+					EndTimeUnixNano:   uint64(now.Add(time.Millisecond).UnixNano()),
+				}},
+			}},
+		}},
+	}
+
+	ri := RequestInfo{ApiKey: "abc123DEF456ghi789jklm", Dataset: "test", ContentType: "application/protobuf"}
+	result, err := TranslateTraceRequest(context.Background(), req, ri)
+	require.NoError(t, err)
+	require.Len(t, result.Batches, 1)
+	require.Len(t, result.Batches[0].Events, 1)
+
+	attrs := result.Batches[0].Events[0].Attributes
+	assert.Equal(t, resourceSchemaURL, attrs["resource.schema_url"])
+	assert.Equal(t, scopeSchemaURL, attrs["scope.schema_url"])
+}

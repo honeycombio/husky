@@ -40,10 +40,16 @@ func TranslateLogsRequest(ctx context.Context, request *collectorLogs.ExportLogs
 	for _, resourceLog := range request.ResourceLogs {
 		var events []Event
 		resourceAttrs := getResourceAttributes(ctx, resourceLog.Resource)
+		if resourceLog.SchemaUrl != "" {
+			resourceAttrs["resource.schema_url"] = resourceLog.SchemaUrl
+		}
 		dataset := getLogsDataset(ri, resourceAttrs)
 
 		for _, scopeLog := range resourceLog.ScopeLogs {
 			scopeAttrs := getScopeAttributes(ctx, scopeLog.Scope)
+			if scopeLog.SchemaUrl != "" {
+				scopeAttrs["scope.schema_url"] = scopeLog.SchemaUrl
+			}
 
 			for _, log := range scopeLog.GetLogRecords() {
 				attrs := map[string]interface{}{

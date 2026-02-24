@@ -102,6 +102,10 @@ func unmarshalResourceSpansJSON(
 			err = unmarshalResourceJSON(ctx, v, resourceAttrs)
 		case "scopeSpans":
 			scopeSpansArray = v.GetArray()
+		case "schemaUrl":
+			if b := v.GetStringBytes(); len(b) > 0 {
+				resourceAttrs.addString([]byte("resource.schema_url"), b)
+			}
 		}
 	})
 
@@ -588,6 +592,10 @@ func unmarshalScopeSpansJSON(
 			}
 		case "spans":
 			spansArray = v.GetArray()
+		case "schemaUrl":
+			if b := v.GetStringBytes(); len(b) > 0 {
+				scopeAttrs.addString([]byte("scope.schema_url"), b)
+			}
 		}
 	})
 	if err != nil {
