@@ -2,10 +2,10 @@ package otlp
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"time"
 
-	"github.com/honeycombio/husky"
 	collectorProfiles "go.opentelemetry.io/proto/otlp/collector/profiles/v1development"
 	profiles "go.opentelemetry.io/proto/otlp/profiles/v1development"
 	"google.golang.org/protobuf/proto"
@@ -22,15 +22,11 @@ func TranslateProfilesRequestFromReader(ctx context.Context, body io.ReadCloser,
 // maxSize is the maximum size of the request body in bytes
 func TranslateProfilesRequestFromReaderSized(ctx context.Context, body io.ReadCloser, ri RequestInfo, maxSize int64) (*TranslateOTLPRequestResult, error) {
 	if err := ri.ValidateProfilesHeaders(); err != nil {
-		husky.AddTelemetryAttribute(ctx, "error", true)
-		husky.AddTelemetryAttribute(ctx, "error_reason", err.Error())
 		return nil, err
 	}
 	request := &collectorProfiles.ExportProfilesServiceRequest{}
 	if err := parseOtlpRequestBody(body, ri.ContentType, ri.ContentEncoding, request, maxSize); err != nil {
-		husky.AddTelemetryAttribute(ctx, "error", true)
-		husky.AddTelemetryAttribute(ctx, "error_reason", err.Error())
-		return nil, ErrFailedParseBody
+		return nil, fmt.Errorf("%w: %s", ErrFailedParseBody, err)
 	}
 	return TranslateProfilesRequest(ctx, request, ri)
 }
@@ -46,8 +42,6 @@ func TranslateProfilesRequestFromReaderSized(ctx context.Context, body io.ReadCl
 //  4. Finalization: Merge dictionaries, optimize storage
 func TranslateProfilesRequest(ctx context.Context, request *collectorProfiles.ExportProfilesServiceRequest, ri RequestInfo) (*TranslateOTLPRequestResult, error) {
 	if err := ri.ValidateProfilesHeaders(); err != nil {
-		husky.AddTelemetryAttribute(ctx, "error", true)
-		husky.AddTelemetryAttribute(ctx, "error_reason", err.Error())
 		return nil, err
 	}
 

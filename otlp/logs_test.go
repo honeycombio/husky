@@ -485,7 +485,7 @@ func TestTranslateLogsRequestFromReaderSized(t *testing.T) {
 
 	_, err = TranslateLogsRequestFromReaderSized(context.Background(), bodyTooLarge, ri, int64(len(bodyBytes)/10))
 	assert.NotNil(t, err)
-	assert.Equal(t, ErrFailedParseBody, err)
+	assert.ErrorIs(t, err, ErrFailedParseBody)
 }
 
 func TestLogsRequestWithInvalidContentTypeReturnsError(t *testing.T) {
@@ -510,7 +510,7 @@ func TestLogsRequestWithInvalidBodyReturnsError(t *testing.T) {
 
 	result, err := TranslateLogsRequestFromReader(context.Background(), body, ri)
 	assert.Nil(t, result)
-	assert.Equal(t, ErrFailedParseBody, err)
+	assert.ErrorIs(t, err, ErrFailedParseBody)
 }
 
 func TestLogsWithoutTraceIdDoesNotGetAnnotationType(t *testing.T) {

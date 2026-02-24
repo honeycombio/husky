@@ -4,11 +4,11 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"fmt"
 	"io"
 	"sync"
 	"time"
 
-	"github.com/honeycombio/husky"
 	"github.com/klauspost/compress/zstd"
 	collectorTrace "go.opentelemetry.io/proto/otlp/collector/trace/v1"
 	trace "go.opentelemetry.io/proto/otlp/trace/v1"
@@ -33,15 +33,11 @@ func TranslateTraceRequestFromReader(ctx context.Context, body io.ReadCloser, ri
 // maxSize is the maximum size of the request body in bytes
 func TranslateTraceRequestFromReaderSized(ctx context.Context, body io.ReadCloser, ri RequestInfo, maxSize int64) (*TranslateOTLPRequestResult, error) {
 	if err := ri.ValidateTracesHeaders(); err != nil {
-		husky.AddTelemetryAttribute(ctx, "error", true)
-		husky.AddTelemetryAttribute(ctx, "error_reason", err.Error())
 		return nil, err
 	}
 	request := &collectorTrace.ExportTraceServiceRequest{}
 	if err := parseOtlpRequestBody(body, ri.ContentType, ri.ContentEncoding, request, maxSize); err != nil {
-		husky.AddTelemetryAttribute(ctx, "error", true)
-		husky.AddTelemetryAttribute(ctx, "error_reason", err.Error())
-		return nil, ErrFailedParseBody
+		return nil, fmt.Errorf("%w: %s", ErrFailedParseBody, err)
 	}
 	return TranslateTraceRequest(ctx, request, ri)
 }
@@ -72,8 +68,6 @@ func TranslateTraceRequestFromReaderSizedWithMsgp(
 	defer body.Close()
 
 	if err := ri.ValidateTracesHeaders(); err != nil {
-		husky.AddTelemetryAttribute(ctx, "error", true)
-		husky.AddTelemetryAttribute(ctx, "error_reason", err.Error())
 		return nil, err
 	}
 
@@ -82,8 +76,6 @@ func TranslateTraceRequestFromReaderSizedWithMsgp(
 	case "application/protobuf", "application/x-protobuf", "application/json":
 		// supported
 	default:
-		husky.AddTelemetryAttribute(ctx, "error", true)
-		husky.AddTelemetryAttribute(ctx, "error_reason", "invalid content type")
 		return nil, ErrInvalidContentType
 	}
 
@@ -94,9 +86,7 @@ func TranslateTraceRequestFromReaderSizedWithMsgp(
 	case "gzip":
 		gzipReader, err := gzip.NewReader(reader)
 		if err != nil {
-			husky.AddTelemetryAttribute(ctx, "error", true)
-			husky.AddTelemetryAttribute(ctx, "error_reason", err.Error())
-			return nil, ErrFailedParseBody
+			return nil, fmt.Errorf("%w: %s", ErrFailedParseBody, err)
 		}
 		defer gzipReader.Close()
 		reader = gzipReader
@@ -111,17 +101,13 @@ func TranslateTraceRequestFromReaderSizedWithMsgp(
 
 		err := zstdReader.Reset(reader)
 		if err != nil {
-			husky.AddTelemetryAttribute(ctx, "error", true)
-			husky.AddTelemetryAttribute(ctx, "error_reason", err.Error())
-			return nil, ErrFailedParseBody
+			return nil, fmt.Errorf("%w: %s", ErrFailedParseBody, err)
 		}
 
 		reader = zstdReader
 	case "":
 		// cool
 	default:
-		husky.AddTelemetryAttribute(ctx, "error", true)
-		husky.AddTelemetryAttribute(ctx, "error_reason", "invalid content encoding")
 		return nil, ErrFailedParseBody
 	}
 
@@ -133,9 +119,7 @@ func TranslateTraceRequestFromReaderSizedWithMsgp(
 
 	_, err := bodyBuffer.ReadFrom(reader)
 	if err != nil {
-		husky.AddTelemetryAttribute(ctx, "error", true)
-		husky.AddTelemetryAttribute(ctx, "error_reason", err.Error())
-		return nil, ErrFailedParseBody
+		return nil, fmt.Errorf("%w: %s", ErrFailedParseBody, err)
 	}
 
 	// Unmarshal based on content type
@@ -152,8 +136,6 @@ func TranslateTraceRequestFromReaderSizedWithMsgp(
 // RequestInfo is the parsed information from the gRPC metadata
 func TranslateTraceRequest(ctx context.Context, request *collectorTrace.ExportTraceServiceRequest, ri RequestInfo) (*TranslateOTLPRequestResult, error) {
 	if err := ri.ValidateTracesHeaders(); err != nil {
-		husky.AddTelemetryAttribute(ctx, "error", true)
-		husky.AddTelemetryAttribute(ctx, "error_reason", err.Error())
 		return nil, err
 	}
 	var batches []Batch

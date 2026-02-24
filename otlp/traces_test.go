@@ -835,7 +835,7 @@ func TestTranslateTraceRequestFromReaderSized(t *testing.T) {
 
 	_, err = TranslateTraceRequestFromReaderSized(context.Background(), bodyTooLarge, ri, int64(len(bodyBytes)/10))
 	assert.NotNil(t, err)
-	assert.Equal(t, ErrFailedParseBody, err)
+	assert.ErrorIs(t, err, ErrFailedParseBody)
 }
 
 func TestInvalidContentTypeReturnsError(t *testing.T) {
@@ -863,7 +863,7 @@ func TestInvalidBodyReturnsError(t *testing.T) {
 
 	result, err := TranslateTraceRequestFromReader(context.Background(), body, ri)
 	assert.Nil(t, result)
-	assert.Equal(t, ErrFailedParseBody, err)
+	assert.ErrorIs(t, err, ErrFailedParseBody)
 }
 
 func TestDefaultServiceNameApplied(t *testing.T) {
@@ -1171,7 +1171,7 @@ func TestBadTraceRequest(t *testing.T) {
 
 				_, err := TranslateTraceRequestFromReader(context.Background(), body, ri)
 				assert.NotNil(t, err)
-				assert.Equal(t, ErrFailedParseBody, err)
+				assert.ErrorIs(t, err, ErrFailedParseBody)
 			})
 		}
 	}
