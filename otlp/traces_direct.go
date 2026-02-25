@@ -99,6 +99,11 @@ import (
 	trace "go.opentelemetry.io/proto/otlp/trace/v1"
 )
 
+const (
+	attrResourceSchemaURL = "resource.schema_url"
+	attrScopeSchemaURL    = "scope.schema_url"
+)
+
 var (
 	ErrInvalidLength        = fmt.Errorf("proto: negative length found during unmarshaling")
 	ErrIntOverflow          = fmt.Errorf("proto: integer overflow")
@@ -521,8 +526,11 @@ func unmarshalResourceSpans(
 	l := len(data)
 	iNdEx := 0
 
-	// First pass: collect resource attributes and schema_url before processing scope spans.
-	// Fields are not guaranteed to arrive in order, so we walk the data twice.
+	// Fields are not guaranteed to arrive in order. We need resource (field 1) to
+	// determine the dataset, and schema_url (field 3) must be in resourceAttrs before
+	// spans are processed. We do this in three passes: resource, schema_url, then spans.
+	// First pass: find resource only — break early since this is the common hot path.
+loop:
 	for iNdEx < l {
 		preIndex := iNdEx
 		fieldNum, wireType, err := decodeField(data, &iNdEx)
@@ -542,16 +550,7 @@ func unmarshalResourceSpans(
 			if err != nil {
 				return err
 			}
-
-		case 3: // schema_url
-			slice, err := decodeWireType2(data, &iNdEx, l, wireType)
-			if err != nil {
-				return err
-			}
-			if len(slice) > 0 {
-				resourceAttrs.addString([]byte("resource.schema_url"), slice)
-			}
-
+			break loop
 		default:
 			if err := skipField(data, &iNdEx, preIndex, l); err != nil {
 				return err
@@ -573,7 +572,34 @@ func unmarshalResourceSpans(
 	})
 	batch := &result.Batches[len(result.Batches)-1]
 
-	// Second pass: process scope spans with fully-populated resourceAttrs.
+	// Second pass: scan for schema_url (field 3) before processing scope_spans.
+	// schema_url appears after scope_spans in canonical proto order, so we pre-scan
+	// to ensure it's in resourceAttrs when spans are processed.
+	iNdEx = 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		fieldNum, wireType, err := decodeField(data, &iNdEx)
+		if err != nil {
+			return err
+		}
+
+		switch fieldNum {
+		case 3: // schema_url
+			slice, err := decodeWireType2(data, &iNdEx, l, wireType)
+			if err != nil {
+				return err
+			}
+			if len(slice) > 0 {
+				resourceAttrs.addString([]byte(attrResourceSchemaURL), slice)
+			}
+		default:
+			if err := skipField(data, &iNdEx, preIndex, l); err != nil {
+				return err
+			}
+		}
+	}
+
+	// Third pass: process scope_spans with fully-populated resourceAttrs.
 	iNdEx = 0
 	for iNdEx < l {
 		preIndex := iNdEx
@@ -1054,7 +1080,8 @@ func unmarshalScopeSpans(
 
 	l := len(data)
 	iNdEx := 0
-	// First pass: collect scope attributes and schema_url before processing spans.
+	// First pass: find scope (field 1) only — break early since this is the common hot path.
+loop:
 	for iNdEx < l {
 		preIndex := iNdEx
 		fieldNum, wireType, err := decodeField(data, &iNdEx)
@@ -1074,15 +1101,7 @@ func unmarshalScopeSpans(
 			if err != nil {
 				return err
 			}
-
-		case 3: // schema_url
-			slice, err := decodeWireType2(data, &iNdEx, l, wireType)
-			if err != nil {
-				return err
-			}
-			if len(slice) > 0 {
-				scopeAttrs.addString([]byte("scope.schema_url"), slice)
-			}
+			break loop
 
 		default:
 			if err := skipField(data, &iNdEx, preIndex, l); err != nil {
@@ -1091,8 +1110,35 @@ func unmarshalScopeSpans(
 		}
 	}
 
+	// Second pass: scan for schema_url (field 3) before processing spans.
+	// schema_url appears after spans in canonical proto order, so we pre-scan
+	// to ensure it's in scopeAttrs when spans are processed.
 	iNdEx = 0
-	// Second pass: process spans with fully-populated scopeAttrs.
+	for iNdEx < l {
+		preIndex := iNdEx
+		fieldNum, wireType, err := decodeField(data, &iNdEx)
+		if err != nil {
+			return err
+		}
+
+		switch fieldNum {
+		case 3: // schema_url
+			slice, err := decodeWireType2(data, &iNdEx, l, wireType)
+			if err != nil {
+				return err
+			}
+			if len(slice) > 0 {
+				scopeAttrs.addString([]byte(attrScopeSchemaURL), slice)
+			}
+		default:
+			if err := skipField(data, &iNdEx, preIndex, l); err != nil {
+				return err
+			}
+		}
+	}
+
+	// Third pass: process spans with fully-populated scopeAttrs.
+	iNdEx = 0
 	for iNdEx < l {
 		preIndex := iNdEx
 		fieldNum, wireType, err := decodeField(data, &iNdEx)
