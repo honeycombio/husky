@@ -587,7 +587,7 @@ loop:
 			if len(slice) > 0 {
 				resourceAttrs.addString([]byte(attrResourceSchemaURL), slice)
 			}
-			break loop
+			break
 		default:
 			if err := skipField(data, &iNdEx, preIndex, l); err != nil {
 				return err

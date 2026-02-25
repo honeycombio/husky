@@ -121,7 +121,7 @@ func TestUnmarshalTraceRequestDirect_Complete(t *testing.T) {
 				},
 			},
 			{
-				Key: "nil_attr",
+				Key:   "nil_attr",
 				Value: nil,
 			},
 			{
