@@ -99,11 +99,6 @@ import (
 	trace "go.opentelemetry.io/proto/otlp/trace/v1"
 )
 
-const (
-	attrResourceSchemaURL = "resource.schema_url"
-	attrScopeSchemaURL    = "scope.schema_url"
-)
-
 var (
 	ErrInvalidLength        = fmt.Errorf("proto: negative length found during unmarshaling")
 	ErrIntOverflow          = fmt.Errorf("proto: integer overflow")

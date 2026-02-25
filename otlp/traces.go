@@ -142,14 +142,14 @@ func TranslateTraceRequest(ctx context.Context, request *collectorTrace.ExportTr
 		var events []Event
 		resourceAttrs := getResourceAttributes(ctx, resourceSpan.Resource)
 		if resourceSpan.SchemaUrl != "" {
-			resourceAttrs["resource.schema_url"] = resourceSpan.SchemaUrl
+			resourceAttrs[attrResourceSchemaURL] = resourceSpan.SchemaUrl
 		}
 		dataset := getDataset(ri, resourceAttrs)
 
 		for _, scopeSpan := range resourceSpan.ScopeSpans {
 			scopeAttrs := getScopeAttributes(ctx, scopeSpan.Scope)
 			if scopeSpan.SchemaUrl != "" {
-				scopeAttrs["scope.schema_url"] = scopeSpan.SchemaUrl
+				scopeAttrs[attrScopeSchemaURL] = scopeSpan.SchemaUrl
 			}
 
 			for _, span := range scopeSpan.GetSpans() {
