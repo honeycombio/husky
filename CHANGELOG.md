@@ -1,5 +1,17 @@
 # Husky Changelog
 
+## v0.41.0 2026-02-24
+
+### ✨ Added
+
+- feat: Add support for new tracestate definition (#342) | [Tyler Helmuth](https://github.com/TylerHelmuth)
+- feat: Add OTLP profiles translation for native profiling (#338) | [Liz Fong-Jones](https://github.com/lizthegrey)
+
+### 🐛 Fixes
+
+- fix: Return parse errors to callers when translating traces/logs/profiles requests (#343) | [Mike Goldsmith](https://github.com/MikeGoldsmith)
+- fix: Updates span id links to use the BytesToSpanID function (#339) | [Maggy](https://github.com/mupraj10)
+
 ## v0.40.0 2026-01-09
 
 ### ✨ Added
