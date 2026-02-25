@@ -621,3 +621,41 @@ func buildExportLogsServiceRequest(traceID []byte, spanID []byte, startTimestamp
 
 	return req
 }
+
+func TestTranslateLogsRequest_SchemaURL(t *testing.T) {
+	const (
+		resourceSchemaURL = "https://opentelemetry.io/schemas/1.21.0"
+		scopeSchemaURL    = "https://opentelemetry.io/schemas/1.20.0"
+	)
+	now := time.Now()
+
+	req := &collectorlogs.ExportLogsServiceRequest{
+		ResourceLogs: []*logs.ResourceLogs{{
+			SchemaUrl: resourceSchemaURL,
+			Resource: &resource.Resource{
+				Attributes: []*common.KeyValue{{
+					Key:   "service.name",
+					Value: &common.AnyValue{Value: &common.AnyValue_StringValue{StringValue: "test-service"}},
+				}},
+			},
+			ScopeLogs: []*logs.ScopeLogs{{
+				SchemaUrl: scopeSchemaURL,
+				Scope:     &common.InstrumentationScope{Name: "test-lib"},
+				LogRecords: []*logs.LogRecord{{
+					TimeUnixNano:   uint64(now.UnixNano()),
+					SeverityNumber: logs.SeverityNumber_SEVERITY_NUMBER_INFO,
+				}},
+			}},
+		}},
+	}
+
+	ri := RequestInfo{ApiKey: "abc123DEF456ghi789jklm", Dataset: "test", ContentType: "application/protobuf"}
+	result, err := TranslateLogsRequest(context.Background(), req, ri)
+	require.NoError(t, err)
+	require.Len(t, result.Batches, 1)
+	require.Len(t, result.Batches[0].Events, 1)
+
+	attrs := result.Batches[0].Events[0].Attributes
+	assert.Equal(t, resourceSchemaURL, attrs["resource.schema_url"])
+	assert.Equal(t, scopeSchemaURL, attrs["scope.schema_url"])
+}
