@@ -521,9 +521,9 @@ func unmarshalResourceSpans(
 	l := len(data)
 	iNdEx := 0
 
-	// Fields are not guaranteed to arrive in order. We need resource (field 1) to
-	// determine the dataset, and schema_url (field 3) must be in resourceAttrs before
-	// spans are processed. We do this in three passes: resource, schema_url, then spans.
+	// Fields are not guaranteed to arrive in order. We do three passes: first find
+	// resource (field 1) to determine the dataset, then collect schema_url (field 3)
+	// if present so it's available as an attribute on spans, then process spans (field 2).
 	// First pass: find resource only — break early since this is the common hot path.
 loop:
 	for iNdEx < l {
