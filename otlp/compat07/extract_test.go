@@ -6,7 +6,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/encoding/protowire"
-
 )
 
 // buildWireBytes constructs raw wire-format bytes from a sequence of
@@ -47,6 +46,12 @@ func TestExtractField(t *testing.T) {
 			),
 			fieldNum:     4,
 			expectValues: [][]byte{{0x01, 0x02}},
+			expectRemaining: buildWireBytes(
+				struct {
+					num     protowire.Number
+					payload []byte
+				}{num: 7, payload: []byte{0x03}},
+			),
 			expectErr:    false,
 		},
 		{
@@ -59,6 +64,12 @@ func TestExtractField(t *testing.T) {
 			),
 			fieldNum:     4,
 			expectValues: nil,
+			expectRemaining: buildWireBytes(
+				struct {
+					num     protowire.Number
+					payload []byte
+				}{num: 7, payload: []byte{0x03}},
+			),
 			expectErr:    false,
 		},
 		{
@@ -79,6 +90,7 @@ func TestExtractField(t *testing.T) {
 			),
 			fieldNum:     1,
 			expectValues: [][]byte{{0x01}, {0x02}, {0x03}},
+			expectRemaining: nil,
 			expectErr:    false,
 		},
 		{
@@ -107,6 +119,16 @@ func TestExtractField(t *testing.T) {
 			),
 			fieldNum:     1,
 			expectValues: [][]byte{{0x01}, {0x02}, {0x03}},
+			expectRemaining: buildWireBytes(
+				struct {
+					num     protowire.Number
+					payload []byte
+				}{num: 7, payload: []byte{0x04}},
+				struct {
+					num     protowire.Number
+					payload []byte
+				}{num: 9, payload: []byte{0x05}},
+			),
 			expectErr:    false,
 		},
 		{
@@ -153,43 +175,10 @@ func TestExtractField(t *testing.T) {
 			} else {
 				require.NoError(t, err)
 				assert.Equal(t, tt.expectValues, values)
-				if tt.raw != nil && tt.expectRemaining != nil {
-					// When we had input and were expecting a specific remaining,
-					// verify it contains only the non-extracted fields.
-					// The order should match the input.
-					expectedRemaining := buildWireBytes(
-						func() []struct {
-							num     protowire.Number
-							payload []byte
-						} {
-							// For the "mixed fields" test, reconstruct what should remain
-							switch tt.name {
-							case "mixed fields with multiple occurrences":
-								return []struct {
-									num     protowire.Number
-									payload []byte
-								}{
-									{num: 7, payload: []byte{0x04}},
-									{num: 9, payload: []byte{0x05}},
-								}
-							case "field present (single occurrence)":
-								return []struct {
-									num     protowire.Number
-									payload []byte
-								}{
-									{num: 7, payload: []byte{0x03}},
-								}
-							default:
-								return []struct {
-									num     protowire.Number
-									payload []byte
-								}{}
-							}
-						}()...,
-					)
-					if expectedRemaining != nil {
-						assert.Equal(t, expectedRemaining, remaining)
-					}
+				if tt.expectRemaining != nil {
+					assert.Equal(t, tt.expectRemaining, remaining)
+				} else {
+					assert.True(t, remaining == nil || len(remaining) == 0, "expected remaining to be nil or empty")
 				}
 			}
 		})
