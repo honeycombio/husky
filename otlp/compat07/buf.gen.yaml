@@ -4,6 +4,6 @@ plugins:
   - local: protoc-gen-go
     out: internal/shadowpb
     opt:
-      - module=github.com/honeycombio/opentelemetry-proto/compat07/internal/shadowpb
+      - module=github.com/honeycombio/husky/otlp/compat07/internal/shadowpb
 inputs:
   - directory: proto

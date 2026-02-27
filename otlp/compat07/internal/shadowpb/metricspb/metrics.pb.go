@@ -7,7 +7,7 @@
 package metricspb
 
 import (
-	commonpb "github.com/honeycombio/opentelemetry-proto/compat07/internal/shadowpb/commonpb"
+	commonpb "github.com/honeycombio/husky/otlp/compat07/internal/shadowpb/commonpb"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
@@ -534,7 +534,7 @@ const file_metrics_proto_rawDesc = "" +
 	"\x16AggregationTemporality\x12'\n" +
 	"#AGGREGATION_TEMPORALITY_UNSPECIFIED\x10\x00\x12!\n" +
 	"\x1dAGGREGATION_TEMPORALITY_DELTA\x10\x01\x12&\n" +
-	"\"AGGREGATION_TEMPORALITY_CUMULATIVE\x10\x02B[ZYgithub.com/honeycombio/opentelemetry-proto/compat07/internal/shadowpb/metricspb;metricspbb\x06proto3"
+	"\"AGGREGATION_TEMPORALITY_CUMULATIVE\x10\x02BRZPgithub.com/honeycombio/husky/otlp/compat07/internal/shadowpb/metricspb;metricspbb\x06proto3"
 
 var (
 	file_metrics_proto_rawDescOnce sync.Once

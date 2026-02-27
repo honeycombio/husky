@@ -4,7 +4,7 @@ package honeycomb.compat.otlp07.metrics;
 
 import "common.proto";
 
-option go_package = "github.com/honeycombio/opentelemetry-proto/compat07/internal/shadowpb/metricspb;metricspb";
+option go_package = "github.com/honeycombio/husky/otlp/compat07/internal/shadowpb/metricspb;metricspb";
 
 // AggregationTemporality mirrors the upstream enum with identical int values.
 // Defined here to avoid a cross-package proto dependency on upstream metrics.proto.

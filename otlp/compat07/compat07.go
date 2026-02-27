@@ -7,7 +7,7 @@ import (
 
 	metricspb "go.opentelemetry.io/proto/otlp/metrics/v1"
 
-	shadowmetricspb "github.com/honeycombio/opentelemetry-proto/compat07/internal/shadowpb/metricspb"
+	shadowmetricspb "github.com/honeycombio/husky/otlp/compat07/internal/shadowpb/metricspb"
 )
 
 // DetectAndConvertMetrics checks a slice of Metrics for 0.7-era data.

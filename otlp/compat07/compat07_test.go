@@ -13,7 +13,7 @@ import (
 	metricspb "go.opentelemetry.io/proto/otlp/metrics/v1"
 	collectormetricspb "go.opentelemetry.io/proto/otlp/collector/metrics/v1"
 
-	shadowcommonpb "github.com/honeycombio/opentelemetry-proto/compat07/internal/shadowpb/commonpb"
+	shadowcommonpb "github.com/honeycombio/husky/otlp/compat07/internal/shadowpb/commonpb"
 )
 
 // loadFixture loads a .binpb test fixture and returns the metrics slice.

@@ -8,8 +8,8 @@ import (
 	commonpb "go.opentelemetry.io/proto/otlp/common/v1"
 	metricspb "go.opentelemetry.io/proto/otlp/metrics/v1"
 
-	shadowcommonpb "github.com/honeycombio/opentelemetry-proto/compat07/internal/shadowpb/commonpb"
-	shadowmetricspb "github.com/honeycombio/opentelemetry-proto/compat07/internal/shadowpb/metricspb"
+	shadowcommonpb "github.com/honeycombio/husky/otlp/compat07/internal/shadowpb/commonpb"
+	shadowmetricspb "github.com/honeycombio/husky/otlp/compat07/internal/shadowpb/metricspb"
 )
 
 // convertStringKeyValue converts a shadow StringKeyValue to an upstream KeyValue.

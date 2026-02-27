@@ -4,8 +4,8 @@ import (
 	"testing"
 
 	// Shadow types from this module
-	_ "github.com/honeycombio/opentelemetry-proto/compat07/internal/shadowpb/commonpb"
-	_ "github.com/honeycombio/opentelemetry-proto/compat07/internal/shadowpb/metricspb"
+	_ "github.com/honeycombio/husky/otlp/compat07/internal/shadowpb/commonpb"
+	_ "github.com/honeycombio/husky/otlp/compat07/internal/shadowpb/metricspb"
 
 	// Upstream 1.x types
 	_ "go.opentelemetry.io/proto/otlp/common/v1"
