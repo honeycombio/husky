@@ -17,7 +17,7 @@ import (
 )
 
 // loadFixture loads a .binpb test fixture and returns the metrics slice.
-func loadFixture(t *testing.T, name string) []*metricspb.Metric {
+func loadFixture(t testing.TB, name string) []*metricspb.Metric {
 	t.Helper()
 	data, err := os.ReadFile(filepath.Join("testdata", name))
 	require.NoError(t, err)
