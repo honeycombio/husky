@@ -525,7 +525,7 @@ func unmarshalResourceSpans(
 	// resource (field 1) to determine the dataset, then collect schema_url (field 3)
 	// if present so it's available as an attribute on spans, then process spans (field 2).
 	// First pass: find resource only — break early since this is the common hot path.
-loop:
+resource:
 	for iNdEx < l {
 		preIndex := iNdEx
 		fieldNum, wireType, err := decodeField(data, &iNdEx)
@@ -545,7 +545,7 @@ loop:
 			if err != nil {
 				return err
 			}
-			break loop
+			break resource
 		default:
 			if err := skipField(data, &iNdEx, preIndex, l); err != nil {
 				return err
@@ -571,6 +571,7 @@ loop:
 	// schema_url appears after scope_spans in canonical proto order, so we pre-scan
 	// to ensure it's in resourceAttrs when spans are processed.
 	iNdEx = 0
+schemaURL:
 	for iNdEx < l {
 		preIndex := iNdEx
 		fieldNum, wireType, err := decodeField(data, &iNdEx)
@@ -587,7 +588,7 @@ loop:
 			if len(slice) > 0 {
 				resourceAttrs.addString([]byte(attrResourceSchemaURL), slice)
 			}
-			break
+			break schemaURL
 		default:
 			if err := skipField(data, &iNdEx, preIndex, l); err != nil {
 				return err
@@ -1077,7 +1078,7 @@ func unmarshalScopeSpans(
 	l := len(data)
 	iNdEx := 0
 	// First pass: find scope (field 1) only — break early since this is the common hot path.
-loop:
+scope:
 	for iNdEx < l {
 		preIndex := iNdEx
 		fieldNum, wireType, err := decodeField(data, &iNdEx)
@@ -1097,7 +1098,7 @@ loop:
 			if err != nil {
 				return err
 			}
-			break loop
+			break scope
 
 		default:
 			if err := skipField(data, &iNdEx, preIndex, l); err != nil {
@@ -1110,6 +1111,7 @@ loop:
 	// schema_url appears after spans in canonical proto order, so we pre-scan
 	// to ensure it's in scopeAttrs when spans are processed.
 	iNdEx = 0
+schemaURL:
 	for iNdEx < l {
 		preIndex := iNdEx
 		fieldNum, wireType, err := decodeField(data, &iNdEx)
@@ -1126,6 +1128,7 @@ loop:
 			if len(slice) > 0 {
 				scopeAttrs.addString([]byte(attrScopeSchemaURL), slice)
 			}
+			break schemaURL
 		default:
 			if err := skipField(data, &iNdEx, preIndex, l); err != nil {
 				return err
