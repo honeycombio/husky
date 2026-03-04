@@ -1,5 +1,11 @@
 # Husky Changelog
 
+## v0.42.0 2026-03-04
+
+### ✨ Added
+
+- feat: record schema_url for traces and logs (#344) | [Mike Goldsmith](https://github.com/MikeGoldsmith)
+
 ## v0.41.0 2026-02-24
 
 ### ✨ Added
