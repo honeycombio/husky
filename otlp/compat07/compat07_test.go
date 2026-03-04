@@ -363,7 +363,7 @@ func TestAC3_2_NonOTLP07UnknownFieldsPreserved(t *testing.T) {
 // TestAC4_1_MixedPayloads verifies mixed 0.7/1.x metrics are handled correctly.
 func TestAC4_1_MixedPayloads(t *testing.T) {
 	metrics := loadFixture(t, "mixed_07_1x.binpb")
-	require.Len(t, metrics, 2) // One IntGauge (0.7) and one DoubleGauge (1.x)
+	require.Len(t, metrics, 2) // One 0.7 IntGauge and one 0.7 DoubleGauge (proto type unchanged in 1.x)
 
 	converted, _, err := DetectAndConvertMetrics(metrics)
 	require.NoError(t, err)

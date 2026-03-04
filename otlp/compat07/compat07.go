@@ -10,11 +10,11 @@ import (
 	shadowmetricspb "github.com/honeycombio/husky/otlp/compat07/internal/shadowpb/metricspb"
 )
 
-// DetectAndConvertMetrics checks a slice of Metrics for 0.7-era data.
+// DetectAndConvertMetrics checks a slice of Metrics for 0.7 data.
 // For each metric:
 //   - If it contains 0.7 data (int_gauge/int_sum/int_histogram in unknown fields),
 //     converts to the 1.x equivalent and returns it.
-//   - If it contains 0.7-era labels on data points, converts those to attributes.
+//   - If it contains 0.7 labels on data points, converts those to attributes.
 //   - If it's already fully 1.x, returns it unchanged.
 //
 // Returns an error only if 0.7 data is present but malformed/unparseable.
@@ -37,7 +37,7 @@ func DetectAndConvertMetrics(metrics []*metricspb.Metric) ([]*metricspb.Metric, 
 }
 
 // Has07Data is a cheaper check that returns true if any metric in the slice
-// contains 0.7-era unknown fields, without converting. Useful for
+// contains 0.7 unknown fields, without converting. Useful for
 // logging/counting 0.7 traffic.
 func Has07Data(metrics []*metricspb.Metric) bool {
 	for _, m := range metrics {
@@ -67,7 +67,7 @@ func convertMetric(m *metricspb.Metric) (*metricspb.Metric, bool, error) {
 		}
 		return convertUnknownMetricData(m, unknownBytes)
 	}
-	// Metric type is recognizable with stable proto, but data points may have 0.7-era labels.
+	// Metric type is recognizable with stable proto, but data points may have 0.7 labels.
 	// e.g. 0.7 DoubleSum became 1.x Sum, same proto field number but 0.7 has Labels while 1.x has Attributes
 	return convertDataPointLabels(m)
 }
@@ -133,7 +133,7 @@ func convertUnknownMetricData(m *metricspb.Metric, unknownBytes []byte) (*metric
 }
 
 // convertDataPointLabels walks data points and exemplars of a metric whose type
-// is recognizable with stable proto, converting any 0.7-era labels/filtered_labels
+// is recognizable with stable proto, converting any 0.7 labels/filtered_labels
 // from unknown fields to attributes/filtered_attributes.
 func convertDataPointLabels(m *metricspb.Metric) (*metricspb.Metric, bool, error) {
 	var converted bool

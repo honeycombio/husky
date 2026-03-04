@@ -193,11 +193,12 @@ func intHistogramZeroBucketsRequest() *collectormetrics.ExportMetricsServiceRequ
 	})
 }
 
-// mixedRequest creates a request with both a 0.7 IntGauge and a 1.x-era DoubleGauge.
-// This tests that the converter handles mixed payloads correctly (AC4).
+// mixedRequest creates a request with both a 0.7 IntGauge and a 0.7 DoubleGauge
+// (proto type unchanged in 1.x).
+// Use this for data to test that the converter handles mixed payloads correctly (AC4).
 func mixedRequest() *collectormetrics.ExportMetricsServiceRequest {
 	return wrapMetrics(
-		// 0.7-era metric
+		// 0.7 IntGauge (removed in 1.x)
 		&metricspb.Metric{
 			Name: "cpu.int_gauge",
 			Data: &metricspb.Metric_IntGauge{
@@ -212,7 +213,7 @@ func mixedRequest() *collectormetrics.ExportMetricsServiceRequest {
 				},
 			},
 		},
-		// 1.x-era metric (DoubleGauge existed in both 0.7 and 1.x, field 5)
+		// 0.7 DoubleGauge (proto type unchanged in 1.x, field 5)
 		&metricspb.Metric{
 			Name: "cpu.double_gauge",
 			Data: &metricspb.Metric_DoubleGauge{
@@ -234,7 +235,7 @@ func mixedRequest() *collectormetrics.ExportMetricsServiceRequest {
 // with StringKeyValue labels (field 1) on the data points. When deserialized with
 // stable proto types, the DoubleSum → Sum mapping works (field 7), but the labels
 // go to unknown fields since stable proto removed field 1 from NumberDataPoint.
-// This tests the labels-to-attributes conversion path (AC2) independent of the
+// Use this for data to test the labels-to-attributes conversion path (AC2) independent of the
 // metric type conversion path (AC1).
 func labelsOnlyRequest() *collectormetrics.ExportMetricsServiceRequest {
 	return wrapMetrics(&metricspb.Metric{
@@ -262,7 +263,7 @@ func labelsOnlyRequest() *collectormetrics.ExportMetricsServiceRequest {
 // When deserialized with stable proto types, DoubleHistogram → Histogram (field 9),
 // but the labels go to unknown fields since stable proto removed field 1 from
 // HistogramDataPoint.
-// This tests AC2.2 (labels on HistogramDataPoint) independently.
+// Use this for data to test AC2.2 (labels on HistogramDataPoint) independently.
 func histogramWithLabelsRequest() *collectormetrics.ExportMetricsServiceRequest {
 	return wrapMetrics(&metricspb.Metric{
 		Name: "http.server.duration.double",
@@ -286,11 +287,12 @@ func histogramWithLabelsRequest() *collectormetrics.ExportMetricsServiceRequest 
 	})
 }
 
-// summaryWithLabelsRequest creates a DoubleSummary metric with StringKeyValue labels
-// (field 1) on the DoubleSummaryDataPoint. DoubleSummary existed in both 0.7 and 1.x
-// (field 12 on Metric), so the metric type is recognized, but labels go to
-// unknown fields since v1.9.0 removed field 1 from SummaryDataPoint.
-// This tests AC2.3 (labels on SummaryDataPoint) independently.
+// summaryWithLabelsRequest creates a 0.7 DoubleSummary metric (proto type unchanged
+// in 1.x) with StringKeyValue labels (field 1) on the DoubleSummaryDataPoint.
+// When deserialized with stable proto types, DoubleSummary → Summary (field 12),
+// but the labels go to unknown fields since stable proto removed field 1 from
+// SummaryDataPoint.
+// Use this for data to test AC2.3 (labels on SummaryDataPoint) independently.
 func summaryWithLabelsRequest() *collectormetrics.ExportMetricsServiceRequest {
 	return wrapMetrics(&metricspb.Metric{
 		Name: "http.server.duration.summary",
