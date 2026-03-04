@@ -521,9 +521,11 @@ func unmarshalResourceSpans(
 	l := len(data)
 	iNdEx := 0
 
-	// We need to parse the resource before the spans, but they're not gauranteed
-	// to arrive in this order. So, walk the data twice to get each field.
-loop:
+	// Fields are not guaranteed to arrive in order. We do three passes: first find
+	// resource (field 1) to determine the dataset, then collect schema_url (field 3)
+	// if present so it's available as an attribute on spans, then process spans (field 2).
+	// First pass: find resource only — break early since this is the common hot path.
+resource:
 	for iNdEx < l {
 		preIndex := iNdEx
 		fieldNum, wireType, err := decodeField(data, &iNdEx)
@@ -543,7 +545,7 @@ loop:
 			if err != nil {
 				return err
 			}
-			break loop
+			break resource
 		default:
 			if err := skipField(data, &iNdEx, preIndex, l); err != nil {
 				return err
@@ -565,7 +567,36 @@ loop:
 	})
 	batch := &result.Batches[len(result.Batches)-1]
 
-	// Now parse the spans.
+	// Second pass: scan for schema_url (field 3) before processing scope_spans.
+	// schema_url appears after scope_spans in canonical proto order, so we pre-scan
+	// to ensure it's in resourceAttrs when spans are processed.
+	iNdEx = 0
+schemaURL:
+	for iNdEx < l {
+		preIndex := iNdEx
+		fieldNum, wireType, err := decodeField(data, &iNdEx)
+		if err != nil {
+			return err
+		}
+
+		switch fieldNum {
+		case 3: // schema_url
+			slice, err := decodeWireType2(data, &iNdEx, l, wireType)
+			if err != nil {
+				return err
+			}
+			if len(slice) > 0 {
+				resourceAttrs.addString([]byte(attrResourceSchemaURL), slice)
+			}
+			break schemaURL
+		default:
+			if err := skipField(data, &iNdEx, preIndex, l); err != nil {
+				return err
+			}
+		}
+	}
+
+	// Third pass: process scope_spans with fully-populated resourceAttrs.
 	iNdEx = 0
 	for iNdEx < l {
 		preIndex := iNdEx
@@ -589,7 +620,6 @@ loop:
 			}
 
 		default:
-			// Note field 3 is schema_url, but we don't use it.
 			if err := skipField(data, &iNdEx, preIndex, l); err != nil {
 				return err
 			}
@@ -1047,7 +1077,8 @@ func unmarshalScopeSpans(
 
 	l := len(data)
 	iNdEx := 0
-loop:
+	// First pass: find scope (field 1) only — break early since this is the common hot path.
+scope:
 	for iNdEx < l {
 		preIndex := iNdEx
 		fieldNum, wireType, err := decodeField(data, &iNdEx)
@@ -1067,7 +1098,8 @@ loop:
 			if err != nil {
 				return err
 			}
-			break loop
+			break scope
+
 		default:
 			if err := skipField(data, &iNdEx, preIndex, l); err != nil {
 				return err
@@ -1075,6 +1107,36 @@ loop:
 		}
 	}
 
+	// Second pass: scan for schema_url (field 3) before processing spans.
+	// schema_url appears after spans in canonical proto order, so we pre-scan
+	// to ensure it's in scopeAttrs when spans are processed.
+	iNdEx = 0
+schemaURL:
+	for iNdEx < l {
+		preIndex := iNdEx
+		fieldNum, wireType, err := decodeField(data, &iNdEx)
+		if err != nil {
+			return err
+		}
+
+		switch fieldNum {
+		case 3: // schema_url
+			slice, err := decodeWireType2(data, &iNdEx, l, wireType)
+			if err != nil {
+				return err
+			}
+			if len(slice) > 0 {
+				scopeAttrs.addString([]byte(attrScopeSchemaURL), slice)
+			}
+			break schemaURL
+		default:
+			if err := skipField(data, &iNdEx, preIndex, l); err != nil {
+				return err
+			}
+		}
+	}
+
+	// Third pass: process spans with fully-populated scopeAttrs.
 	iNdEx = 0
 	for iNdEx < l {
 		preIndex := iNdEx

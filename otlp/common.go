@@ -45,6 +45,9 @@ const (
 
 	defaultSampleRate = int32(1)
 
+	attrResourceSchemaURL = "resource.schema_url"
+	attrScopeSchemaURL    = "scope.schema_url"
+
 	// maxDepth is the maximum depth of a nested kvlist attribute that will be flattened.
 	// If the depth is exceeded, the attribute should be added as a JSON string instead.
 	maxDepth = 5
