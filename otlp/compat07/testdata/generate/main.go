@@ -230,10 +230,10 @@ func mixedRequest() *collectormetrics.ExportMetricsServiceRequest {
 	)
 }
 
-// labelsOnlyRequest creates a 1.x-type DoubleSum metric but with StringKeyValue
-// labels (field 1) on the data points. When deserialized with upstream 1.x types,
-// the DoubleSum → Sum mapping works (field 7), but the labels go to unknown fields
-// since the upstream removed field 1 from NumberDataPoint.
+// labelsOnlyRequest creates a 0.7 DoubleSum metric (proto type unchanged in 1.x)
+// with StringKeyValue labels (field 1) on the data points. When deserialized with
+// stable proto types, the DoubleSum → Sum mapping works (field 7), but the labels
+// go to unknown fields since stable proto removed field 1 from NumberDataPoint.
 // This tests the labels-to-attributes conversion path (AC2) independent of the
 // metric type conversion path (AC1).
 func labelsOnlyRequest() *collectormetrics.ExportMetricsServiceRequest {
@@ -257,10 +257,11 @@ func labelsOnlyRequest() *collectormetrics.ExportMetricsServiceRequest {
 	})
 }
 
-// histogramWithLabelsRequest creates a 1.x-type DoubleHistogram metric but with
-// StringKeyValue labels (field 1) on the data points. When deserialized with
-// upstream 1.x types, DoubleHistogram → Histogram (field 9), but the labels go
-// to unknown fields since v1.9.0 removed field 1 from HistogramDataPoint.
+// histogramWithLabelsRequest creates a 0.7 DoubleHistogram metric (proto type
+// unchanged in 1.x) with StringKeyValue labels (field 1) on the data points.
+// When deserialized with stable proto types, DoubleHistogram → Histogram (field 9),
+// but the labels go to unknown fields since stable proto removed field 1 from
+// HistogramDataPoint.
 // This tests AC2.2 (labels on HistogramDataPoint) independently.
 func histogramWithLabelsRequest() *collectormetrics.ExportMetricsServiceRequest {
 	return wrapMetrics(&metricspb.Metric{
