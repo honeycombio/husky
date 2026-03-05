@@ -166,6 +166,9 @@ func convertUnknownMetricData(m *metricspb.Metric, unknownBytes []byte) (*metric
 		return result
 	}
 
+	// extractField returns all occurrences, but these are oneof fields in the
+	// Metric proto — a real 0.7 SDK will only produce one. Using values[0] ought to be OK.
+
 	// Try IntGauge (field 4)
 	if values, remaining, err := extractField(unknownBytes, 4); err != nil {
 		return nil, fmt.Errorf("extract IntGauge: %w", err)
