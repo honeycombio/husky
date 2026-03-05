@@ -41,16 +41,55 @@ func DetectAndConvertMetrics(metrics []*metricspb.Metric) ([]*metricspb.Metric, 
 // logging/counting 0.7 traffic.
 func Has07Data(metrics []*metricspb.Metric) bool {
 	for _, m := range metrics {
-		// Check for 0.7 metric types (IntGauge=4, IntSum=6, IntHistogram=8)
+		// No recognized 1.x data variant — check for 0.7 metric types
+		// (IntGauge=4, IntSum=6, IntHistogram=8) in unknown fields.
 		if m.GetData() == nil {
 			unknown := m.ProtoReflect().GetUnknown()
 			if hasField(unknown, 4) || hasField(unknown, 6) || hasField(unknown, 8) {
 				return true
 			}
+			continue
 		}
-		// Check for 0.7 labels on data points (field 1 in unknown fields)
-		if hasLabelsInDataPoints(m) {
-			return true
+		// Recognized 1.x type — check data points for 0.7 labels.
+		// A batch will not mix attributes and labels, so finding 1.x
+		// attributes on any data point means the entire batch is 1.x.
+		switch d := m.GetData().(type) {
+		case *metricspb.Metric_Gauge:
+			for _, dp := range d.Gauge.GetDataPoints() {
+				if len(dp.GetAttributes()) > 0 {
+					return false
+				}
+				if hasField(dp.ProtoReflect().GetUnknown(), 1) {
+					return true
+				}
+			}
+		case *metricspb.Metric_Sum:
+			for _, dp := range d.Sum.GetDataPoints() {
+				if len(dp.GetAttributes()) > 0 {
+					return false
+				}
+				if hasField(dp.ProtoReflect().GetUnknown(), 1) {
+					return true
+				}
+			}
+		case *metricspb.Metric_Histogram:
+			for _, dp := range d.Histogram.GetDataPoints() {
+				if len(dp.GetAttributes()) > 0 {
+					return false
+				}
+				if hasField(dp.ProtoReflect().GetUnknown(), 1) {
+					return true
+				}
+			}
+		case *metricspb.Metric_Summary:
+			for _, dp := range d.Summary.GetDataPoints() {
+				if len(dp.GetAttributes()) > 0 {
+					return false
+				}
+				if hasField(dp.ProtoReflect().GetUnknown(), 1) {
+					return true
+				}
+			}
 		}
 	}
 	return false
@@ -258,49 +297,3 @@ func convertExemplarFilteredLabels(ex *metricspb.Exemplar) error {
 	return nil
 }
 
-// hasLabelsInDataPoints checks if any data point or exemplar in the metric has
-// labels/filtered_labels (field 1) in its unknown fields.
-func hasLabelsInDataPoints(m *metricspb.Metric) bool {
-	switch d := m.GetData().(type) {
-	case *metricspb.Metric_Gauge:
-		for _, dp := range d.Gauge.GetDataPoints() {
-			if hasField(dp.ProtoReflect().GetUnknown(), 1) {
-				return true
-			}
-			for _, ex := range dp.GetExemplars() {
-				if hasField(ex.ProtoReflect().GetUnknown(), 1) {
-					return true
-				}
-			}
-		}
-	case *metricspb.Metric_Sum:
-		for _, dp := range d.Sum.GetDataPoints() {
-			if hasField(dp.ProtoReflect().GetUnknown(), 1) {
-				return true
-			}
-			for _, ex := range dp.GetExemplars() {
-				if hasField(ex.ProtoReflect().GetUnknown(), 1) {
-					return true
-				}
-			}
-		}
-	case *metricspb.Metric_Histogram:
-		for _, dp := range d.Histogram.GetDataPoints() {
-			if hasField(dp.ProtoReflect().GetUnknown(), 1) {
-				return true
-			}
-			for _, ex := range dp.GetExemplars() {
-				if hasField(ex.ProtoReflect().GetUnknown(), 1) {
-					return true
-				}
-			}
-		}
-	case *metricspb.Metric_Summary:
-		for _, dp := range d.Summary.GetDataPoints() {
-			if hasField(dp.ProtoReflect().GetUnknown(), 1) {
-				return true
-			}
-		}
-	}
-	return false
-}
