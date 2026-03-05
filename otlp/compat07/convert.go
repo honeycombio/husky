@@ -116,7 +116,7 @@ func convertLabelsToAttributes(unknownBytes []byte) ([]*commonpb.KeyValue, []byt
 	for _, lb := range labelBytes {
 		var skv shadowcommonpb.StringKeyValue
 		if err := proto.Unmarshal(lb, &skv); err != nil {
-			return nil, nil, fmt.Errorf("compat07: unmarshal label: %w", err)
+			return nil, nil, fmt.Errorf("unmarshal label: %w", err)
 		}
 		attrs = append(attrs, convertStringKeyValue(&skv))
 	}

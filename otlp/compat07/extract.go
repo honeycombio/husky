@@ -19,19 +19,19 @@ func extractField(raw []byte, fieldNum protowire.Number) (values [][]byte, remai
 	for len(b) > 0 {
 		num, typ, tagLen := protowire.ConsumeTag(b)
 		if tagLen < 0 {
-			return nil, nil, fmt.Errorf("compat07: invalid tag in unknown fields: %w", protowire.ParseError(tagLen))
+			return nil, nil, fmt.Errorf("invalid tag in unknown fields: %w", protowire.ParseError(tagLen))
 		}
 
 		valLen := protowire.ConsumeFieldValue(num, typ, b[tagLen:])
 		if valLen < 0 {
-			return nil, nil, fmt.Errorf("compat07: invalid field value for field %d: %w", num, protowire.ParseError(valLen))
+			return nil, nil, fmt.Errorf("invalid field value for field %d: %w", num, protowire.ParseError(valLen))
 		}
 
 		totalLen := tagLen + valLen
 
 		if num == fieldNum {
 			if typ != protowire.BytesType {
-				return nil, nil, fmt.Errorf("compat07: expected length-delimited (wire type 2) for field %d, got wire type %d", fieldNum, typ)
+				return nil, nil, fmt.Errorf("expected length-delimited (wire type 2) for field %d, got wire type %d", fieldNum, typ)
 			}
 			// ConsumeBytes parses the varint length prefix and returns the inner bytes.
 			innerBytes, _ := protowire.ConsumeBytes(b[tagLen:])
