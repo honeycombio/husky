@@ -10,6 +10,15 @@ import (
 	shadowmetricspb "github.com/honeycombio/husky/otlp/compat07/internal/shadowpb/metricspb"
 )
 
+// metricVersion is the result of checking a single metric for 0.7 vs 1.x signals.
+type metricVersion int
+
+const (
+	inconclusive metricVersion = iota // no definitive signal: dimensionless data points, empty metric, or unrecognized unknown fields
+	detected07                        // 0.7 metric type or labels found
+	detected1x                        // 1.x attributes found
+)
+
 // ResourceMetricsHas07Data checks whether a ResourceMetrics slice contains any
 // 0.7-shaped metric data. A single ExportMetricsServiceRequest is serialized by
 // one SDK version, so the entire request is uniformly 0.7 or 1.x. This function
@@ -31,38 +40,6 @@ func ResourceMetricsHas07Data(resourceMetrics []*metricspb.ResourceMetrics) bool
 	}
 	return false
 }
-
-// ConvertMetrics converts a slice of Metrics from 0.7 to 1.x shape.
-// For each metric:
-//   - If it's already fully 1.x, returns it unchanged.
-//   - If it contains 0.7 metric types (int_gauge/int_sum/int_histogram in unknown fields),
-//     converts to the 1.x equivalent and returns it.
-//   - If it contains 0.7 labels on any metric data points, converts those to attributes.
-//
-// Returns an error only if 0.7 data is present but malformed/unparseable.
-// The returned slice is always new, but metrics with recognized 1.x types are
-// mutated in place: 0.7 labels are converted to attributes and the corresponding
-// unknown field bytes are removed from their data points and exemplars.
-func ConvertMetrics(metrics []*metricspb.Metric) ([]*metricspb.Metric, error) {
-	result := make([]*metricspb.Metric, len(metrics))
-	for i, m := range metrics {
-		converted, err := convertMetric(m)
-		if err != nil {
-			return nil, fmt.Errorf("compat07: metric %q (index %d): %w", m.GetName(), i, err)
-		}
-		result[i] = converted
-	}
-	return result, nil
-}
-
-// metricVersion is the result of checking a single metric for 0.7 vs 1.x signals.
-type metricVersion int
-
-const (
-	inconclusive metricVersion = iota // no definitive signal: dimensionless data points, empty metric, or unrecognized unknown fields
-	detected07                        // 0.7 metric type or labels found
-	detected1x                        // 1.x attributes found
-)
 
 // Has07Data is a cheaper check that returns true if any metric in the slice
 // contains 0.7 unknown fields, without converting. Useful for
@@ -132,6 +109,29 @@ func check07Metric(m *metricspb.Metric) metricVersion {
 		}
 	}
 	return inconclusive
+}
+
+// ConvertMetrics converts a slice of Metrics from 0.7 to 1.x shape.
+// For each metric:
+//   - If it's already fully 1.x, returns it unchanged.
+//   - If it contains 0.7 metric types (int_gauge/int_sum/int_histogram in unknown fields),
+//     converts to the 1.x equivalent and returns it.
+//   - If it contains 0.7 labels on any metric data points, converts those to attributes.
+//
+// Returns an error only if 0.7 data is present but malformed/unparseable.
+// The returned slice is always new, but metrics with recognized 1.x types are
+// mutated in place: 0.7 labels are converted to attributes and the corresponding
+// unknown field bytes are removed from their data points and exemplars.
+func ConvertMetrics(metrics []*metricspb.Metric) ([]*metricspb.Metric, error) {
+	result := make([]*metricspb.Metric, len(metrics))
+	for i, m := range metrics {
+		converted, err := convertMetric(m)
+		if err != nil {
+			return nil, fmt.Errorf("compat07: metric %q (index %d): %w", m.GetName(), i, err)
+		}
+		result[i] = converted
+	}
+	return result, nil
 }
 
 // convertMetric handles a single metric, detecting and converting 0.7 data.
