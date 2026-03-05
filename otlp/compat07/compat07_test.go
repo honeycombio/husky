@@ -400,6 +400,51 @@ func TestAC4_1_MixedPayloads(t *testing.T) {
 	assert.Equal(t, "us-east-1", dp1.GetAttributes()[1].GetValue().GetStringValue())
 }
 
+// TestResourceMetricsHas07Data verifies detection at the ResourceMetrics level.
+func TestResourceMetricsHas07Data(t *testing.T) {
+	t.Run("0.7 fixture", func(t *testing.T) {
+		data, err := os.ReadFile(filepath.Join("testdata", "int_gauge.binpb"))
+		require.NoError(t, err)
+		var req collectormetricspb.ExportMetricsServiceRequest
+		require.NoError(t, proto.Unmarshal(data, &req))
+
+		assert.True(t, ResourceMetricsHas07Data(req.GetResourceMetrics()))
+	})
+
+	t.Run("pure 1.x", func(t *testing.T) {
+		rm := []*metricspb.ResourceMetrics{
+			{
+				ScopeMetrics: []*metricspb.ScopeMetrics{
+					{
+						Metrics: []*metricspb.Metric{
+							{
+								Name: "test_gauge",
+								Data: &metricspb.Metric_Gauge{
+									Gauge: &metricspb.Gauge{
+										DataPoints: []*metricspb.NumberDataPoint{
+											{
+												Value:      &metricspb.NumberDataPoint_AsDouble{AsDouble: 42.5},
+												Attributes: []*commonpb.KeyValue{{Key: "env", Value: &commonpb.AnyValue{Value: &commonpb.AnyValue_StringValue{StringValue: "prod"}}}},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+		assert.False(t, ResourceMetricsHas07Data(rm))
+	})
+
+	t.Run("empty", func(t *testing.T) {
+		assert.False(t, ResourceMetricsHas07Data(nil))
+		assert.False(t, ResourceMetricsHas07Data([]*metricspb.ResourceMetrics{}))
+		assert.False(t, ResourceMetricsHas07Data([]*metricspb.ResourceMetrics{{}}))
+	})
+}
+
 // TestAC4_2_Has07Data verifies Has07Data detection.
 func TestAC4_2_Has07Data(t *testing.T) {
 	// Test mixed payload returns true

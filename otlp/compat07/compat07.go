@@ -10,6 +10,28 @@ import (
 	shadowmetricspb "github.com/honeycombio/husky/otlp/compat07/internal/shadowpb/metricspb"
 )
 
+// ResourceMetricsHas07Data checks whether a ResourceMetrics slice contains any
+// 0.7-shaped metric data. A single ExportMetricsServiceRequest is serialized by
+// one SDK version, so the entire request is uniformly 0.7 or 1.x. This function
+// scans metrics until it finds a definitive signal (0.7 labels/types or 1.x
+// attributes) and returns early. Metrics with no dimensions are inconclusive
+// and are skipped.
+func ResourceMetricsHas07Data(resourceMetrics []*metricspb.ResourceMetrics) bool {
+	for _, rm := range resourceMetrics {
+		for _, sm := range rm.GetScopeMetrics() {
+			for _, m := range sm.GetMetrics() {
+				switch check07Metric(m) {
+				case detected07:
+					return true
+				case detected1x:
+					return false
+				}
+			}
+		}
+	}
+	return false
+}
+
 // ConvertMetrics converts a slice of Metrics from 0.7 to 1.x shape.
 // For each metric:
 //   - If it's already fully 1.x, returns it unchanged.
@@ -32,63 +54,83 @@ func ConvertMetrics(metrics []*metricspb.Metric) ([]*metricspb.Metric, error) {
 	return result, nil
 }
 
+// metricVersion is the result of checking a single metric for 0.7 vs 1.x signals.
+type metricVersion int
+
+const (
+	inconclusive metricVersion = iota // no definitive signal: dimensionless data points, empty metric, or unrecognized unknown fields
+	detected07                        // 0.7 metric type or labels found
+	detected1x                        // 1.x attributes found
+)
+
 // Has07Data is a cheaper check that returns true if any metric in the slice
 // contains 0.7 unknown fields, without converting. Useful for
 // logging/counting 0.7 traffic.
 func Has07Data(metrics []*metricspb.Metric) bool {
 	for _, m := range metrics {
-		// No recognized 1.x data variant — check for 0.7 metric types
-		// (IntGauge=4, IntSum=6, IntHistogram=8) in unknown fields.
-		if m.GetData() == nil {
-			unknown := m.ProtoReflect().GetUnknown()
-			if hasField(unknown, 4) || hasField(unknown, 6) || hasField(unknown, 8) {
-				return true
-			}
-			continue
-		}
-		// Recognized 1.x type — check data points for 0.7 labels.
-		// A batch will not mix attributes and labels, so finding 1.x
-		// attributes on any data point means the entire batch is 1.x.
-		switch d := m.GetData().(type) {
-		case *metricspb.Metric_Gauge:
-			for _, dp := range d.Gauge.GetDataPoints() {
-				if len(dp.GetAttributes()) > 0 {
-					return false
-				}
-				if hasField(dp.ProtoReflect().GetUnknown(), 1) {
-					return true
-				}
-			}
-		case *metricspb.Metric_Sum:
-			for _, dp := range d.Sum.GetDataPoints() {
-				if len(dp.GetAttributes()) > 0 {
-					return false
-				}
-				if hasField(dp.ProtoReflect().GetUnknown(), 1) {
-					return true
-				}
-			}
-		case *metricspb.Metric_Histogram:
-			for _, dp := range d.Histogram.GetDataPoints() {
-				if len(dp.GetAttributes()) > 0 {
-					return false
-				}
-				if hasField(dp.ProtoReflect().GetUnknown(), 1) {
-					return true
-				}
-			}
-		case *metricspb.Metric_Summary:
-			for _, dp := range d.Summary.GetDataPoints() {
-				if len(dp.GetAttributes()) > 0 {
-					return false
-				}
-				if hasField(dp.ProtoReflect().GetUnknown(), 1) {
-					return true
-				}
-			}
+		switch check07Metric(m) {
+		case detected07:
+			return true
+		case detected1x:
+			return false
 		}
 	}
 	return false
+}
+
+// check07Metric inspects a single metric for 0.7 vs 1.x signals.
+func check07Metric(m *metricspb.Metric) metricVersion {
+	// No recognized 1.x data variant — check for 0.7 metric types
+	// (IntGauge=4, IntSum=6, IntHistogram=8) in unknown fields.
+	if m.GetData() == nil {
+		unknown := m.ProtoReflect().GetUnknown()
+		if hasField(unknown, 4) || hasField(unknown, 6) || hasField(unknown, 8) {
+			return detected07
+		}
+		return inconclusive
+	}
+	// Recognized 1.x type — check data points for 0.7 labels.
+	// A batch will not mix attributes and labels, so finding 1.x
+	// attributes on any data point means the entire batch is 1.x.
+	switch d := m.GetData().(type) {
+	case *metricspb.Metric_Gauge:
+		for _, dp := range d.Gauge.GetDataPoints() {
+			if len(dp.GetAttributes()) > 0 {
+				return detected1x
+			}
+			if hasField(dp.ProtoReflect().GetUnknown(), 1) {
+				return detected07
+			}
+		}
+	case *metricspb.Metric_Sum:
+		for _, dp := range d.Sum.GetDataPoints() {
+			if len(dp.GetAttributes()) > 0 {
+				return detected1x
+			}
+			if hasField(dp.ProtoReflect().GetUnknown(), 1) {
+				return detected07
+			}
+		}
+	case *metricspb.Metric_Histogram:
+		for _, dp := range d.Histogram.GetDataPoints() {
+			if len(dp.GetAttributes()) > 0 {
+				return detected1x
+			}
+			if hasField(dp.ProtoReflect().GetUnknown(), 1) {
+				return detected07
+			}
+		}
+	case *metricspb.Metric_Summary:
+		for _, dp := range d.Summary.GetDataPoints() {
+			if len(dp.GetAttributes()) > 0 {
+				return detected1x
+			}
+			if hasField(dp.ProtoReflect().GetUnknown(), 1) {
+				return detected07
+			}
+		}
+	}
+	return inconclusive
 }
 
 // convertMetric handles a single metric, detecting and converting 0.7 data.

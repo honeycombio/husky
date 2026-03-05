@@ -1,10 +1,14 @@
 package compat07
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
+	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
 
+	collectormetricspb "go.opentelemetry.io/proto/otlp/collector/metrics/v1"
 	commonpb "go.opentelemetry.io/proto/otlp/common/v1"
 	metricspb "go.opentelemetry.io/proto/otlp/metrics/v1"
 )
@@ -38,6 +42,27 @@ func pure1xMetrics() []*metricspb.Metric {
 						},
 					},
 				},
+			},
+		},
+	}
+}
+
+// loadFixtureAsResourceMetrics loads a .binpb fixture and returns the ResourceMetrics slice.
+func loadFixtureAsResourceMetrics(b testing.TB, name string) []*metricspb.ResourceMetrics {
+	b.Helper()
+	data, err := os.ReadFile(filepath.Join("testdata", name))
+	require.NoError(b, err)
+	var req collectormetricspb.ExportMetricsServiceRequest
+	require.NoError(b, proto.Unmarshal(data, &req))
+	return req.GetResourceMetrics()
+}
+
+// wrapAsResourceMetrics wraps a metrics slice in a ResourceMetrics hierarchy.
+func wrapAsResourceMetrics(metrics []*metricspb.Metric) []*metricspb.ResourceMetrics {
+	return []*metricspb.ResourceMetrics{
+		{
+			ScopeMetrics: []*metricspb.ScopeMetrics{
+				{Metrics: metrics},
 			},
 		},
 	}
@@ -156,5 +181,63 @@ func BenchmarkConvertMetrics_Mixed(b *testing.B) {
 		b.StartTimer()
 		result, _ := ConvertMetrics(metrics)
 		benchSink = result
+	}
+}
+
+func BenchmarkResourceMetricsHas07Data_Pure1x(b *testing.B) {
+	rm := wrapAsResourceMetrics(pure1xMetrics())
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		benchSink = ResourceMetricsHas07Data(rm)
+	}
+}
+
+func BenchmarkResourceMetricsHas07Data_IntGauge(b *testing.B) {
+	rm := loadFixtureAsResourceMetrics(b, "int_gauge.binpb")
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		benchSink = ResourceMetricsHas07Data(rm)
+	}
+}
+
+func BenchmarkResourceMetricsHas07Data_LabelsOnly(b *testing.B) {
+	rm := loadFixtureAsResourceMetrics(b, "labels_only.binpb")
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		benchSink = ResourceMetricsHas07Data(rm)
+	}
+}
+
+func BenchmarkResourceMetricsCallerGated_1xPassthrough(b *testing.B) {
+	rm := wrapAsResourceMetrics(pure1xMetrics())
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if ResourceMetricsHas07Data(rm) {
+			for _, r := range rm {
+				for _, sm := range r.GetScopeMetrics() {
+					result, _ := ConvertMetrics(sm.GetMetrics())
+					benchSink = result
+				}
+			}
+		} else {
+			benchSink = rm
+		}
+	}
+}
+
+func BenchmarkResourceMetricsCallerGated_IntGauge(b *testing.B) {
+	rm := loadFixtureAsResourceMetrics(b, "int_gauge.binpb")
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if ResourceMetricsHas07Data(rm) {
+			for _, r := range rm {
+				for _, sm := range r.GetScopeMetrics() {
+					result, _ := ConvertMetrics(sm.GetMetrics())
+					benchSink = result
+				}
+			}
+		} else {
+			benchSink = rm
+		}
 	}
 }
