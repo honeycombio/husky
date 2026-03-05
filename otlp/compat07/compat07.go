@@ -10,30 +10,26 @@ import (
 	shadowmetricspb "github.com/honeycombio/husky/otlp/compat07/internal/shadowpb/metricspb"
 )
 
-// DetectAndConvertMetrics checks a slice of Metrics for 0.7 data.
+// ConvertMetrics converts a slice of Metrics from 0.7 to 1.x shape.
 // For each metric:
-//   - If it contains 0.7 data (int_gauge/int_sum/int_histogram in unknown fields),
-//     converts to the 1.x equivalent and returns it.
-//   - If it contains 0.7 labels on data points, converts those to attributes.
 //   - If it's already fully 1.x, returns it unchanged.
+//   - If it contains 0.7 metric types (int_gauge/int_sum/int_histogram in unknown fields),
+//     converts to the 1.x equivalent and returns it.
+//   - If it contains 0.7 labels on any metric data points, converts those to attributes.
 //
 // Returns an error only if 0.7 data is present but malformed/unparseable.
 // The input slice is not modified; individual data points within recognized
 // metrics with recognized types may be mutated (labels converted to attributes in place).
-func DetectAndConvertMetrics(metrics []*metricspb.Metric) ([]*metricspb.Metric, bool, error) {
+func ConvertMetrics(metrics []*metricspb.Metric) ([]*metricspb.Metric, error) {
 	result := make([]*metricspb.Metric, len(metrics))
-	var any07 bool
 	for i, m := range metrics {
-		converted, was07, err := convertMetric(m)
+		converted, err := convertMetric(m)
 		if err != nil {
-			return nil, false, fmt.Errorf("compat07: metric %q (index %d): %w", m.GetName(), i, err)
+			return nil, fmt.Errorf("compat07: metric %q (index %d): %w", m.GetName(), i, err)
 		}
 		result[i] = converted
-		if was07 {
-			any07 = true
-		}
 	}
-	return result, any07, nil
+	return result, nil
 }
 
 // Has07Data is a cheaper check that returns true if any metric in the slice
@@ -96,13 +92,12 @@ func Has07Data(metrics []*metricspb.Metric) bool {
 }
 
 // convertMetric handles a single metric, detecting and converting 0.7 data.
-// Returns the (possibly converted) metric and whether any 0.7 data was found.
-func convertMetric(m *metricspb.Metric) (*metricspb.Metric, bool, error) {
+func convertMetric(m *metricspb.Metric) (*metricspb.Metric, error) {
 	if m.GetData() == nil {
 		// No recognized data variant from stable proto, check for 0.7 metric types
 		unknownBytes := m.ProtoReflect().GetUnknown()
 		if len(unknownBytes) == 0 {
-			return m, false, nil
+			return m, nil
 		}
 		return convertUnknownMetricData(m, unknownBytes)
 	}
@@ -113,7 +108,7 @@ func convertMetric(m *metricspb.Metric) (*metricspb.Metric, bool, error) {
 
 // convertUnknownMetricData tries to extract IntGauge (field 4), IntSum (field 6),
 // or IntHistogram (field 8) from the metric's unknown fields.
-func convertUnknownMetricData(m *metricspb.Metric, unknownBytes []byte) (*metricspb.Metric, bool, error) {
+func convertUnknownMetricData(m *metricspb.Metric, unknownBytes []byte) (*metricspb.Metric, error) {
 	// Create a new metric preserving the original's metadata.
 	newMetric := func(remaining []byte) *metricspb.Metric {
 		result := &metricspb.Metric{
@@ -130,88 +125,79 @@ func convertUnknownMetricData(m *metricspb.Metric, unknownBytes []byte) (*metric
 
 	// Try IntGauge (field 4)
 	if values, remaining, err := extractField(unknownBytes, 4); err != nil {
-		return nil, false, fmt.Errorf("extract IntGauge: %w", err)
+		return nil, fmt.Errorf("extract IntGauge: %w", err)
 	} else if len(values) > 0 {
 		var ig shadowmetricspb.IntGauge
 		if err := proto.Unmarshal(values[0], &ig); err != nil {
-			return nil, false, fmt.Errorf("unmarshal IntGauge: %w", err)
+			return nil, fmt.Errorf("unmarshal IntGauge: %w", err)
 		}
 		result := newMetric(remaining)
 		result.Data = &metricspb.Metric_Gauge{Gauge: convertIntGauge(&ig)}
-		return result, true, nil
+		return result, nil
 	}
 
 	// Try IntSum (field 6)
 	if values, remaining, err := extractField(unknownBytes, 6); err != nil {
-		return nil, false, fmt.Errorf("extract IntSum: %w", err)
+		return nil, fmt.Errorf("extract IntSum: %w", err)
 	} else if len(values) > 0 {
 		var is shadowmetricspb.IntSum
 		if err := proto.Unmarshal(values[0], &is); err != nil {
-			return nil, false, fmt.Errorf("unmarshal IntSum: %w", err)
+			return nil, fmt.Errorf("unmarshal IntSum: %w", err)
 		}
 		result := newMetric(remaining)
 		result.Data = &metricspb.Metric_Sum{Sum: convertIntSum(&is)}
-		return result, true, nil
+		return result, nil
 	}
 
 	// Try IntHistogram (field 8)
 	if values, remaining, err := extractField(unknownBytes, 8); err != nil {
-		return nil, false, fmt.Errorf("extract IntHistogram: %w", err)
+		return nil, fmt.Errorf("extract IntHistogram: %w", err)
 	} else if len(values) > 0 {
 		var ih shadowmetricspb.IntHistogram
 		if err := proto.Unmarshal(values[0], &ih); err != nil {
-			return nil, false, fmt.Errorf("unmarshal IntHistogram: %w", err)
+			return nil, fmt.Errorf("unmarshal IntHistogram: %w", err)
 		}
 		result := newMetric(remaining)
 		result.Data = &metricspb.Metric_Histogram{Histogram: convertIntHistogram(&ih)}
-		return result, true, nil
+		return result, nil
 	}
 
 	// No recognized 0.7 data; pass through unchanged
-	return m, false, nil
+	return m, nil
 }
 
 // convertDataPointLabels walks data points and exemplars of a metric whose type
 // is recognizable with stable proto, converting any 0.7 labels/filtered_labels
 // from unknown fields to attributes/filtered_attributes.
-func convertDataPointLabels(m *metricspb.Metric) (*metricspb.Metric, bool, error) {
-	var converted bool
+func convertDataPointLabels(m *metricspb.Metric) (*metricspb.Metric, error) {
 	switch d := m.GetData().(type) {
 	case *metricspb.Metric_Gauge:
 		for _, dp := range d.Gauge.GetDataPoints() {
-			if c, err := convertNumberDataPointLabels(dp); err != nil {
-				return nil, false, err
-			} else if c {
-				converted = true
+			if _, err := convertNumberDataPointLabels(dp); err != nil {
+				return nil, err
 			}
 		}
 	case *metricspb.Metric_Sum:
 		for _, dp := range d.Sum.GetDataPoints() {
-			if c, err := convertNumberDataPointLabels(dp); err != nil {
-				return nil, false, err
-			} else if c {
-				converted = true
+			if _, err := convertNumberDataPointLabels(dp); err != nil {
+				return nil, err
 			}
 		}
 	case *metricspb.Metric_Histogram:
 		for _, dp := range d.Histogram.GetDataPoints() {
-			if c, err := convertHistogramDataPointLabels(dp); err != nil {
-				return nil, false, err
-			} else if c {
-				converted = true
+			if _, err := convertHistogramDataPointLabels(dp); err != nil {
+				return nil, err
 			}
 		}
 	case *metricspb.Metric_Summary:
 		for _, dp := range d.Summary.GetDataPoints() {
-			if c, err := convertSummaryDataPointLabels(dp); err != nil {
-				return nil, false, err
-			} else if c {
-				converted = true
+			if _, err := convertSummaryDataPointLabels(dp); err != nil {
+				return nil, err
 			}
 		}
 		// ExponentialHistogram did not exist in 0.7, no label conversion needed
 	}
-	return m, converted, nil
+	return m, nil
 }
 
 // convertNumberDataPointLabels extracts labels (field 1) from a NumberDataPoint's
@@ -296,4 +282,3 @@ func convertExemplarFilteredLabels(ex *metricspb.Exemplar) error {
 	}
 	return nil
 }
-

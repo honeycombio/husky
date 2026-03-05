@@ -37,7 +37,7 @@ func loadFixture(t testing.TB, name string) []*metricspb.Metric {
 // TestAC1_1_IntGaugeConversion verifies IntGauge converts to Gauge with as_int value.
 func TestAC1_1_IntGaugeConversion(t *testing.T) {
 	metrics := loadFixture(t, "int_gauge.binpb")
-	converted, _, err := DetectAndConvertMetrics(metrics)
+	converted, err := ConvertMetrics(metrics)
 	require.NoError(t, err)
 	require.Len(t, converted, 1)
 
@@ -66,7 +66,7 @@ func TestAC1_1_IntGaugeConversion(t *testing.T) {
 // TestAC1_2_IntSumDeltaMonotonic verifies IntSum with delta and monotonic flags.
 func TestAC1_2_IntSumDeltaMonotonic(t *testing.T) {
 	metrics := loadFixture(t, "int_sum_delta_monotonic.binpb")
-	converted, _, err := DetectAndConvertMetrics(metrics)
+	converted, err := ConvertMetrics(metrics)
 	require.NoError(t, err)
 	require.Len(t, converted, 1)
 
@@ -86,7 +86,7 @@ func TestAC1_2_IntSumDeltaMonotonic(t *testing.T) {
 // TestAC1_2_IntSumCumulativeNonmonotonic verifies IntSum with cumulative and non-monotonic flags.
 func TestAC1_2_IntSumCumulativeNonmonotonic(t *testing.T) {
 	metrics := loadFixture(t, "int_sum_cumulative_nonmonotonic.binpb")
-	converted, _, err := DetectAndConvertMetrics(metrics)
+	converted, err := ConvertMetrics(metrics)
 	require.NoError(t, err)
 	require.Len(t, converted, 1)
 
@@ -100,7 +100,7 @@ func TestAC1_2_IntSumCumulativeNonmonotonic(t *testing.T) {
 // TestAC1_3_IntHistogramConversion verifies IntHistogram converts with bucket counts and bounds.
 func TestAC1_3_IntHistogramConversion(t *testing.T) {
 	metrics := loadFixture(t, "int_histogram.binpb")
-	converted, _, err := DetectAndConvertMetrics(metrics)
+	converted, err := ConvertMetrics(metrics)
 	require.NoError(t, err)
 	require.Len(t, converted, 1)
 
@@ -120,7 +120,7 @@ func TestAC1_3_IntHistogramConversion(t *testing.T) {
 // TestAC1_4_IntExemplarConversion verifies IntExemplar on NumberDataPoint converts to as_int.
 func TestAC1_4_IntExemplarConversion(t *testing.T) {
 	metrics := loadFixture(t, "int_gauge.binpb")
-	converted, _, err := DetectAndConvertMetrics(metrics)
+	converted, err := ConvertMetrics(metrics)
 	require.NoError(t, err)
 
 	gauge := converted[0].GetGauge()
@@ -153,7 +153,7 @@ func TestAC1_5_MalformedBytesError(t *testing.T) {
 	malformed := []byte{0x22, 0xFF, 0xFF, 0xFF, 0xFF}
 	m.ProtoReflect().SetUnknown(malformed)
 
-	converted, _, err := DetectAndConvertMetrics([]*metricspb.Metric{m})
+	converted, err := ConvertMetrics([]*metricspb.Metric{m})
 	assert.Error(t, err)
 	assert.Nil(t, converted)
 }
@@ -161,7 +161,7 @@ func TestAC1_5_MalformedBytesError(t *testing.T) {
 // TestAC1_6_IntHistogramZeroBuckets verifies IntHistogram with zero buckets converts.
 func TestAC1_6_IntHistogramZeroBuckets(t *testing.T) {
 	metrics := loadFixture(t, "int_histogram_zero_buckets.binpb")
-	converted, _, err := DetectAndConvertMetrics(metrics)
+	converted, err := ConvertMetrics(metrics)
 	require.NoError(t, err)
 	require.Len(t, converted, 1)
 
@@ -180,7 +180,7 @@ func TestAC1_6_IntHistogramZeroBuckets(t *testing.T) {
 // TestAC2_1_LabelsOnNumberDataPoint verifies labels convert to attributes.
 func TestAC2_1_LabelsOnNumberDataPoint(t *testing.T) {
 	metrics := loadFixture(t, "labels_only.binpb")
-	converted, _, err := DetectAndConvertMetrics(metrics)
+	converted, err := ConvertMetrics(metrics)
 	require.NoError(t, err)
 	require.Len(t, converted, 1)
 
@@ -200,7 +200,7 @@ func TestAC2_1_LabelsOnNumberDataPoint(t *testing.T) {
 // TestAC2_2_LabelsOnHistogramDataPoint verifies labels convert on HistogramDataPoint.
 func TestAC2_2_LabelsOnHistogramDataPoint(t *testing.T) {
 	metrics := loadFixture(t, "histogram_with_labels.binpb")
-	converted, _, err := DetectAndConvertMetrics(metrics)
+	converted, err := ConvertMetrics(metrics)
 	require.NoError(t, err)
 	require.Len(t, converted, 1)
 
@@ -227,7 +227,7 @@ func TestAC2_2_LabelsOnHistogramDataPoint(t *testing.T) {
 // TestAC2_3_LabelsOnSummaryDataPoint verifies labels convert on SummaryDataPoint.
 func TestAC2_3_LabelsOnSummaryDataPoint(t *testing.T) {
 	metrics := loadFixture(t, "summary_with_labels.binpb")
-	converted, _, err := DetectAndConvertMetrics(metrics)
+	converted, err := ConvertMetrics(metrics)
 	require.NoError(t, err)
 	require.Len(t, converted, 1)
 
@@ -257,7 +257,7 @@ func TestAC2_3_LabelsOnSummaryDataPoint(t *testing.T) {
 // This test explicitly verifies filtered_labels conversion on exemplars.
 func TestAC2_4_FilteredLabelsOnExemplar(t *testing.T) {
 	metrics := loadFixture(t, "int_gauge.binpb")
-	converted, _, err := DetectAndConvertMetrics(metrics)
+	converted, err := ConvertMetrics(metrics)
 	require.NoError(t, err)
 
 	gauge := converted[0].GetGauge()
@@ -290,7 +290,7 @@ func TestAC2_5_EmptyLabels(t *testing.T) {
 		},
 	}
 
-	converted, _, err := DetectAndConvertMetrics([]*metricspb.Metric{m})
+	converted, err := ConvertMetrics([]*metricspb.Metric{m})
 	require.NoError(t, err)
 	require.Len(t, converted, 1)
 
@@ -325,7 +325,7 @@ func TestAC3_1_1xPassthrough(t *testing.T) {
 		},
 	}
 
-	converted, _, err := DetectAndConvertMetrics([]*metricspb.Metric{m})
+	converted, err := ConvertMetrics([]*metricspb.Metric{m})
 	require.NoError(t, err)
 	require.Len(t, converted, 1)
 
@@ -352,7 +352,7 @@ func TestAC3_2_NonOTLP07UnknownFieldsPreserved(t *testing.T) {
 	unknownBytes := []byte{0xEA, 0x07, 0x06, 'c', 'u', 's', 't', 'o', 'm'}
 	m.ProtoReflect().SetUnknown(unknownBytes)
 
-	converted, _, err := DetectAndConvertMetrics([]*metricspb.Metric{m})
+	converted, err := ConvertMetrics([]*metricspb.Metric{m})
 	require.NoError(t, err)
 
 	// Verify field 99 is still present by checking unknown bytes
@@ -365,7 +365,7 @@ func TestAC4_1_MixedPayloads(t *testing.T) {
 	metrics := loadFixture(t, "mixed_07_1x.binpb")
 	require.Len(t, metrics, 2) // One 0.7 IntGauge and one 0.7 DoubleGauge (proto type unchanged in 1.x)
 
-	converted, _, err := DetectAndConvertMetrics(metrics)
+	converted, err := ConvertMetrics(metrics)
 	require.NoError(t, err)
 	require.Len(t, converted, 2)
 
@@ -424,56 +424,10 @@ func TestAC4_2_Has07Data(t *testing.T) {
 	assert.False(t, Has07Data(pureMetrics))
 }
 
-// TestDetectAndConvertMetrics_ReportsConversion verifies the bool return signals
-// whether any 0.7 data was found and converted.
-func TestDetectAndConvertMetrics_ReportsConversion(t *testing.T) {
-	tests := []struct {
-		name     string
-		metrics  []*metricspb.Metric
-		expected bool
-	}{
-		{
-			name:     "0.7 IntGauge returns true",
-			metrics:  loadFixture(t, "int_gauge.binpb"),
-			expected: true,
-		},
-		{
-			name:     "0.7 Sum (proto type unchanged in 1.x) returns true",
-			metrics:  loadFixture(t, "labels_only.binpb"),
-			expected: true,
-		},
-		{
-			name: "pure 1.x Gauge returns false",
-			metrics: []*metricspb.Metric{
-				{
-					Name: "test_gauge",
-					Data: &metricspb.Metric_Gauge{
-						Gauge: &metricspb.Gauge{
-							DataPoints: []*metricspb.NumberDataPoint{
-								{
-									Value: &metricspb.NumberDataPoint_AsDouble{AsDouble: 42.5},
-								},
-							},
-						},
-					},
-				},
-			},
-			expected: false,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			_, converted, err := DetectAndConvertMetrics(tt.metrics)
-			require.NoError(t, err)
-			assert.Equal(t, tt.expected, converted)
-		})
-	}
-}
-
 // TestAC5_1_IntegerLossless verifies integers survive as as_int (not floats).
 func TestAC5_1_IntegerLossless(t *testing.T) {
 	metrics := loadFixture(t, "int_gauge.binpb")
-	converted, _, err := DetectAndConvertMetrics(metrics)
+	converted, err := ConvertMetrics(metrics)
 	require.NoError(t, err)
 
 	dp := converted[0].GetGauge().GetDataPoints()[0]
@@ -485,7 +439,7 @@ func TestAC5_1_IntegerLossless(t *testing.T) {
 // TestAC5_2_StringLabelsPreserved verifies label key/value strings are exact.
 func TestAC5_2_StringLabelsPreserved(t *testing.T) {
 	metrics := loadFixture(t, "int_gauge.binpb")
-	converted, _, err := DetectAndConvertMetrics(metrics)
+	converted, err := ConvertMetrics(metrics)
 	require.NoError(t, err)
 
 	dp := converted[0].GetGauge().GetDataPoints()[0]
@@ -499,7 +453,7 @@ func TestAC5_2_StringLabelsPreserved(t *testing.T) {
 // TestAC5_3_TimestampsPreserved verifies timestamps are copied as-is.
 func TestAC5_3_TimestampsPreserved(t *testing.T) {
 	metrics := loadFixture(t, "int_gauge.binpb")
-	converted, _, err := DetectAndConvertMetrics(metrics)
+	converted, err := ConvertMetrics(metrics)
 	require.NoError(t, err)
 
 	dp := converted[0].GetGauge().GetDataPoints()[0]
@@ -510,7 +464,7 @@ func TestAC5_3_TimestampsPreserved(t *testing.T) {
 // TestEdgeCase_HistogramWithZeroBucketsPreservesData verifies zero-bucket histogram data.
 func TestEdgeCase_HistogramWithZeroBucketsPreservesData(t *testing.T) {
 	metrics := loadFixture(t, "int_histogram_zero_buckets.binpb")
-	converted, _, err := DetectAndConvertMetrics(metrics)
+	converted, err := ConvertMetrics(metrics)
 	require.NoError(t, err)
 
 	dp := converted[0].GetHistogram().GetDataPoints()[0]
@@ -571,7 +525,7 @@ func TestAllFixturesToNonNilDataTypes(t *testing.T) {
 	for _, fixture := range fixtures {
 		t.Run(fixture, func(t *testing.T) {
 			metrics := loadFixture(t, fixture)
-			converted, _, err := DetectAndConvertMetrics(metrics)
+			converted, err := ConvertMetrics(metrics)
 			require.NoError(t, err, "conversion failed for %s", fixture)
 			require.NotEmpty(t, converted)
 

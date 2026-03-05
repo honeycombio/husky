@@ -71,11 +71,11 @@ func BenchmarkHas07Data_Pure1x(b *testing.B) {
 // benchSink prevents the compiler from optimizing away benchmark calls.
 var benchSink any
 
-func BenchmarkDetectAndConvertMetrics_1xPassthrough(b *testing.B) {
+func BenchmarkConvertMetrics_1xPassthrough(b *testing.B) {
 	metrics := pure1xMetrics()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		result, _, _ := DetectAndConvertMetrics(metrics)
+		result, _ := ConvertMetrics(metrics)
 		benchSink = result
 	}
 }
@@ -85,7 +85,7 @@ func BenchmarkCallerGated_1xPassthrough(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		if Has07Data(metrics) {
-			result, _, _ := DetectAndConvertMetrics(metrics)
+			result, _ := ConvertMetrics(metrics)
 			benchSink = result
 		} else {
 			benchSink = metrics
@@ -98,7 +98,7 @@ func BenchmarkCallerGated_IntGauge(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		if Has07Data(metrics) {
-			result, _, _ := DetectAndConvertMetrics(metrics)
+			result, _ := ConvertMetrics(metrics)
 			benchSink = result
 		} else {
 			benchSink = metrics
@@ -106,34 +106,34 @@ func BenchmarkCallerGated_IntGauge(b *testing.B) {
 	}
 }
 
-func BenchmarkDetectAndConvertMetrics_IntGauge(b *testing.B) {
+func BenchmarkConvertMetrics_IntGauge(b *testing.B) {
 	metrics := loadFixture(b, "int_gauge.binpb")
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		result, _, _ := DetectAndConvertMetrics(metrics)
+		result, _ := ConvertMetrics(metrics)
 		benchSink = result
 	}
 }
 
-func BenchmarkDetectAndConvertMetrics_IntSum(b *testing.B) {
+func BenchmarkConvertMetrics_IntSum(b *testing.B) {
 	metrics := loadFixture(b, "int_sum_delta_monotonic.binpb")
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		result, _, _ := DetectAndConvertMetrics(metrics)
+		result, _ := ConvertMetrics(metrics)
 		benchSink = result
 	}
 }
 
-func BenchmarkDetectAndConvertMetrics_IntHistogram(b *testing.B) {
+func BenchmarkConvertMetrics_IntHistogram(b *testing.B) {
 	metrics := loadFixture(b, "int_histogram.binpb")
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		result, _, _ := DetectAndConvertMetrics(metrics)
+		result, _ := ConvertMetrics(metrics)
 		benchSink = result
 	}
 }
 
-func BenchmarkDetectAndConvertMetrics_LabelsOnly(b *testing.B) {
+func BenchmarkConvertMetrics_LabelsOnly(b *testing.B) {
 	// Labels conversion mutates data points in place, so clone per iteration.
 	original := loadFixture(b, "labels_only.binpb")
 	b.ResetTimer()
@@ -141,12 +141,12 @@ func BenchmarkDetectAndConvertMetrics_LabelsOnly(b *testing.B) {
 		b.StopTimer()
 		metrics := cloneMetrics(original)
 		b.StartTimer()
-		result, _, _ := DetectAndConvertMetrics(metrics)
+		result, _ := ConvertMetrics(metrics)
 		benchSink = result
 	}
 }
 
-func BenchmarkDetectAndConvertMetrics_Mixed(b *testing.B) {
+func BenchmarkConvertMetrics_Mixed(b *testing.B) {
 	// Mixed payload has 0.7 metrics (some with proto types unchanged in 1.x) whose labels get mutated.
 	original := loadFixture(b, "mixed_07_1x.binpb")
 	b.ResetTimer()
@@ -154,7 +154,7 @@ func BenchmarkDetectAndConvertMetrics_Mixed(b *testing.B) {
 		b.StopTimer()
 		metrics := cloneMetrics(original)
 		b.StartTimer()
-		result, _, _ := DetectAndConvertMetrics(metrics)
+		result, _ := ConvertMetrics(metrics)
 		benchSink = result
 	}
 }
