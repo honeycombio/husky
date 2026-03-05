@@ -219,25 +219,25 @@ func convertDataPointLabels(m *metricspb.Metric) (*metricspb.Metric, error) {
 	switch d := m.GetData().(type) {
 	case *metricspb.Metric_Gauge:
 		for _, dp := range d.Gauge.GetDataPoints() {
-			if _, err := convertNumberDataPointLabels(dp); err != nil {
+			if err := convertNumberDataPointLabels(dp); err != nil {
 				return nil, err
 			}
 		}
 	case *metricspb.Metric_Sum:
 		for _, dp := range d.Sum.GetDataPoints() {
-			if _, err := convertNumberDataPointLabels(dp); err != nil {
+			if err := convertNumberDataPointLabels(dp); err != nil {
 				return nil, err
 			}
 		}
 	case *metricspb.Metric_Histogram:
 		for _, dp := range d.Histogram.GetDataPoints() {
-			if _, err := convertHistogramDataPointLabels(dp); err != nil {
+			if err := convertHistogramDataPointLabels(dp); err != nil {
 				return nil, err
 			}
 		}
 	case *metricspb.Metric_Summary:
 		for _, dp := range d.Summary.GetDataPoints() {
-			if _, err := convertSummaryDataPointLabels(dp); err != nil {
+			if err := convertSummaryDataPointLabels(dp); err != nil {
 				return nil, err
 			}
 		}
@@ -248,67 +248,64 @@ func convertDataPointLabels(m *metricspb.Metric) (*metricspb.Metric, error) {
 
 // convertNumberDataPointLabels extracts labels (field 1) from a NumberDataPoint's
 // unknown fields and appends them as attributes.
-func convertNumberDataPointLabels(dp *metricspb.NumberDataPoint) (bool, error) {
+func convertNumberDataPointLabels(dp *metricspb.NumberDataPoint) error {
 	unknownBytes := dp.ProtoReflect().GetUnknown()
 	if len(unknownBytes) == 0 {
-		return false, nil
+		return nil
 	}
 	attrs, remaining, err := convertLabelsToAttributes(unknownBytes)
 	if err != nil {
-		return false, err
+		return err
 	}
-	converted := len(attrs) > 0
-	if converted {
+	if len(attrs) > 0 {
 		dp.Attributes = append(dp.Attributes, attrs...)
 		dp.ProtoReflect().SetUnknown(remaining)
 	}
 	for _, ex := range dp.GetExemplars() {
 		if err := convertExemplarFilteredLabels(ex); err != nil {
-			return false, err
+			return err
 		}
 	}
-	return converted, nil
+	return nil
 }
 
 // convertHistogramDataPointLabels is like convertNumberDataPointLabels but for HistogramDataPoint.
-func convertHistogramDataPointLabels(dp *metricspb.HistogramDataPoint) (bool, error) {
+func convertHistogramDataPointLabels(dp *metricspb.HistogramDataPoint) error {
 	unknownBytes := dp.ProtoReflect().GetUnknown()
 	if len(unknownBytes) == 0 {
-		return false, nil
+		return nil
 	}
 	attrs, remaining, err := convertLabelsToAttributes(unknownBytes)
 	if err != nil {
-		return false, err
+		return err
 	}
-	converted := len(attrs) > 0
-	if converted {
+	if len(attrs) > 0 {
 		dp.Attributes = append(dp.Attributes, attrs...)
 		dp.ProtoReflect().SetUnknown(remaining)
 	}
 	for _, ex := range dp.GetExemplars() {
 		if err := convertExemplarFilteredLabels(ex); err != nil {
-			return false, err
+			return err
 		}
 	}
-	return converted, nil
+	return nil
 }
 
 // convertSummaryDataPointLabels is like convertNumberDataPointLabels but for SummaryDataPoint.
-func convertSummaryDataPointLabels(dp *metricspb.SummaryDataPoint) (bool, error) {
+func convertSummaryDataPointLabels(dp *metricspb.SummaryDataPoint) error {
 	unknownBytes := dp.ProtoReflect().GetUnknown()
 	if len(unknownBytes) == 0 {
-		return false, nil
+		return nil
 	}
 	attrs, remaining, err := convertLabelsToAttributes(unknownBytes)
 	if err != nil {
-		return false, err
+		return err
 	}
-	converted := len(attrs) > 0
-	if converted {
+	if len(attrs) > 0 {
 		dp.Attributes = append(dp.Attributes, attrs...)
 		dp.ProtoReflect().SetUnknown(remaining)
 	}
-	return converted, nil
+	return nil
 }
 
 // convertExemplarFilteredLabels extracts filtered_labels (field 1) from an
