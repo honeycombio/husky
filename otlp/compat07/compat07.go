@@ -40,8 +40,9 @@ func ResourceMetricsHas07Data(resourceMetrics []*metricspb.ResourceMetrics) bool
 //   - If it contains 0.7 labels on any metric data points, converts those to attributes.
 //
 // Returns an error only if 0.7 data is present but malformed/unparseable.
-// The input slice is not modified; individual data points within recognized
-// metrics with recognized types may be mutated (labels converted to attributes in place).
+// The returned slice is always new, but metrics with recognized 1.x types are
+// mutated in place: 0.7 labels are converted to attributes and the corresponding
+// unknown field bytes are removed from their data points and exemplars.
 func ConvertMetrics(metrics []*metricspb.Metric) ([]*metricspb.Metric, error) {
 	result := make([]*metricspb.Metric, len(metrics))
 	for i, m := range metrics {
