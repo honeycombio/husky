@@ -1,0 +1,69 @@
+syntax = "proto3";
+
+package honeycomb.compat.otlp07.metrics;
+
+import "common.proto";
+
+option go_package = "github.com/honeycombio/husky/otlp/compat07/internal/shadowpb/metricspb;metricspb";
+
+// AggregationTemporality mirrors the upstream enum with identical int values.
+// Defined here to avoid a cross-package proto dependency on upstream metrics.proto.
+enum AggregationTemporality {
+  AGGREGATION_TEMPORALITY_UNSPECIFIED = 0;
+  AGGREGATION_TEMPORALITY_DELTA = 1;
+  AGGREGATION_TEMPORALITY_CUMULATIVE = 2;
+}
+
+// IntExemplar is the OTLP 0.7 integer exemplar type.
+// Upstream field: IntExemplar in opentelemetry.proto.metrics.v1 (lines 913-939).
+message IntExemplar {
+  repeated honeycomb.compat.otlp07.common.StringKeyValue filtered_labels = 1;
+  fixed64 time_unix_nano = 2;
+  sfixed64 value = 3;
+  bytes span_id = 4;
+  bytes trace_id = 5;
+}
+
+// IntDataPoint is the OTLP 0.7 integer data point used by IntGauge and IntSum.
+// Upstream field: IntDataPoint in opentelemetry.proto.metrics.v1 (lines 793-818).
+message IntDataPoint {
+  repeated honeycomb.compat.otlp07.common.StringKeyValue labels = 1;
+  fixed64 start_time_unix_nano = 2;
+  fixed64 time_unix_nano = 3;
+  sfixed64 value = 4;
+  repeated IntExemplar exemplars = 5;
+}
+
+// IntGauge is the OTLP 0.7 integer gauge.
+// Appears as Metric.data oneof field 4 (int_gauge) in the upstream Metric message.
+message IntGauge {
+  repeated IntDataPoint data_points = 1;
+}
+
+// IntSum is the OTLP 0.7 integer sum.
+// Appears as Metric.data oneof field 6 (int_sum) in the upstream Metric message.
+message IntSum {
+  repeated IntDataPoint data_points = 1;
+  AggregationTemporality aggregation_temporality = 2;
+  bool is_monotonic = 3;
+}
+
+// IntHistogramDataPoint is the OTLP 0.7 integer histogram data point.
+// Upstream field: IntHistogramDataPoint in opentelemetry.proto.metrics.v1 (lines 842-898).
+message IntHistogramDataPoint {
+  repeated honeycomb.compat.otlp07.common.StringKeyValue labels = 1;
+  fixed64 start_time_unix_nano = 2;
+  fixed64 time_unix_nano = 3;
+  fixed64 count = 4;
+  sfixed64 sum = 5;
+  repeated fixed64 bucket_counts = 6;
+  repeated double explicit_bounds = 7;
+  repeated IntExemplar exemplars = 8;
+}
+
+// IntHistogram is the OTLP 0.7 integer histogram.
+// Appears as Metric.data oneof field 8 (int_histogram) in the upstream Metric message.
+message IntHistogram {
+  repeated IntHistogramDataPoint data_points = 1;
+  AggregationTemporality aggregation_temporality = 2;
+}

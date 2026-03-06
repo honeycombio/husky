@@ -1,0 +1,243 @@
+package compat07
+
+import (
+	"os"
+	"path/filepath"
+	"testing"
+
+	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/proto"
+
+	collectormetricspb "go.opentelemetry.io/proto/otlp/collector/metrics/v1"
+	commonpb "go.opentelemetry.io/proto/otlp/common/v1"
+	metricspb "go.opentelemetry.io/proto/otlp/metrics/v1"
+)
+
+// cloneMetrics deep-copies a metric slice so mutations from conversion
+// don't affect subsequent benchmark iterations.
+func cloneMetrics(metrics []*metricspb.Metric) []*metricspb.Metric {
+	result := make([]*metricspb.Metric, len(metrics))
+	for i, m := range metrics {
+		result[i] = proto.Clone(m).(*metricspb.Metric)
+	}
+	return result
+}
+
+// pure1xMetrics returns a single-element slice with a clean 1.x Gauge metric.
+func pure1xMetrics() []*metricspb.Metric {
+	return []*metricspb.Metric{
+		{
+			Name: "bench_gauge",
+			Data: &metricspb.Metric_Gauge{
+				Gauge: &metricspb.Gauge{
+					DataPoints: []*metricspb.NumberDataPoint{
+						{
+							Value: &metricspb.NumberDataPoint_AsDouble{AsDouble: 42.5},
+							Attributes: []*commonpb.KeyValue{
+								{
+									Key:   "env",
+									Value: &commonpb.AnyValue{Value: &commonpb.AnyValue_StringValue{StringValue: "prod"}},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
+// loadFixtureAsResourceMetrics loads a .binpb fixture and returns the ResourceMetrics slice.
+func loadFixtureAsResourceMetrics(b testing.TB, name string) []*metricspb.ResourceMetrics {
+	b.Helper()
+	data, err := os.ReadFile(filepath.Join("testdata", name))
+	require.NoError(b, err)
+	var req collectormetricspb.ExportMetricsServiceRequest
+	require.NoError(b, proto.Unmarshal(data, &req))
+	return req.GetResourceMetrics()
+}
+
+// wrapAsResourceMetrics wraps a metrics slice in a ResourceMetrics hierarchy.
+func wrapAsResourceMetrics(metrics []*metricspb.Metric) []*metricspb.ResourceMetrics {
+	return []*metricspb.ResourceMetrics{
+		{
+			ScopeMetrics: []*metricspb.ScopeMetrics{
+				{Metrics: metrics},
+			},
+		},
+	}
+}
+
+func BenchmarkHasField(b *testing.B) {
+	// Use int_gauge fixture: metric has unknown field 4 (IntGauge).
+	metrics := loadFixture(b, "int_gauge.binpb")
+	raw := metrics[0].ProtoReflect().GetUnknown()
+
+	b.Run("no_match", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			hasField(raw, 99)
+		}
+	})
+	b.Run("match", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			hasField(raw, 4)
+		}
+	})
+}
+
+func BenchmarkHas07Data_Pure1x(b *testing.B) {
+	metrics := pure1xMetrics()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		Has07Data(metrics)
+	}
+}
+
+// benchSink prevents the compiler from optimizing away benchmark calls.
+var benchSink any
+
+func BenchmarkConvertMetrics_1xPassthrough(b *testing.B) {
+	metrics := pure1xMetrics()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		result, _ := ConvertMetrics(metrics)
+		benchSink = result
+	}
+}
+
+func BenchmarkCallerGated_1xPassthrough(b *testing.B) {
+	metrics := pure1xMetrics()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if Has07Data(metrics) {
+			result, _ := ConvertMetrics(metrics)
+			benchSink = result
+		} else {
+			benchSink = metrics
+		}
+	}
+}
+
+func BenchmarkCallerGated_IntGauge(b *testing.B) {
+	metrics := loadFixture(b, "int_gauge.binpb")
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if Has07Data(metrics) {
+			result, _ := ConvertMetrics(metrics)
+			benchSink = result
+		} else {
+			benchSink = metrics
+		}
+	}
+}
+
+func BenchmarkConvertMetrics_IntGauge(b *testing.B) {
+	metrics := loadFixture(b, "int_gauge.binpb")
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		result, _ := ConvertMetrics(metrics)
+		benchSink = result
+	}
+}
+
+func BenchmarkConvertMetrics_IntSum(b *testing.B) {
+	metrics := loadFixture(b, "int_sum_delta_monotonic.binpb")
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		result, _ := ConvertMetrics(metrics)
+		benchSink = result
+	}
+}
+
+func BenchmarkConvertMetrics_IntHistogram(b *testing.B) {
+	metrics := loadFixture(b, "int_histogram.binpb")
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		result, _ := ConvertMetrics(metrics)
+		benchSink = result
+	}
+}
+
+func BenchmarkConvertMetrics_LabelsOnly(b *testing.B) {
+	// Labels conversion mutates data points in place, so clone per iteration.
+	original := loadFixture(b, "labels_only.binpb")
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		b.StopTimer()
+		metrics := cloneMetrics(original)
+		b.StartTimer()
+		result, _ := ConvertMetrics(metrics)
+		benchSink = result
+	}
+}
+
+func BenchmarkConvertMetrics_Mixed(b *testing.B) {
+	// Mixed payload has 0.7 metrics (some with proto types unchanged in 1.x) whose labels get mutated.
+	original := loadFixture(b, "mixed_07_1x.binpb")
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		b.StopTimer()
+		metrics := cloneMetrics(original)
+		b.StartTimer()
+		result, _ := ConvertMetrics(metrics)
+		benchSink = result
+	}
+}
+
+func BenchmarkResourceMetricsHas07Data_Pure1x(b *testing.B) {
+	rm := wrapAsResourceMetrics(pure1xMetrics())
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		benchSink = ResourceMetricsHas07Data(rm)
+	}
+}
+
+func BenchmarkResourceMetricsHas07Data_IntGauge(b *testing.B) {
+	rm := loadFixtureAsResourceMetrics(b, "int_gauge.binpb")
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		benchSink = ResourceMetricsHas07Data(rm)
+	}
+}
+
+func BenchmarkResourceMetricsHas07Data_LabelsOnly(b *testing.B) {
+	rm := loadFixtureAsResourceMetrics(b, "labels_only.binpb")
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		benchSink = ResourceMetricsHas07Data(rm)
+	}
+}
+
+func BenchmarkResourceMetricsCallerGated_1xPassthrough(b *testing.B) {
+	rm := wrapAsResourceMetrics(pure1xMetrics())
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if ResourceMetricsHas07Data(rm) {
+			for _, r := range rm {
+				for _, sm := range r.GetScopeMetrics() {
+					result, _ := ConvertMetrics(sm.GetMetrics())
+					benchSink = result
+				}
+			}
+		} else {
+			benchSink = rm
+		}
+	}
+}
+
+func BenchmarkResourceMetricsCallerGated_IntGauge(b *testing.B) {
+	rm := loadFixtureAsResourceMetrics(b, "int_gauge.binpb")
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if ResourceMetricsHas07Data(rm) {
+			for _, r := range rm {
+				for _, sm := range r.GetScopeMetrics() {
+					result, _ := ConvertMetrics(sm.GetMetrics())
+					benchSink = result
+				}
+			}
+		} else {
+			benchSink = rm
+		}
+	}
+}

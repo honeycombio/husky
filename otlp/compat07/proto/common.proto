@@ -1,0 +1,13 @@
+syntax = "proto3";
+
+package honeycomb.compat.otlp07.common;
+
+option go_package = "github.com/honeycombio/husky/otlp/compat07/internal/shadowpb/commonpb;commonpb";
+
+// StringKeyValue is the OTLP 0.7 label type: a pair of string key and string value.
+// In OTLP 1.x this was replaced by KeyValue with typed AnyValue.
+// Field numbers match the upstream opentelemetry.proto.common.v1.StringKeyValue.
+message StringKeyValue {
+  string key = 1;
+  string value = 2;
+}
