@@ -4,8 +4,10 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"sort"
 	"time"
 
+	husky "github.com/honeycombio/husky"
 	collectorLogs "go.opentelemetry.io/proto/otlp/collector/logs/v1"
 	logs "go.opentelemetry.io/proto/otlp/logs/v1"
 	"google.golang.org/protobuf/proto"
@@ -38,11 +40,13 @@ func TranslateLogsRequest(ctx context.Context, request *collectorLogs.ExportLogs
 		return nil, err
 	}
 	batches := []Batch{}
+	schemaURLs := map[string]struct{}{}
 	for _, resourceLog := range request.ResourceLogs {
 		var events []Event
 		resourceAttrs := getResourceAttributes(ctx, resourceLog.Resource)
 		if resourceLog.SchemaUrl != "" {
 			resourceAttrs[attrResourceSchemaURL] = resourceLog.SchemaUrl
+			schemaURLs[resourceLog.SchemaUrl] = struct{}{}
 		}
 		dataset := getLogsDataset(ri, resourceAttrs)
 
@@ -50,6 +54,7 @@ func TranslateLogsRequest(ctx context.Context, request *collectorLogs.ExportLogs
 			scopeAttrs := getScopeAttributes(ctx, scopeLog.Scope)
 			if scopeLog.SchemaUrl != "" {
 				scopeAttrs[attrScopeSchemaURL] = scopeLog.SchemaUrl
+				schemaURLs[scopeLog.SchemaUrl] = struct{}{}
 			}
 
 			for _, log := range scopeLog.GetLogRecords() {
@@ -110,6 +115,14 @@ func TranslateLogsRequest(ctx context.Context, request *collectorLogs.ExportLogs
 			Dataset: dataset,
 			Events:  events,
 		})
+	}
+	if len(schemaURLs) > 0 {
+		urls := make([]string, 0, len(schemaURLs))
+		for u := range schemaURLs {
+			urls = append(urls, u)
+		}
+		sort.Strings(urls)
+		husky.AddTelemetryAttribute(ctx, "app.schema_urls", urls)
 	}
 	return &TranslateOTLPRequestResult{
 		RequestSize: proto.Size(request),
