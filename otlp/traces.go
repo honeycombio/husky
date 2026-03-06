@@ -6,9 +6,11 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"sort"
 	"sync"
 	"time"
 
+	husky "github.com/honeycombio/husky"
 	"github.com/klauspost/compress/zstd"
 	collectorTrace "go.opentelemetry.io/proto/otlp/collector/trace/v1"
 	trace "go.opentelemetry.io/proto/otlp/trace/v1"
@@ -147,11 +149,13 @@ func TranslateTraceRequest(ctx context.Context, request *collectorTrace.ExportTr
 		return nil, err
 	}
 	var batches []Batch
+	schemaURLs := map[string]struct{}{}
 	for _, resourceSpan := range request.ResourceSpans {
 		var events []Event
 		resourceAttrs := getResourceAttributes(ctx, resourceSpan.Resource)
 		if resourceSpan.SchemaUrl != "" {
 			resourceAttrs[attrResourceSchemaURL] = resourceSpan.SchemaUrl
+			schemaURLs[resourceSpan.SchemaUrl] = struct{}{}
 		}
 		dataset := getDataset(ri, resourceAttrs)
 
@@ -159,6 +163,7 @@ func TranslateTraceRequest(ctx context.Context, request *collectorTrace.ExportTr
 			scopeAttrs := getScopeAttributes(ctx, scopeSpan.Scope)
 			if scopeSpan.SchemaUrl != "" {
 				scopeAttrs[attrScopeSchemaURL] = scopeSpan.SchemaUrl
+				schemaURLs[scopeSpan.SchemaUrl] = struct{}{}
 			}
 
 			for _, span := range scopeSpan.GetSpans() {
@@ -323,6 +328,14 @@ func TranslateTraceRequest(ctx context.Context, request *collectorTrace.ExportTr
 			Dataset: dataset,
 			Events:  events,
 		})
+	}
+	if len(schemaURLs) > 0 {
+		urls := make([]string, 0, len(schemaURLs))
+		for u := range schemaURLs {
+			urls = append(urls, u)
+		}
+		sort.Strings(urls)
+		husky.AddTelemetryAttribute(ctx, "app.schema_urls", urls)
 	}
 	return &TranslateOTLPRequestResult{
 		RequestSize: proto.Size(request),
