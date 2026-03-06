@@ -1,5 +1,12 @@
 # Husky Changelog
 
+## v0.43.0 2026-03-06
+
+### ✨ Added
+
+- feat(otlp): emit app.schema_urls telemetry for traces and logs (#349) | [Mike Goldsmith](https://github.com/MikeGoldsmith)
+- feat: replace OTLP proto fork with a 0.7 compat package (#347) | [Robb Kidd](https://github.com/robbkidd)
+
 ## v0.42.0 2026-03-04
 
 ### ✨ Added
