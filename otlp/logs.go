@@ -77,6 +77,7 @@ func TranslateLogsRequest(ctx context.Context, request *collectorLogs.ExportLogs
 				}
 				if log.EventName != "" {
 					attrs["event.name"] = log.EventName
+					attrs["name"] = log.EventName
 				}
 				if log.Body != nil {
 					// convert the log body to attributes, includes flattening kv pairs into multiple attributes
