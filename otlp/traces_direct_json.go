@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
+	"encoding/hex"
 	"errors"
 	"strconv"
 	"time"
@@ -696,19 +697,17 @@ func unmarshalSpanJSON(
 
 		switch string(key) {
 		case "traceId":
-			// Trace ID is base64 encoded in JSON
 			strBytes := v.GetStringBytes()
 			var b []byte
-			b, err = base64.StdEncoding.DecodeString(string(strBytes))
+			b, err = decodeIDBytes(string(strBytes))
 			if err == nil {
 				fields.traceID = b
 			}
 
 		case "spanId":
-			// Span ID is base64 encoded in JSON
 			strBytes := v.GetStringBytes()
 			var b []byte
-			b, err = base64.StdEncoding.DecodeString(string(strBytes))
+			b, err = decodeIDBytes(string(strBytes))
 			if err == nil {
 				fields.spanID = b
 			}
@@ -726,10 +725,9 @@ func unmarshalSpanJSON(
 			}
 
 		case "parentSpanId":
-			// Parent span ID is base64 encoded in JSON
 			strBytes := v.GetStringBytes()
 			var b []byte
-			b, err = base64.StdEncoding.DecodeString(string(strBytes))
+			b, err = decodeIDBytes(string(strBytes))
 			if err == nil && len(b) > 0 {
 				fields.parentID = b
 			}
@@ -1146,19 +1144,17 @@ func unmarshalSpanLinkJSON(
 
 		switch string(key) {
 		case "traceId":
-			// Trace ID is base64 encoded in JSON
 			strBytes := v.GetStringBytes()
 			var b []byte
-			b, err = base64.StdEncoding.DecodeString(string(strBytes))
+			b, err = decodeIDBytes(string(strBytes))
 			if err == nil {
 				fields.linkedTraceID = b
 			}
 
 		case "spanId":
-			// Span ID is base64 encoded in JSON
 			strBytes := v.GetStringBytes()
 			var b []byte
-			b, err = base64.StdEncoding.DecodeString(string(strBytes))
+			b, err = decodeIDBytes(string(strBytes))
 			if err == nil {
 				fields.linkedSpanID = b
 			}
@@ -1194,4 +1190,35 @@ func unmarshalSpanLinkJSON(
 	}
 	batch.Events = append(batch.Events, event)
 	return nil
+}
+
+// decodeIDBytes decodes a trace/span ID that may be hex (OTLP JSON spec) or base64 (proto3 JSON).
+func decodeIDBytes(s string) ([]byte, error) {
+	if isHexString(s) {
+		return hex.DecodeString(s)
+	}
+	return base64.StdEncoding.DecodeString(s)
+}
+
+var hexByteTable = [256]bool{
+	'0': true, '1': true, '2': true, '3': true, '4': true,
+	'5': true, '6': true, '7': true, '8': true, '9': true,
+	'a': true, 'b': true, 'c': true, 'd': true, 'e': true, 'f': true,
+	'A': true, 'B': true, 'C': true, 'D': true, 'E': true, 'F': true,
+}
+
+// isHexString reports whether s is a non-empty, even-length string of hex digits.
+func isHexString(s string) bool {
+	if len(s) == 0 || len(s)%2 != 0 {
+		return false
+	}
+	if s[len(s)-1] == '=' {
+		return false // base64 padding — definitely not hex
+	}
+	for i := 0; i < len(s); i++ {
+		if !hexByteTable[s[i]] {
+			return false
+		}
+	}
+	return true
 }
