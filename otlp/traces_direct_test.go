@@ -65,7 +65,7 @@ func hexToBin(s string) []byte {
 func TestUnmarshalTraceRequestDirect_Complete(t *testing.T) {
 	// Create a comprehensive test request with all supported features
 	// Using human-readable hex strings for clarity
-	traceID1 := "0102030405060708090a0b0c0d0e0f10"
+	traceID1 := "adb975f0528562d20350d5f81f13549d"
 	spanID1 := "0102030405060708"
 	parentSpanID1 := "1112131415161718"
 
@@ -973,6 +973,35 @@ func TestUnmarshalTraceRequestDirect_Complete(t *testing.T) {
 					})
 				}
 			})
+
+			// Only the JSON path is affected: some OTLP clients send trace/span IDs
+			// as lowercase hex strings (per the OTLP JSON spec) rather than base64
+			// (per proto3 JSON). The proto path handles this via a 24-byte compat
+			// shim in BytesToTraceID; verify the direct JSON path does the same.
+			if tc.contentType == "application/json" {
+				t.Run("HexStringIDs", func(t *testing.T) {
+					jsonBody := fmt.Sprintf(`{"resourceSpans":[{"resource":{"attributes":[{"key":"service.name","value":{"stringValue":"testsvc"}}]},"scopeSpans":[{"spans":[{"traceId":%q,"spanId":%q,"name":"test-span","kind":1,"startTimeUnixNano":"1000000000","endTimeUnixNano":"2000000000"}]}]}]}`,
+						traceID1, spanID1)
+
+					ri := RequestInfo{
+						ApiKey:      "abc123DEF456ghi789jklm",
+						Dataset:     "test-dataset",
+						ContentType: "application/json",
+					}
+					result, err := unmarshalTraceRequestDirectMsgpJSON(context.Background(), []byte(jsonBody), ri)
+					require.NoError(t, err)
+					require.Len(t, result.Batches, 1)
+					require.Len(t, result.Batches[0].Events, 1)
+
+					attrs := decodeMessagePackAttributes(t, result.Batches[0].Events[0].Attributes)
+
+					// Expected: same output as the proto path (BytesToTraceID / BytesToSpanID).
+					// A 32-char hex trace ID decoded as base64 yields 24 bytes; BytesToTraceID
+					// re-encodes those 24 bytes as base64 to recover the original hex string.
+					assert.Equal(t, traceID1, attrs["trace.trace_id"])
+					assert.Equal(t, spanID1, attrs["trace.span_id"])
+				})
+			}
 		})
 	}
 }
