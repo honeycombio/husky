@@ -1,5 +1,11 @@
 # Husky Changelog
 
+## v0.43.1 2026-05-04
+
+### 🐛 Fixes
+
+fix(otlp): handle hex-encoded trace/span IDs in direct JSON path (#355) | [Yingrong Zhao](https://github.com/vinozzZ)
+
 ## v0.43.0 2026-03-06
 
 ### ✨ Added
