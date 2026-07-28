@@ -34,7 +34,10 @@ func TranslateTraceRequestFromReader(ctx context.Context, body io.ReadCloser, ri
 // RequestInfo is the parsed information from the HTTP headers
 // maxSize is the maximum size of the request body in bytes
 func TranslateTraceRequestFromReaderSized(ctx context.Context, body io.ReadCloser, ri RequestInfo, maxSize int64) (*TranslateOTLPRequestResult, error) {
-	if err := ri.ValidateTracesHeaders(); err != nil {
+	if err := ri.ValidateHeaders(); err != nil {
+		return nil, err
+	}
+	if err := ri.ValidateDatasetHeader(); err != nil {
 		return nil, err
 	}
 	request := &collectorTrace.ExportTraceServiceRequest{}
@@ -69,7 +72,10 @@ func TranslateTraceRequestFromReaderSizedWithMsgp(
 ) (*TranslateOTLPRequestResultMsgp, error) {
 	defer body.Close()
 
-	if err := ri.ValidateTracesHeaders(); err != nil {
+	if err := ri.ValidateHeaders(); err != nil {
+		return nil, err
+	}
+	if err := ri.ValidateDatasetHeader(); err != nil {
 		return nil, err
 	}
 
@@ -145,7 +151,10 @@ func TranslateTraceRequestFromReaderSizedWithMsgp(
 // TranslateTraceRequest translates an OTLP/gRPC request into Honeycomb-friendly structure
 // RequestInfo is the parsed information from the gRPC metadata
 func TranslateTraceRequest(ctx context.Context, request *collectorTrace.ExportTraceServiceRequest, ri RequestInfo) (*TranslateOTLPRequestResult, error) {
-	if err := ri.ValidateTracesHeaders(); err != nil {
+	if err := ri.ValidateHeaders(); err != nil {
+		return nil, err
+	}
+	if err := ri.ValidateDatasetHeader(); err != nil {
 		return nil, err
 	}
 	var batches []Batch

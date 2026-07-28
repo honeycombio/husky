@@ -456,7 +456,10 @@ func UnmarshalTraceRequestDirectMsgp(
 	data []byte,
 	ri RequestInfo,
 ) (*TranslateOTLPRequestResultMsgp, error) {
-	if err := ri.ValidateTracesHeaders(); err != nil {
+	if err := ri.ValidateHeaders(); err != nil {
+		return nil, err
+	}
+	if err := ri.ValidateDatasetHeader(); err != nil {
 		return nil, err
 	}
 
@@ -1936,7 +1939,7 @@ func marshalAnyToJSON(val any) []byte {
 }
 
 func getDatasetFromMsgpAttr(ri RequestInfo, attrs *msgpAttributes) string {
-	if ri.hasClassicKey() {
+	if ri.hasClassicKey() && ri.usesDatasetHeader() {
 		return ri.Dataset
 	}
 

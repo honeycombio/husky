@@ -21,7 +21,7 @@ func TranslateProfilesRequestFromReader(ctx context.Context, body io.ReadCloser,
 // RequestInfo is the parsed information from the HTTP headers
 // maxSize is the maximum size of the request body in bytes
 func TranslateProfilesRequestFromReaderSized(ctx context.Context, body io.ReadCloser, ri RequestInfo, maxSize int64) (*TranslateOTLPRequestResult, error) {
-	if err := ri.ValidateProfilesHeaders(); err != nil {
+	if err := ri.ValidateHeaders(); err != nil {
 		return nil, err
 	}
 	request := &collectorProfiles.ExportProfilesServiceRequest{}
@@ -41,7 +41,7 @@ func TranslateProfilesRequestFromReaderSized(ctx context.Context, body io.ReadCl
 //  3. Retriever: Parse link_table again, fan out by trace_id, write rows
 //  4. Finalization: Merge dictionaries, optimize storage
 func TranslateProfilesRequest(ctx context.Context, request *collectorProfiles.ExportProfilesServiceRequest, ri RequestInfo) (*TranslateOTLPRequestResult, error) {
-	if err := ri.ValidateProfilesHeaders(); err != nil {
+	if err := ri.ValidateHeaders(); err != nil {
 		return nil, err
 	}
 

@@ -1984,3 +1984,44 @@ func TestUnmarshalTraceRequestDirect_SchemaURL(t *testing.T) {
 		})
 	}
 }
+
+// getDatasetFromMsgpAttr mirrors getDataset's destination selection for
+// the direct-unmarshal fast path.
+func TestGetDatasetFromMsgpAttr(t *testing.T) {
+	withService := &msgpAttributes{serviceName: "svc-from-telemetry"}
+	noService := &msgpAttributes{}
+
+	testCases := []struct {
+		name     string
+		ri       RequestInfo
+		attrs    *msgpAttributes
+		expected string
+	}{
+		{name: "classic env, header present: header wins", ri: RequestInfo{ApiKey: classicKey, Dataset: "from-header"}, attrs: withService, expected: "from-header"},
+		{name: "migrated env, header present: header still wins", ri: RequestInfo{ApiKey: classicKey, EnvironmentName: "migrated-env", Dataset: "from-header"}, attrs: withService, expected: "from-header"},
+		{name: "classic env, no header: empty (validation rejects upstream)", ri: RequestInfo{ApiKey: classicKey}, attrs: withService, expected: ""},
+		{name: "migrated env, no header: service.name", ri: RequestInfo{ApiKey: classicKey, EnvironmentName: "migrated-env"}, attrs: withService, expected: "svc-from-telemetry"},
+		{name: "migrated env, no header, no service.name: default", ri: RequestInfo{ApiKey: classicKey, EnvironmentName: "migrated-env"}, attrs: noService, expected: defaultServiceName},
+		{name: "E&S, header present: service.name, header ignored", ri: RequestInfo{ApiKey: ensKey, Dataset: "from-header"}, attrs: withService, expected: "svc-from-telemetry"},
+		{name: "E&S, no header: same service.name result", ri: RequestInfo{ApiKey: ensKey}, attrs: withService, expected: "svc-from-telemetry"},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.expected, getDatasetFromMsgpAttr(tc.ri, tc.attrs))
+		})
+	}
+}
+
+// UnmarshalTraceRequestDirectMsgp calls the split validators, so a migrated
+// environment works through the direct-unmarshal fast path even for a caller
+// whose handler has no validation of its own — this is its only check.
+func TestUnmarshalTraceRequestDirectMsgpHonorsClassicMigratedEnvironment(t *testing.T) {
+	migrated := RequestInfo{ApiKey: classicKey, EnvironmentName: "migrated-env", Dataset: "", ContentType: "application/protobuf"}
+	_, err := UnmarshalTraceRequestDirectMsgp(context.Background(), nil, migrated)
+	assert.NoError(t, err, "migrated env, no dataset header: translation should accept")
+
+	classic := RequestInfo{ApiKey: classicKey, EnvironmentName: "", Dataset: "", ContentType: "application/protobuf"}
+	_, err = UnmarshalTraceRequestDirectMsgp(context.Background(), nil, classic)
+	assert.EqualError(t, err, ErrMissingDatasetHeader.Error(), "classic env, no dataset header: translation still rejects")
+}

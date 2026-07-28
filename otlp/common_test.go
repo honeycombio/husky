@@ -26,6 +26,19 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
+// Keys in the shapes the validators detect, shared across multiple tests for
+// the same purpose. One representative key per environment type is enough:
+// key-shape detection itself is exhaustively covered by TestIsClassicKey.
+const (
+	classicKey = "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1"
+	ensKey     = "abc123DEF456ghi789jklm"
+)
+
+func TestKeyConstantsAreTheShapesTheyClaim(t *testing.T) {
+	require.True(t, IsClassicApiKey(classicKey), "classicKey must be a classic key")
+	require.False(t, IsClassicApiKey(ensKey), "ensKey must not be a classic key")
+}
+
 func TestParseGrpcMetadataIntoRequestInfo(t *testing.T) {
 	ctx := metadata.NewIncomingContext(context.Background(), metadata.New(map[string]string{
 		apiKeyHeader:    "test-api-key",
@@ -124,13 +137,16 @@ func TestAddAttributesToMap(t *testing.T) {
 	}
 }
 
-// ValidateTracesHeaders and ValidateMetricsHeaders are byte-identical; this table
+// ValidateTracesHeaders and ValidateMetricsHeaders are identical; this table
 // asserts both against the same cases so that invariant is enforced, not just implied.
 func TestValidateTracesAndMetricsHeaders(t *testing.T) {
-	const keyClassic = "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1"
-	require.True(t, IsClassicApiKey(keyClassic), "keyClassic must be a classic key")
-	const keyEnS = "abc123DEF456ghi789jklm"
-	require.False(t, IsClassicApiKey(keyEnS), "keyEnS must not be a classic key")
+	signals := []struct {
+		name string
+		fn   func(*RequestInfo) error
+	}{
+		{name: "traces", fn: (*RequestInfo).ValidateTracesHeaders},
+		{name: "metrics", fn: (*RequestInfo).ValidateMetricsHeaders},
+	}
 
 	testCases := []struct {
 		name        string
@@ -141,10 +157,10 @@ func TestValidateTracesAndMetricsHeaders(t *testing.T) {
 	}{
 		{name: "no key, no dataset", apikey: "", dataset: "", contentType: "application/protobuf", err: ErrMissingAPIKeyHeader},
 		{name: "no key, dataset present", apikey: "", dataset: "dataset", contentType: "application/protobuf", err: ErrMissingAPIKeyHeader},
-		{name: "classic/no dataset", apikey: keyClassic, dataset: "", contentType: "application/protobuf", err: ErrMissingDatasetHeader},
-		{name: "classic/dataset present", apikey: keyClassic, dataset: "dataset", contentType: "application/protobuf", err: nil},
-		{name: "E&S/no dataset", apikey: keyEnS, dataset: "", contentType: "application/protobuf", err: nil},
-		{name: "E&S/dataset present", apikey: keyEnS, dataset: "dataset", contentType: "application/protobuf", err: nil},
+		{name: "classic/no dataset", apikey: classicKey, dataset: "", contentType: "application/protobuf", err: ErrMissingDatasetHeader},
+		{name: "classic/dataset present", apikey: classicKey, dataset: "dataset", contentType: "application/protobuf", err: nil},
+		{name: "E&S/no dataset", apikey: ensKey, dataset: "", contentType: "application/protobuf", err: nil},
+		{name: "E&S/dataset present", apikey: ensKey, dataset: "dataset", contentType: "application/protobuf", err: nil},
 		{name: "content-type/(missing)", apikey: "apikey", dataset: "dataset", contentType: "", err: ErrInvalidContentType},
 		{name: "content-type/javascript", apikey: "apikey", dataset: "dataset", contentType: "application/javascript", err: ErrInvalidContentType},
 		{name: "content-type/xml", apikey: "apikey", dataset: "dataset", contentType: "application/xml", err: ErrInvalidContentType},
@@ -155,35 +171,29 @@ func TestValidateTracesAndMetricsHeaders(t *testing.T) {
 		{name: "content-type/x-protobuf", apikey: "apikey", dataset: "dataset", contentType: "application/x-protobuf", err: nil},
 	}
 
-	signals := []struct {
-		name string
-		fn   func(*RequestInfo) error
-	}{
-		{name: "traces", fn: (*RequestInfo).ValidateTracesHeaders},
-		{name: "metrics", fn: (*RequestInfo).ValidateMetricsHeaders},
-	}
+	for _, sig := range signals {
+		t.Run(sig.name, func(t *testing.T) {
+			for _, tc := range testCases {
+				t.Run(tc.name, func(t *testing.T) {
+					ri := RequestInfo{ApiKey: tc.apikey, ContentType: tc.contentType, Dataset: tc.dataset}
+					err := sig.fn(&ri)
+					if tc.err != nil {
+						assert.EqualError(t, err, tc.err.Error())
+					} else {
+						assert.NoError(t, err)
+					}
+				})
+			}
 
-	for _, tc := range testCases {
-		for _, sig := range signals {
-			t.Run(sig.name+"/"+tc.name, func(t *testing.T) {
-				ri := RequestInfo{ApiKey: tc.apikey, ContentType: tc.contentType, Dataset: tc.dataset}
-				err := sig.fn(&ri)
-				if tc.err != nil {
-					assert.EqualError(t, err, tc.err.Error())
-				} else {
-					assert.NoError(t, err)
-				}
+			t.Run("deprecated, unaware of migrated environment", func(t *testing.T) {
+				migrated := RequestInfo{ApiKey: classicKey, EnvironmentName: "migrated-env", Dataset: "", ContentType: "application/protobuf"}
+				assert.EqualError(t, sig.fn(&migrated), ErrMissingDatasetHeader.Error(), "deprecated validator stays frozen, EnvironmentName ignored")
 			})
-		}
+		})
 	}
 }
 
 func TestValidateLogsHeaders(t *testing.T) {
-	const keyClassic = "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1"
-	require.True(t, IsClassicApiKey(keyClassic), "keyClassic must be a classic key")
-	const keyEnS = "abc123DEF456ghi789jklm"
-	require.False(t, IsClassicApiKey(keyEnS), "keyEnS must not be a classic key")
-
 	testCases := []struct {
 		name        string
 		apikey      string
@@ -195,10 +205,10 @@ func TestValidateLogsHeaders(t *testing.T) {
 		{name: "no key, dataset present", apikey: "", dataset: "dataset", contentType: "application/protobuf", err: ErrMissingAPIKeyHeader},
 		// logs will use dataset header if present, but log ingest will also use service.name in the data
 		// and we will have a sensible default if neither are present, so a missing dataset header is not an error here
-		{name: "classic/no dataset", apikey: keyClassic, dataset: "", contentType: "application/protobuf", err: nil},
-		{name: "classic/dataset present", apikey: keyClassic, dataset: "dataset", contentType: "application/protobuf", err: nil},
-		{name: "E&S/no dataset", apikey: keyEnS, dataset: "", contentType: "application/protobuf", err: nil},
-		{name: "E&S/dataset present", apikey: keyEnS, dataset: "dataset", contentType: "application/protobuf", err: nil},
+		{name: "classic/no dataset", apikey: classicKey, dataset: "", contentType: "application/protobuf", err: nil},
+		{name: "classic/dataset present", apikey: classicKey, dataset: "dataset", contentType: "application/protobuf", err: nil},
+		{name: "E&S/no dataset", apikey: ensKey, dataset: "", contentType: "application/protobuf", err: nil},
+		{name: "E&S/dataset present", apikey: ensKey, dataset: "dataset", contentType: "application/protobuf", err: nil},
 		{name: "content-type/(missing)", apikey: "apikey", dataset: "dataset", contentType: "", err: ErrInvalidContentType},
 		{name: "content-type/javascript", apikey: "apikey", dataset: "dataset", contentType: "application/javascript", err: ErrInvalidContentType},
 		{name: "content-type/xml", apikey: "apikey", dataset: "dataset", contentType: "application/xml", err: ErrInvalidContentType},
@@ -218,6 +228,89 @@ func TestValidateLogsHeaders(t *testing.T) {
 			} else {
 				assert.NoError(t, err)
 			}
+		})
+	}
+}
+
+func TestValidateHeaders(t *testing.T) {
+	testCases := []struct {
+		name        string
+		apikey      string
+		contentType string
+		err         error
+	}{
+		{name: "no key", apikey: "", contentType: "application/protobuf", err: ErrMissingAPIKeyHeader},
+		{name: "classic key ok", apikey: classicKey, contentType: "application/protobuf", err: nil},
+		{name: "E&S key ok", apikey: ensKey, contentType: "application/json", err: nil},
+		{name: "bad content-type", apikey: classicKey, contentType: "application/xml", err: ErrInvalidContentType},
+		{name: "missing content-type", apikey: classicKey, contentType: "", err: ErrInvalidContentType},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			ri := RequestInfo{ApiKey: tc.apikey, ContentType: tc.contentType}
+			err := ri.ValidateHeaders()
+			if tc.err != nil {
+				assert.EqualError(t, err, tc.err.Error())
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestValidateDatasetHeader(t *testing.T) {
+	testCases := []struct {
+		name    string
+		apikey  string
+		envName string
+		dataset string
+		err     error
+	}{
+		{name: "classic env, dataset present", apikey: classicKey, envName: "", dataset: "dataset", err: nil},
+		{name: "migrated env, dataset present", apikey: classicKey, envName: "migrated-env", dataset: "dataset", err: nil},
+		{name: "classic env, no dataset", apikey: classicKey, envName: "", dataset: "", err: ErrMissingDatasetHeader},
+		{name: "migrated env, no dataset", apikey: classicKey, envName: "migrated-env", dataset: "", err: nil},
+		{name: "E&S, dataset present", apikey: ensKey, envName: "ens-env", dataset: "dataset", err: nil},
+		{name: "E&S, no dataset", apikey: ensKey, envName: "ens-env", dataset: "", err: nil},
+		{name: "E&S, no env name, no dataset", apikey: ensKey, envName: "", dataset: "", err: nil},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			ri := RequestInfo{ApiKey: tc.apikey, EnvironmentName: tc.envName, Dataset: tc.dataset}
+			err := ri.ValidateDatasetHeader()
+			if tc.err != nil {
+				assert.EqualError(t, err, tc.err.Error())
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestGetDataset(t *testing.T) {
+	withService := map[string]interface{}{"service.name": "svc-from-telemetry"}
+	noService := map[string]interface{}{}
+
+	testCases := []struct {
+		name     string
+		ri       RequestInfo
+		attrs    map[string]interface{}
+		expected string
+	}{
+		{name: "classic env, header present: header wins", ri: RequestInfo{ApiKey: classicKey, Dataset: "from-header"}, attrs: withService, expected: "from-header"},
+		{name: "migrated env, header present: header still wins", ri: RequestInfo{ApiKey: classicKey, EnvironmentName: "migrated-env", Dataset: "from-header"}, attrs: withService, expected: "from-header"},
+		{name: "classic env, no header: empty (validation rejects upstream)", ri: RequestInfo{ApiKey: classicKey}, attrs: withService, expected: ""},
+		{name: "migrated env, no header: service.name", ri: RequestInfo{ApiKey: classicKey, EnvironmentName: "migrated-env"}, attrs: withService, expected: "svc-from-telemetry"},
+		{name: "migrated env, no header, no service.name: default", ri: RequestInfo{ApiKey: classicKey, EnvironmentName: "migrated-env"}, attrs: noService, expected: defaultServiceName},
+		{name: "E&S, header present: service.name, header ignored", ri: RequestInfo{ApiKey: ensKey, Dataset: "from-header"}, attrs: withService, expected: "svc-from-telemetry"},
+		{name: "E&S, no header: same service.name result", ri: RequestInfo{ApiKey: ensKey}, attrs: withService, expected: "svc-from-telemetry"},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.expected, getDataset(tc.ri, tc.attrs))
 		})
 	}
 }

@@ -170,6 +170,12 @@ type RequestInfo struct {
 	ApiKey  string
 	Dataset string
 
+	// EnvironmentName is the name of the environment associated with ApiKey,
+	// as reported by auth (e.g. the /1/auth endpoint). Callers set it after
+	// authenticating the key. Blank means the environment behaves as Classic;
+	// non-blank on a classic ApiKey means the environment migrated in place.
+	EnvironmentName string
+
 	UserAgent          string
 	ContentType        string
 	ContentEncoding    string
@@ -180,7 +186,49 @@ func (ri RequestInfo) hasClassicKey() bool {
 	return IsClassicApiKey(ri.ApiKey)
 }
 
+// hasClassicMigratedEnv reports whether ApiKey is a classic key whose
+// environment has been migrated in place to behave like Environments & Services.
+func (ri RequestInfo) hasClassicMigratedEnv() bool {
+	return ri.hasClassicKey() && ri.EnvironmentName != ""
+}
+
+// usesDatasetHeader reports whether a classic key's dataset destination
+// should come from the header: true when the header is present, or when the
+// environment behaves as Classic (where validation already requires it).
+// False only for a migrated environment with no header, whose destination
+// falls back to service.name, as with E&S keys.
+func (ri RequestInfo) usesDatasetHeader() bool {
+	return ri.Dataset != "" || !ri.hasClassicMigratedEnv()
+}
+
+// ValidateHeaders performs the signal-agnostic header/metadata checks shared
+// by all OTLP request types: a supported content-type and a present API key.
+// Signals that require a dataset header should also call ValidateDatasetHeader.
+func (ri *RequestInfo) ValidateHeaders() error {
+	if !IsContentTypeSupported(ri.ContentType) {
+		return ErrInvalidContentType
+	}
+	if len(ri.ApiKey) == 0 {
+		return ErrMissingAPIKeyHeader
+	}
+	return nil
+}
+
+// ValidateDatasetHeader checks the dataset header requirement: classic keys
+// must name a destination dataset, unless the key's environment has migrated
+// in place (non-blank EnvironmentName).
+func (ri *RequestInfo) ValidateDatasetHeader() error {
+	if ri.hasClassicKey() && !ri.hasClassicMigratedEnv() && len(ri.Dataset) == 0 {
+		return ErrMissingDatasetHeader
+	}
+	return nil
+}
+
 // ValidateTracesHeaders validates required headers/metadata for a trace OTLP request
+//
+// Deprecated: use ValidateHeaders and ValidateDatasetHeader. Frozen — ignores
+// EnvironmentName, so a migrated environment's classic key still requires
+// the dataset header here.
 func (ri *RequestInfo) ValidateTracesHeaders() error {
 	if !IsContentTypeSupported(ri.ContentType) {
 		return ErrInvalidContentType
@@ -195,6 +243,10 @@ func (ri *RequestInfo) ValidateTracesHeaders() error {
 }
 
 // ValidateMetricsHeaders validates required headers/metadata for a metric OTLP request
+//
+// Deprecated: use ValidateHeaders and ValidateDatasetHeader. Frozen — ignores
+// EnvironmentName, so a migrated environment's classic key still requires
+// the dataset header here.
 func (ri *RequestInfo) ValidateMetricsHeaders() error {
 	if !IsContentTypeSupported(ri.ContentType) {
 		return ErrInvalidContentType
@@ -209,6 +261,9 @@ func (ri *RequestInfo) ValidateMetricsHeaders() error {
 }
 
 // ValidateLogsHeaders validates required headers/metadata for a logs OTLP request
+//
+// Deprecated: use ValidateHeaders. Logs do not require a dataset header:
+// we settled on a fallback destination for logs in honeycombio/husky#118.
 func (ri *RequestInfo) ValidateLogsHeaders() error {
 	if !IsContentTypeSupported(ri.ContentType) {
 		return ErrInvalidContentType
@@ -216,13 +271,13 @@ func (ri *RequestInfo) ValidateLogsHeaders() error {
 	if len(ri.ApiKey) == 0 {
 		return ErrMissingAPIKeyHeader
 	}
-	// Intentially not requiring a dataset header for classic keys
-	// because we settled on a fallback destination for logs
-	// in honeycombio/husky#118.
 	return nil
 }
 
 // ValidateProfilesHeaders validates required headers/metadata for a profiles OTLP request
+//
+// Deprecated: use ValidateHeaders. Profiles go to the __profiles__ dataset
+// by default; no dataset header is required.
 func (ri *RequestInfo) ValidateProfilesHeaders() error {
 	if !IsContentTypeSupported(ri.ContentType) {
 		return ErrInvalidContentType
@@ -230,7 +285,6 @@ func (ri *RequestInfo) ValidateProfilesHeaders() error {
 	if len(ri.ApiKey) == 0 {
 		return ErrMissingAPIKeyHeader
 	}
-	// Profiles go to __profiles__ dataset by default, no dataset header required
 	return nil
 }
 
@@ -376,7 +430,7 @@ func isInstrumentationLibrary(libraryName string) bool {
 }
 
 func getDataset(ri RequestInfo, attrs map[string]interface{}) string {
-	if ri.hasClassicKey() {
+	if ri.hasClassicKey() && ri.usesDatasetHeader() {
 		return ri.Dataset
 	}
 
