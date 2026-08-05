@@ -1,5 +1,11 @@
 # Husky Changelog
 
+## v0.44.0 2026-08-05
+
+### 💡 Enhancements
+
+- feat: composable header validation, support migrated environments by @robbkidd in https://github.com/honeycombio/husky/pull/359
+
 ## v0.43.1 2026-05-04
 
 ### 🐛 Fixes
