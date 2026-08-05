@@ -31,7 +31,10 @@ func unmarshalTraceRequestDirectMsgpJSON(
 	data []byte,
 	ri RequestInfo,
 ) (*TranslateOTLPRequestResultMsgp, error) {
-	if err := ri.ValidateTracesHeaders(); err != nil {
+	if err := ri.ValidateHeaders(); err != nil {
+		return nil, err
+	}
+	if err := ri.ValidateDatasetHeader(); err != nil {
 		return nil, err
 	}
 

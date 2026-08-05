@@ -23,7 +23,7 @@ func TranslateLogsRequestFromReader(ctx context.Context, body io.ReadCloser, ri 
 // RequestInfo is the parsed information from the HTTP headers
 // maxSize is the maximum size of the request body in bytes
 func TranslateLogsRequestFromReaderSized(ctx context.Context, body io.ReadCloser, ri RequestInfo, maxSize int64) (*TranslateOTLPRequestResult, error) {
-	if err := ri.ValidateLogsHeaders(); err != nil {
+	if err := ri.ValidateHeaders(); err != nil {
 		return nil, err
 	}
 	request := &collectorLogs.ExportLogsServiceRequest{}
@@ -36,7 +36,7 @@ func TranslateLogsRequestFromReaderSized(ctx context.Context, body io.ReadCloser
 // TranslateLogsRequest translates an OTLP proto log request into Honeycomb-friendly structure
 // RequestInfo is the parsed information from the gRPC metadata
 func TranslateLogsRequest(ctx context.Context, request *collectorLogs.ExportLogsServiceRequest, ri RequestInfo) (*TranslateOTLPRequestResult, error) {
-	if err := ri.ValidateLogsHeaders(); err != nil {
+	if err := ri.ValidateHeaders(); err != nil {
 		return nil, err
 	}
 	batches := []Batch{}

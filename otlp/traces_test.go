@@ -1493,3 +1493,18 @@ func TestTranslateTraceRequest_SchemaURL(t *testing.T) {
 	assert.Equal(t, resourceSchemaURL, attrs["resource.schema_url"])
 	assert.Equal(t, scopeSchemaURL, attrs["scope.schema_url"])
 }
+
+// TranslateTraceRequest calls the split validators, so a migrated environment
+// works through translation even for callers whose gRPC handler never calls
+// a validator themselves.
+func TestTranslateTraceRequestHonorsClassicMigratedEnvironment(t *testing.T) {
+	emptyReq := &collectortrace.ExportTraceServiceRequest{}
+
+	migrated := RequestInfo{ApiKey: classicKey, EnvironmentName: "migrated-env", Dataset: "", ContentType: "application/protobuf"}
+	_, err := TranslateTraceRequest(context.Background(), emptyReq, migrated)
+	assert.NoError(t, err, "migrated env, no dataset header: translation should accept")
+
+	classic := RequestInfo{ApiKey: classicKey, EnvironmentName: "", Dataset: "", ContentType: "application/protobuf"}
+	_, err = TranslateTraceRequest(context.Background(), emptyReq, classic)
+	assert.EqualError(t, err, ErrMissingDatasetHeader.Error(), "classic env, no dataset header: translation still rejects")
+}
