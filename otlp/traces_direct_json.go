@@ -227,6 +227,24 @@ func unmarshalKeyValueJSON(
 // several potential keys, depending on the type. In this way, it can re-implent
 // JSON's inherent type agnosticism, with the advantage of being far more expensive
 // to generate, transmit, and parse.
+var errUnexpectedIntValueType = errors.New("intValue was neither a string nor a number")
+
+// skipUndecodableAttribute drops a single attribute whose value cannot be
+// decoded and records that it happened. The alternative is failing the request,
+// which costs every span in the payload for one bad attribute. Skipping matches
+// what this parser already does for a malformed KeyValue or AnyValue, and both
+// callers of unmarshalAnyValueJSON already ignore a nil result.
+//
+// The attribute is dropped rather than coerced, so the telemetry is the only
+// record that anything was lost. Keep it.
+func skipUndecodableAttribute(ctx context.Context, key []byte, cause error) {
+	husky.AddTelemetryAttributes(ctx, map[string]any{
+		"undecodable_attr":        true,
+		"undecodable_attr_key":    string(key),
+		"undecodable_attr_reason": cause.Error(),
+	})
+}
+
 func unmarshalAnyValueIntoAttrsJSON(
 	ctx context.Context,
 	v *fastjson.Value,
@@ -274,12 +292,14 @@ func unmarshalAnyValueIntoAttrsJSON(
 				val = int64(v.GetInt())
 			case fastjson.TypeString:
 				strBytes := v.GetStringBytes()
-				val, err = strconv.ParseInt(string(strBytes), 10, 64)
-				if err != nil {
+				parsed, parseErr := strconv.ParseInt(string(strBytes), 10, 64)
+				if parseErr != nil {
+					skipUndecodableAttribute(ctx, key, parseErr)
 					return
 				}
+				val = parsed
 			default:
-				err = errors.New("parse error: expected value as a string or a number.")
+				skipUndecodableAttribute(ctx, key, errUnexpectedIntValueType)
 				return
 			}
 
@@ -409,11 +429,12 @@ func unmarshalAnyValueJSON(ctx context.Context, v *fastjson.Value) (any, error) 
 		case "intValue":
 			// JSON encodes int64 as string
 			strBytes := v.GetStringBytes()
-			var val int64
-			val, err = strconv.ParseInt(string(strBytes), 10, 64)
-			if err == nil {
-				result = val
+			parsed, parseErr := strconv.ParseInt(string(strBytes), 10, 64)
+			if parseErr != nil {
+				skipUndecodableAttribute(ctx, key, parseErr)
+				return
 			}
+			result = parsed
 
 		case "doubleValue":
 			result = v.GetFloat64()
@@ -421,11 +442,12 @@ func unmarshalAnyValueJSON(ctx context.Context, v *fastjson.Value) (any, error) 
 		case "bytesValue":
 			// Bytes are base64 encoded in JSON
 			strBytes := v.GetStringBytes()
-			var b []byte
-			b, err = base64.StdEncoding.DecodeString(string(strBytes))
-			if err == nil {
-				result = b
+			b, decodeErr := base64.StdEncoding.DecodeString(string(strBytes))
+			if decodeErr != nil {
+				skipUndecodableAttribute(ctx, key, decodeErr)
+				return
 			}
+			result = b
 
 		case "arrayValue":
 			var arr []any

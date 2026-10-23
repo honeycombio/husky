@@ -1737,22 +1737,118 @@ func TestUnmarshalTraceRequestDirectJSON_ErrorHandling(t *testing.T) {
 		ContentType: "application/json",
 	}
 
+	// Only a body we cannot parse at all is still an error. An attribute whose
+	// value will not decode is skipped instead, see the test below.
 	testCases := []struct {
 		name     string
 		jsonData string
 		errorMsg string
 	}{
 		{
-			name: "invalid_int_value",
+			name: "invalid_json_syntax",
 			jsonData: `{
 				"resourceSpans": [{
 					"resource": {
-						"attributes": [{
-							"key": "test_int",
-							"value": {
-								"intValue": "not-a-number"
-							}
+						"attributes": [{invalid json here}]
+					}
+				}]
+			}`,
+			errorMsg: "",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := unmarshalTraceRequestDirectMsgpJSON(ctx, []byte(tc.jsonData), ri)
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), tc.errorMsg)
+		})
+	}
+}
+
+// TestUnmarshalTraceRequestDirectJSON_SkipsUndecodableAttributes pins the
+// behaviour change from OTEL-669. These cases used to fail the whole request,
+// which cost every span in the payload for one bad attribute.
+func TestUnmarshalTraceRequestDirectJSON_SkipsUndecodableAttributes(t *testing.T) {
+	ctx := context.Background()
+	ri := RequestInfo{
+		ApiKey:      "abc123DEF456ghi789jklm",
+		Dataset:     "test-dataset",
+		ContentType: "application/json",
+	}
+
+	testCases := []struct {
+		name     string
+		jsonData string
+		// skippedKey is the attribute expected to be absent from the event.
+		skippedKey string
+	}{
+		{
+			name: "empty_int_value_on_span",
+			jsonData: `{
+				"resourceSpans": [{
+					"scopeSpans": [{
+						"spans": [{
+							"traceId": "AQIDBAUGAAAAAAAAAAAAAAAAAA==",
+							"spanId": "AQIDBAUGAA==",
+							"name": "test-span",
+							"attributes": [
+								{"key": "http.response.body.size", "value": {"intValue": ""}},
+								{"key": "kept", "value": {"stringValue": "yes"}}
+							]
 						}]
+					}]
+				}]
+			}`,
+			skippedKey: "http.response.body.size",
+		},
+		{
+			name: "unparseable_int_value_on_span",
+			jsonData: `{
+				"resourceSpans": [{
+					"scopeSpans": [{
+						"spans": [{
+							"traceId": "AQIDBAUGAAAAAAAAAAAAAAAAAA==",
+							"spanId": "AQIDBAUGAA==",
+							"name": "test-span",
+							"attributes": [
+								{"key": "bad_int", "value": {"intValue": "not-a-number"}},
+								{"key": "kept", "value": {"stringValue": "yes"}}
+							]
+						}]
+					}]
+				}]
+			}`,
+			skippedKey: "bad_int",
+		},
+		{
+			name: "int_value_of_unexpected_type_on_span",
+			jsonData: `{
+				"resourceSpans": [{
+					"scopeSpans": [{
+						"spans": [{
+							"traceId": "AQIDBAUGAAAAAAAAAAAAAAAAAA==",
+							"spanId": "AQIDBAUGAA==",
+							"name": "test-span",
+							"attributes": [
+								{"key": "bool_as_int", "value": {"intValue": true}},
+								{"key": "kept", "value": {"stringValue": "yes"}}
+							]
+						}]
+					}]
+				}]
+			}`,
+			skippedKey: "bool_as_int",
+		},
+		{
+			name: "empty_int_value_on_resource",
+			jsonData: `{
+				"resourceSpans": [{
+					"resource": {
+						"attributes": [
+							{"key": "resource.int.attr", "value": {"intValue": ""}},
+							{"key": "service.name", "value": {"stringValue": "svc"}}
+						]
 					},
 					"scopeSpans": [{
 						"spans": [{
@@ -1763,72 +1859,47 @@ func TestUnmarshalTraceRequestDirectJSON_ErrorHandling(t *testing.T) {
 					}]
 				}]
 			}`,
-			errorMsg: "invalid syntax",
-		},
-		{
-			name: "invalid_span_attributes",
-			jsonData: `{
-				"resourceSpans": [{
-					"scopeSpans": [{
-						"spans": [{
-							"traceId": "AQIDBAUGAAAAAAAAAAAAAAAAAA==",
-							"spanId": "AQIDBAUGAA==",
-							"name": "test-span",
-							"attributes": [{
-								"key": "bad_int",
-								"value": {
-									"intValue": "invalid"
-								}
-							}]
-						}]
-					}]
-				}]
-			}`,
-			errorMsg: "invalid syntax",
-		},
-		{
-			name: "invalid_json_syntax",
-			jsonData: `{
-				"resourceSpans": [{
-					"resource": {
-						"attributes": [{invalid json here}]
-					}
-				}]
-			}`,
-			errorMsg: "", // fastjson will return a parse error
-		},
-		{
-			name:     "resource_int_error",
-			jsonData: generateComprehensiveOTLPTraceJSON("resource.int.attr", "not-a-number"),
-			errorMsg: "invalid syntax",
-		},
-		{
-			name:     "scope_int_error",
-			jsonData: generateComprehensiveOTLPTraceJSON("scope.attribute.int", "invalid-int"),
-			errorMsg: "invalid syntax",
-		},
-		{
-			name:     "span_attribute_int_error",
-			jsonData: generateComprehensiveOTLPTraceJSON("span.attributes.int", "not-a-number"),
-			errorMsg: "invalid syntax",
-		},
-		{
-			name:     "event_int_error",
-			jsonData: generateComprehensiveOTLPTraceJSON("event1.int", "invalid-int"),
-			errorMsg: "invalid syntax",
-		},
-		{
-			name:     "link_int_error",
-			jsonData: generateComprehensiveOTLPTraceJSON("link1.int", "invalid-int"),
-			errorMsg: "invalid syntax",
+			skippedKey: "resource.int.attr",
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := unmarshalTraceRequestDirectMsgpJSON(ctx, []byte(tc.jsonData), ri)
-			require.Error(t, err)
-			assert.Contains(t, err.Error(), tc.errorMsg)
+			result, err := unmarshalTraceRequestDirectMsgpJSON(ctx, []byte(tc.jsonData), ri)
+			require.NoError(t, err, "one undecodable attribute must not fail the request")
+			require.Len(t, result.Batches, 1)
+			require.Len(t, result.Batches[0].Events, 1, "the span must survive")
+
+			attrs := decodeMessagePackAttributes(t, result.Batches[0].Events[0].Attributes)
+			assert.NotContains(t, attrs, tc.skippedKey, "the undecodable attribute is dropped, not coerced")
+			assert.Equal(t, "test-span", attrs["name"], "the rest of the span is intact")
+		})
+	}
+}
+
+// Attributes that previously failed the request appear at every level, so check
+// a payload carrying several at once still yields its spans.
+func TestUnmarshalTraceRequestDirectJSON_SkipsUndecodableAttributesEverywhere(t *testing.T) {
+	ctx := context.Background()
+	ri := RequestInfo{
+		ApiKey:      "abc123DEF456ghi789jklm",
+		Dataset:     "test-dataset",
+		ContentType: "application/json",
+	}
+
+	for _, target := range []string{
+		"resource.int.attr",
+		"scope.attribute.int",
+		"span.attributes.int",
+		"event1.int",
+		"link1.int",
+	} {
+		t.Run(target, func(t *testing.T) {
+			result, err := unmarshalTraceRequestDirectMsgpJSON(
+				ctx, []byte(generateComprehensiveOTLPTraceJSON(target, "")), ri)
+			require.NoError(t, err)
+			require.Len(t, result.Batches, 1)
+			require.NotEmpty(t, result.Batches[0].Events)
 		})
 	}
 }
