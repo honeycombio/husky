@@ -1877,6 +1877,44 @@ func TestUnmarshalTraceRequestDirectJSON_SkipsUndecodableAttributes(t *testing.T
 	}
 }
 
+// A nested intValue may arrive as a JSON number rather than a string. Reading
+// only the string form dropped it, so this pins that it survives.
+func TestUnmarshalTraceRequestDirectJSON_NestedNumericIntValue(t *testing.T) {
+	ctx := context.Background()
+	ri := RequestInfo{
+		ApiKey:      "abc123DEF456ghi789jklm",
+		Dataset:     "test-dataset",
+		ContentType: "application/json",
+	}
+
+	jsonData := `{
+		"resourceSpans": [{
+			"scopeSpans": [{
+				"spans": [{
+					"traceId": "AQIDBAUGAAAAAAAAAAAAAAAAAA==",
+					"spanId": "AQIDBAUGAA==",
+					"name": "test-span",
+					"attributes": [
+						{"key": "numbers", "value": {"arrayValue": {"values": [
+							{"intValue": 123},
+							{"intValue": "456"}
+						]}}}
+					]
+				}]
+			}]
+		}]
+	}`
+
+	result, err := unmarshalTraceRequestDirectMsgpJSON(ctx, []byte(jsonData), ri)
+	require.NoError(t, err)
+	require.Len(t, result.Batches, 1)
+	require.Len(t, result.Batches[0].Events, 1)
+
+	attrs := decodeMessagePackAttributes(t, result.Batches[0].Events[0].Attributes)
+	assert.Contains(t, attrs["numbers"], "123", "a numeric intValue must not be dropped")
+	assert.Contains(t, attrs["numbers"], "456", "a string intValue must still work")
+}
+
 // Attributes that previously failed the request appear at every level, so check
 // a payload carrying several at once still yields its spans.
 func TestUnmarshalTraceRequestDirectJSON_SkipsUndecodableAttributesEverywhere(t *testing.T) {

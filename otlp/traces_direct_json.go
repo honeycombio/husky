@@ -422,14 +422,23 @@ func unmarshalAnyValueJSON(ctx context.Context, v *fastjson.Value) (any, error) 
 			result = v.GetBool()
 
 		case "intValue":
-			// JSON encodes int64 as string
-			strBytes := v.GetStringBytes()
-			parsed, parseErr := strconv.ParseInt(string(strBytes), 10, 64)
-			if parseErr != nil {
-				skipUndecodableAttribute(ctx, key, parseErr)
+			// JSON encodes int64 as a string, but a number is also valid and
+			// protojson accepts it. Only reading the string form dropped a
+			// numeric one, since GetStringBytes returns nil for a number.
+			switch v.Type() {
+			case fastjson.TypeNumber:
+				result = int64(v.GetInt())
+			case fastjson.TypeString:
+				parsed, parseErr := strconv.ParseInt(string(v.GetStringBytes()), 10, 64)
+				if parseErr != nil {
+					skipUndecodableAttribute(ctx, key, parseErr)
+					return
+				}
+				result = parsed
+			default:
+				skipUndecodableAttribute(ctx, key, errUnexpectedIntValueType)
 				return
 			}
-			result = parsed
 
 		case "doubleValue":
 			result = v.GetFloat64()
