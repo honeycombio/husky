@@ -221,22 +221,11 @@ func unmarshalKeyValueJSON(
 	return unmarshalAnyValueIntoAttrsJSON(ctx, valueObj, keyBytes, attrs, depth)
 }
 
-// unmarshalAnyValueIntoAttrsJSON parses an AnyValue from JSON and adds it
-// directly to msgpAttributes.
-// Similar to protobuf, JSON OTLP encodes an "AnyValue" as an object with one of
-// several potential keys, depending on the type. In this way, it can re-implent
-// JSON's inherent type agnosticism, with the advantage of being far more expensive
-// to generate, transmit, and parse.
 var errUnexpectedIntValueType = errors.New("intValue was neither a string nor a number")
 
-// skipUndecodableAttribute drops a single attribute whose value cannot be
-// decoded and records that it happened. The alternative is failing the request,
-// which costs every span in the payload for one bad attribute. Skipping matches
-// what this parser already does for a malformed KeyValue or AnyValue, and both
-// callers of unmarshalAnyValueJSON already ignore a nil result.
-//
-// The attribute is dropped rather than coerced, so the telemetry is the only
-// record that anything was lost. Keep it.
+// skipUndecodableAttribute drops one attribute whose value cannot be decoded and
+// records it. Failing instead costs every span in the request for a single bad
+// attribute, and the telemetry is the only trace of what was dropped.
 func skipUndecodableAttribute(ctx context.Context, key []byte, cause error) {
 	husky.AddTelemetryAttributes(ctx, map[string]any{
 		"undecodable_attr":        true,
@@ -245,6 +234,12 @@ func skipUndecodableAttribute(ctx context.Context, key []byte, cause error) {
 	})
 }
 
+// unmarshalAnyValueIntoAttrsJSON parses an AnyValue from JSON and adds it
+// directly to msgpAttributes.
+// Similar to protobuf, JSON OTLP encodes an "AnyValue" as an object with one of
+// several potential keys, depending on the type. In this way, it can re-implent
+// JSON's inherent type agnosticism, with the advantage of being far more expensive
+// to generate, transmit, and parse.
 func unmarshalAnyValueIntoAttrsJSON(
 	ctx context.Context,
 	v *fastjson.Value,
