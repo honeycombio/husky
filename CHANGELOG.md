@@ -1,5 +1,12 @@
 # Husky Changelog
 
+## v0.45.0 2026-10-23
+
+### 🐛 Fixes
+
+- fix(otlp): skip an attribute whose value cannot be decoded by @MikeGoldsmith in https://github.com/honeycombio/husky/pull/363
+- fix(otlp): accept a nested intValue sent as a JSON number by @MikeGoldsmith in https://github.com/honeycombio/husky/pull/363
+
 ## v0.44.0 2026-08-05
 
 ### 💡 Enhancements
