@@ -193,7 +193,7 @@ func (m *msgpAttributes) addAttributes(add *msgpAttributes) {
 
 var keyHashPool = sync.Pool{
 	New: func() any {
-		return make(map[uint64]struct{}, 64)
+		return newKeyHashSet()
 	},
 }
 
@@ -212,9 +212,12 @@ func (m *msgpAttributes) finalize() ([]byte, error) {
 	result := make([]byte, 3, len(m.buf)+3)
 	result[0] = 0xde // map16 format
 
-	keyHashes := keyHashPool.Get().(map[uint64]struct{})
+	keyHashes := keyHashPool.Get().(*keyHashSet)
 	defer func() {
-		clear(keyHashes)
+		if len(keyHashes.slots) > keyHashSetMaxPooledSlots {
+			return
+		}
+		keyHashes.reset()
 		keyHashPool.Put(keyHashes)
 	}()
 
@@ -233,8 +236,7 @@ func (m *msgpAttributes) finalize() ([]byte, error) {
 		if err != nil {
 			return nil, err
 		}
-		if _, exists := keyHashes[keyHash]; !exists {
-			keyHashes[keyHash] = struct{}{}
+		if keyHashes.add(keyHash) {
 
 			// Copy the entire key-value pair to result
 			result = append(result, data[:len(data)-len(afterValue)]...)
@@ -244,7 +246,7 @@ func (m *msgpAttributes) finalize() ([]byte, error) {
 		data = afterValue
 	}
 
-	uniqueCount := len(keyHashes)
+	uniqueCount := keyHashes.len()
 	if uniqueCount > 65535 {
 		return nil, errors.New("too many attributes")
 	}
