@@ -77,6 +77,7 @@ func TestTranslateLogsRequest(t *testing.T) {
 			assert.Equal(t, int32(100), ev.SampleRate)
 			assert.Equal(t, "resource_attr_val", ev.Attributes["resource_attr"])
 			assert.Equal(t, "event_name", ev.Attributes["event.name"])
+			assert.Equal(t, "event_name", ev.Attributes["name"])
 		})
 	}
 }
@@ -536,6 +537,7 @@ func TestLogsWithoutTraceIdDoesNotGetAnnotationType(t *testing.T) {
 					TimeUnixNano:   uint64(startTimestamp.Nanosecond()),
 					SeverityText:   "test_severity_text",
 					SeverityNumber: logs.SeverityNumber_SEVERITY_NUMBER_DEBUG,
+					EventName:      "event_name",
 				}},
 			}},
 		}},
@@ -561,6 +563,26 @@ func TestLogsWithoutTraceIdDoesNotGetAnnotationType(t *testing.T) {
 	assert.Nil(t, ev.Attributes["trace.trace_id"])
 	assert.Nil(t, ev.Attributes["trace.span_id"])
 	assert.Nil(t, ev.Attributes["meta.annotation_type"])
+	assert.Equal(t, "event_name", ev.Attributes["event.name"])
+	assert.Nil(t, ev.Attributes["name"])
+}
+
+func TestLogNameAttributeOverridesEventName(t *testing.T) {
+	req := buildExportLogsServiceRequest(test.RandomBytes(16), test.RandomBytes(8), time.Now(), "my-service")
+	logRecord := req.ResourceLogs[0].ScopeLogs[0].LogRecords[0]
+	logRecord.Attributes = append(logRecord.Attributes, &common.KeyValue{
+		Key:   "name",
+		Value: &common.AnyValue{Value: &common.AnyValue_StringValue{StringValue: "user_name"}},
+	})
+
+	result, err := TranslateLogsRequest(context.Background(), req, RequestInfo{
+		ApiKey:      "abc123DEF456ghi789jklm",
+		ContentType: "application/protobuf",
+	})
+	assert.Nil(t, err)
+	ev := result.Batches[0].Events[0]
+	assert.Equal(t, "user_name", ev.Attributes["name"])
+	assert.Equal(t, "event_name", ev.Attributes["event.name"])
 }
 
 // Build an OTel Logs request. Provide a valid OTel traceID and spanID, a time for the log entry, and a service name.
