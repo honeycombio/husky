@@ -229,7 +229,7 @@ func (m *msgpAttributes) finalize() ([]byte, error) {
 		if err != nil {
 			return nil, err
 		}
-		keyHash := wyhash.Hash(keyBytes, 0)
+		keyHash := wyhash.Hash(keyBytes, keyHashSeed)
 
 		// Find where the value ends by skipping it
 		afterValue, err := msgp.Skip(remaining)
