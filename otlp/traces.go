@@ -55,7 +55,10 @@ var httpBodyBufferPool = sync.Pool{
 
 var zstdDecoderPool = sync.Pool{
 	New: func() any {
-		reader, _ := zstd.NewReader(nil, zstd.WithDecoderConcurrency(1))
+		reader, _ := zstd.NewReader(nil,
+			zstd.WithDecoderConcurrency(1),
+			zstd.WithDecoderMaxWindow(zstdMaxDecoderWindow),
+		)
 		return reader
 	},
 }
@@ -125,8 +128,7 @@ func TranslateTraceRequestFromReaderSizedWithMsgp(
 		httpBodyBufferPool.Put(bodyBuffer)
 	}()
 
-	_, err := bodyBuffer.ReadFrom(reader)
-	if err != nil {
+	if err := readDecompressed(bodyBuffer, reader, maxSize); err != nil {
 		return nil, fmt.Errorf("%w: %s", ErrFailedParseBody, err)
 	}
 

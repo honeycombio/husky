@@ -53,6 +53,16 @@ const (
 	maxDepth = 5
 
 	defaultMaxRequestBodySize = 20 * 1024 * 1024 // 20MiB
+
+	// zstdMaxDecoderWindow is the largest zstd window a request may declare.
+	// A streaming decoder allocates the declared window before it emits any
+	// output, and the library default allows windows up to 512MiB, so a frame
+	// of a few bytes could otherwise force a large allocation. 8MiB is the
+	// largest window a default-configured encoder emits (klauspost/compress
+	// defaults to an 8MiB window and caps it there, and the OpenTelemetry
+	// Collector's zstd compressor uses those defaults), so this does not
+	// reject traffic from clients that use default settings.
+	zstdMaxDecoderWindow = 8 * 1024 * 1024 // 8MiB
 )
 
 // fieldSizeMax is the maximum size of a field that will be accepted by honeycomb.
@@ -585,16 +595,31 @@ func addAttributeToMapAsJson(attrs map[string]interface{}, key string, value *co
 	return w.truncatedBytes
 }
 
+// readDecompressed reads the decoded body from r into dst, returning an error
+// if it decodes to more than maxSize bytes. A compressed body can expand by
+// orders of magnitude, so the limit has to be applied to the decoded stream
+// rather than to the bytes that arrived on the wire.
+func readDecompressed(dst io.Writer, r io.Reader, maxSize int64) error {
+	n, err := io.Copy(dst, io.LimitReader(r, maxSize+1))
+	if err != nil {
+		return err
+	}
+	if n > maxSize {
+		return fmt.Errorf("decompressed body exceeds maximum size of %d bytes", maxSize)
+	}
+	return nil
+}
+
 func parseOtlpRequestBody(body io.ReadCloser, contentType string, contentEncoding string, request protoreflect.ProtoMessage, maxRequestBodySize int64) error {
 	defer func() {
 		_ = body.Close()
 	}()
 
-	bodyBytes, err := io.ReadAll(body)
+	bodyBytes, err := io.ReadAll(io.LimitReader(body, maxRequestBodySize))
 	if err != nil {
 		return err
 	}
-	bodyReader := io.LimitReader(bytes.NewReader(bodyBytes), maxRequestBodySize)
+	bodyReader := bytes.NewReader(bodyBytes)
 
 	var reader io.Reader
 	switch contentEncoding {
@@ -606,7 +631,7 @@ func parseOtlpRequestBody(body io.ReadCloser, contentType string, contentEncodin
 		defer gzipReader.Close()
 		reader = gzipReader
 	case "zstd":
-		zstdReader, err := zstd.NewReader(bodyReader)
+		zstdReader, err := zstd.NewReader(bodyReader, zstd.WithDecoderMaxWindow(zstdMaxDecoderWindow))
 		if err != nil {
 			return err
 		}
@@ -616,16 +641,17 @@ func parseOtlpRequestBody(body io.ReadCloser, contentType string, contentEncodin
 		reader = bodyReader
 	}
 
-	bytes, err := io.ReadAll(reader)
-	if err != nil {
+	var decoded bytes.Buffer
+	if err := readDecompressed(&decoded, reader, maxRequestBodySize); err != nil {
 		return err
 	}
+	decodedBytes := decoded.Bytes()
 
 	switch contentType {
 	case "application/protobuf", "application/x-protobuf":
-		err = proto.Unmarshal(bytes, request)
+		err = proto.Unmarshal(decodedBytes, request)
 	case "application/json":
-		err = protojson.Unmarshal(bytes, request)
+		err = protojson.Unmarshal(decodedBytes, request)
 	default:
 		return ErrInvalidContentType
 	}
