@@ -77,6 +77,10 @@ func TranslateLogsRequest(ctx context.Context, request *collectorLogs.ExportLogs
 				}
 				if log.EventName != "" {
 					attrs["event.name"] = log.EventName
+					// Span events carry their name in name, so a trace-correlated log event does too
+					if len(log.TraceId) > 0 {
+						attrs["name"] = log.EventName
+					}
 				}
 				if log.Body != nil {
 					// convert the log body to attributes, includes flattening kv pairs into multiple attributes
