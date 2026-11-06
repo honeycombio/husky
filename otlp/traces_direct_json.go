@@ -234,6 +234,21 @@ func skipUndecodableAttribute(ctx context.Context, key []byte, cause error) {
 	})
 }
 
+// parseUnixNanoJSON reads a fixed64 timestamp from JSON. The canonical JSON
+// encoding is a string, but protojson also accepts a number, and
+// GetStringBytes returns nil for a number, so reading only the string form
+// rejected every span in the request.
+func parseUnixNanoJSON(v *fastjson.Value) (uint64, error) {
+	switch v.Type() {
+	case fastjson.TypeNumber:
+		return v.Uint64()
+	case fastjson.TypeString:
+		return strconv.ParseUint(string(v.GetStringBytes()), 10, 64)
+	default:
+		return 0, errors.New("parse error: expected value as a string or a number.")
+	}
+}
+
 // unmarshalAnyValueIntoAttrsJSON parses an AnyValue from JSON and adds it
 // directly to msgpAttributes.
 // Similar to protobuf, JSON OTLP encodes an "AnyValue" as an object with one of
@@ -792,19 +807,15 @@ func unmarshalSpanJSON(
 			}
 
 		case "startTimeUnixNano":
-			// Time is encoded as string in JSON
-			strBytes := v.GetStringBytes()
 			var val uint64
-			val, err = strconv.ParseUint(string(strBytes), 10, 64)
+			val, err = parseUnixNanoJSON(v)
 			if err == nil {
 				startTimeUnixNano = val
 			}
 
 		case "endTimeUnixNano":
-			// Time is encoded as string in JSON
-			strBytes := v.GetStringBytes()
 			var val uint64
-			val, err = strconv.ParseUint(string(strBytes), 10, 64)
+			val, err = parseUnixNanoJSON(v)
 			if err == nil {
 				endTimeUnixNano = val
 			}
@@ -1019,10 +1030,8 @@ func unmarshalSpanEventJSON(
 		}
 		switch string(key) {
 		case "timeUnixNano":
-			// Time is encoded as string in JSON
-			strBytes := v.GetStringBytes()
 			var val uint64
-			val, err = strconv.ParseUint(string(strBytes), 10, 64)
+			val, err = parseUnixNanoJSON(v)
 			if err == nil {
 				timeUnixNano = val
 			}
