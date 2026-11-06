@@ -1,5 +1,20 @@
 # Husky Changelog
 
+## v0.46.0 2026-11-06
+
+### 💡 Enhancements
+
+- feat(otlp): set name from EventName on trace-correlated logs by @MikeGoldsmith in https://github.com/honeycombio/husky/pull/369
+- perf(otlp): dedup attribute keys with a pre-hashed set in finalize by @lizthegrey in https://github.com/honeycombio/husky/pull/366
+
+### 🐛 Fixes
+
+- fix(otlp): bound zstd window and decompressed body size by @lizthegrey in https://github.com/honeycombio/husky/pull/368
+
+### 🛠 Maintenance
+
+- maint(deps): bump the minor-patch group across 1 directory with 10 updates by @dependabot in https://github.com/honeycombio/husky/pull/367
+
 ## v0.45.0 2026-10-23
 
 ### 🐛 Fixes
