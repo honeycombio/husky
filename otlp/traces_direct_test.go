@@ -1915,6 +1915,60 @@ func TestUnmarshalTraceRequestDirectJSON_NestedNumericIntValue(t *testing.T) {
 	assert.Contains(t, attrs["numbers"], "456", "a string intValue must still work")
 }
 
+// Timestamps may arrive as JSON numbers as well as strings; protojson accepts
+// both. Reading only the string form rejected the whole request.
+func TestUnmarshalTraceRequestDirectJSON_NumericTimestamps(t *testing.T) {
+	ctx := context.Background()
+	ri := RequestInfo{
+		ApiKey:      "abc123DEF456ghi789jklm",
+		Dataset:     "test-dataset",
+		ContentType: "application/json",
+	}
+
+	// start 1700000000.000s, end 1.5s later, span event 250ms after the start.
+	payload := func(start, end, eventTime string) string {
+		return `{"resourceSpans":[{"scopeSpans":[{"spans":[{
+			"traceId": "AQIDBAUGAAAAAAAAAAAAAAAAAA==",
+			"spanId": "AQIDBAUGAA==",
+			"name": "test-span",
+			"startTimeUnixNano": ` + start + `,
+			"endTimeUnixNano": ` + end + `,
+			"events": [{"name": "e", "timeUnixNano": ` + eventTime + `}]
+		}]}]}]}`
+	}
+
+	for name, body := range map[string]string{
+		"strings": payload(`"1700000000000000000"`, `"1700000001500000000"`, `"1700000000250000000"`),
+		"numbers": payload(`1700000000000000000`, `1700000001500000000`, `1700000000250000000`),
+		"mixed":   payload(`1700000000000000000`, `"1700000001500000000"`, `1700000000250000000`),
+	} {
+		t.Run(name, func(t *testing.T) {
+			result, err := unmarshalTraceRequestDirectMsgpJSON(ctx, []byte(body), ri)
+			require.NoError(t, err)
+			require.Len(t, result.Batches, 1)
+			require.Len(t, result.Batches[0].Events, 2, "the span and its event")
+
+			for _, ev := range result.Batches[0].Events {
+				attrs := decodeMessagePackAttributes(t, ev.Attributes)
+				switch attrs["name"] {
+				case "test-span":
+					assert.Equal(t, int64(1700000000000000000), ev.Timestamp.UnixNano())
+					assert.EqualValues(t, 1500, attrs["duration_ms"])
+				case "e":
+					assert.Equal(t, int64(1700000000250000000), ev.Timestamp.UnixNano())
+					assert.EqualValues(t, 250, attrs["meta.time_since_span_start_ms"])
+				default:
+					t.Fatalf("unexpected event %v", attrs["name"])
+				}
+			}
+		})
+	}
+
+	// A timestamp that is neither a string nor a number is still an error.
+	_, err := unmarshalTraceRequestDirectMsgpJSON(ctx, []byte(payload(`true`, `"1"`, `"1"`)), ri)
+	require.Error(t, err)
+}
+
 // Attributes that previously failed the request appear at every level, so check
 // a payload carrying several at once still yields its spans.
 func TestUnmarshalTraceRequestDirectJSON_SkipsUndecodableAttributesEverywhere(t *testing.T) {
