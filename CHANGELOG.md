@@ -1,5 +1,11 @@
 # Husky Changelog
 
+## v0.47.0 2026-11-12
+
+### 🐛 Fixes
+
+- fix(otlp): accept numeric timestamps in JSON trace requests by @MikeGoldsmith in https://github.com/honeycombio/husky/pull/371
+
 ## v0.46.0 2026-11-06
 
 ### 💡 Enhancements
