@@ -195,9 +195,13 @@ func TranslateTraceRequest(ctx context.Context, request *collectorTrace.ExportTr
 					"span.num_events":  len(span.Events),
 					"meta.signal_type": "trace",
 				}
-				duration := float64(span.EndTimeUnixNano-span.StartTimeUnixNano) / float64(time.Millisecond)
-				if duration < 0 {
-					duration = 0
+				// The timestamps are unsigned, so check the order before subtracting.
+				// Otherwise an end time before the start time wraps around to a huge
+				// positive duration instead of being flagged as invalid.
+				duration := float64(0)
+				if span.EndTimeUnixNano >= span.StartTimeUnixNano {
+					duration = float64(span.EndTimeUnixNano-span.StartTimeUnixNano) / float64(time.Millisecond)
+				} else {
 					eventAttrs["meta.invalid_duration"] = true
 				}
 				eventAttrs["duration_ms"] = duration
@@ -244,9 +248,10 @@ func TranslateTraceRequest(ctx context.Context, request *collectorTrace.ExportTr
 						"meta.signal_type":     "trace",
 					}
 					// calculate time since span start for querying capabilities
-					time_since_span_start := float64(sevent.TimeUnixNano-span.StartTimeUnixNano) / float64(time.Millisecond)
-					if time_since_span_start < 0 {
-						time_since_span_start = 0
+					time_since_span_start := float64(0)
+					if sevent.TimeUnixNano >= span.StartTimeUnixNano {
+						time_since_span_start = float64(sevent.TimeUnixNano-span.StartTimeUnixNano) / float64(time.Millisecond)
+					} else {
 						attrs["meta.invalid_time_since_span_start"] = true
 					}
 					attrs["meta.time_since_span_start_ms"] = time_since_span_start
