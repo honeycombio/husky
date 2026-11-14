@@ -1494,6 +1494,46 @@ func TestTranslateTraceRequest_SchemaURL(t *testing.T) {
 	assert.Equal(t, scopeSchemaURL, attrs["scope.schema_url"])
 }
 
+func TestTranslateTraceRequest_EndBeforeStart(t *testing.T) {
+	traceID := test.RandomBytes(16)
+	spanID := test.RandomBytes(8)
+	start := time.Now()
+
+	req := &collectortrace.ExportTraceServiceRequest{
+		ResourceSpans: []*trace.ResourceSpans{{
+			ScopeSpans: []*trace.ScopeSpans{{
+				Spans: []*trace.Span{{
+					TraceId:           traceID,
+					SpanId:            spanID,
+					Name:              "skewed-span",
+					StartTimeUnixNano: uint64(start.UnixNano()),
+					EndTimeUnixNano:   uint64(start.Add(-5 * time.Millisecond).UnixNano()),
+					Events: []*trace.Span_Event{{
+						Name:         "early-event",
+						TimeUnixNano: uint64(start.Add(-time.Second).UnixNano()),
+					}},
+				}},
+			}},
+		}},
+	}
+
+	ri := RequestInfo{ApiKey: "abc123DEF456ghi789jklm", Dataset: "test", ContentType: "application/protobuf"}
+	result, err := TranslateTraceRequest(context.Background(), req, ri)
+	require.NoError(t, err)
+	require.Len(t, result.Batches, 1)
+	require.Len(t, result.Batches[0].Events, 2)
+
+	spanEvent := result.Batches[0].Events[0].Attributes
+	assert.Equal(t, "early-event", spanEvent["name"])
+	assert.Equal(t, float64(0), spanEvent["meta.time_since_span_start_ms"])
+	assert.Equal(t, true, spanEvent["meta.invalid_time_since_span_start"])
+
+	span := result.Batches[0].Events[1].Attributes
+	assert.Equal(t, "skewed-span", span["name"])
+	assert.Equal(t, float64(0), span["duration_ms"])
+	assert.Equal(t, true, span["meta.invalid_duration"])
+}
+
 // TranslateTraceRequest calls the split validators, so a migrated environment
 // works through translation even for callers whose gRPC handler never calls
 // a validator themselves.
