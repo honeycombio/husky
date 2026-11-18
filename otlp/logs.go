@@ -107,7 +107,13 @@ func TranslateLogsRequest(ctx context.Context, request *collectorLogs.ExportLogs
 
 				// Now we need to wrap the eventAttrs in an event so we can specify the timestamp
 				// which is the StartTime as a time.Time object
-				timestamp := time.Unix(0, int64(log.TimeUnixNano)).UTC()
+				// The data model says to fall back to the observed time when the
+				// record carries no timestamp of its own.
+				timeUnixNano := log.TimeUnixNano
+				if timeUnixNano == 0 {
+					timeUnixNano = log.ObservedTimeUnixNano
+				}
+				timestamp := time.Unix(0, int64(timeUnixNano)).UTC()
 				events = append(events, Event{
 					Attributes: attrs,
 					Timestamp:  timestamp,

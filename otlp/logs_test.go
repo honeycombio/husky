@@ -681,3 +681,37 @@ func TestTranslateLogsRequest_SchemaURL(t *testing.T) {
 	assert.Equal(t, resourceSchemaURL, attrs["resource.schema_url"])
 	assert.Equal(t, scopeSchemaURL, attrs["scope.schema_url"])
 }
+
+func TestTranslateLogsRequest_ObservedTimestampFallback(t *testing.T) {
+	observed := time.Date(2026, 11, 1, 12, 0, 0, 0, time.UTC)
+	timestamp := time.Date(2026, 11, 1, 11, 0, 0, 0, time.UTC)
+
+	req := &collectorlogs.ExportLogsServiceRequest{
+		ResourceLogs: []*logs.ResourceLogs{{
+			ScopeLogs: []*logs.ScopeLogs{{
+				LogRecords: []*logs.LogRecord{
+					{
+						// no timestamp, only the time the collector observed it
+						ObservedTimeUnixNano: uint64(observed.UnixNano()),
+						SeverityNumber:       logs.SeverityNumber_SEVERITY_NUMBER_INFO,
+					},
+					{
+						// an explicit timestamp wins over the observed time
+						TimeUnixNano:         uint64(timestamp.UnixNano()),
+						ObservedTimeUnixNano: uint64(observed.UnixNano()),
+						SeverityNumber:       logs.SeverityNumber_SEVERITY_NUMBER_INFO,
+					},
+				},
+			}},
+		}},
+	}
+
+	ri := RequestInfo{ApiKey: "abc123DEF456ghi789jklm", Dataset: "test", ContentType: "application/protobuf"}
+	result, err := TranslateLogsRequest(context.Background(), req, ri)
+	require.NoError(t, err)
+	require.Len(t, result.Batches, 1)
+	require.Len(t, result.Batches[0].Events, 2)
+
+	assert.Equal(t, observed, result.Batches[0].Events[0].Timestamp)
+	assert.Equal(t, timestamp, result.Batches[0].Events[1].Timestamp)
+}
