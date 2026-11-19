@@ -1,5 +1,12 @@
 # Husky Changelog
 
+## v0.47.1 2026-11-19
+
+### 🐛 Fixes
+
+- fix(otlp): use the observed time for logs that have no timestamp by @vignesh2027 in https://github.com/honeycombio/husky/pull/374
+- fix(otlp): flag spans and events that end before they start by @vignesh2027 in https://github.com/honeycombio/husky/pull/373
+
 ## v0.47.0 2026-11-12
 
 ### 🐛 Fixes
