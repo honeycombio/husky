@@ -893,14 +893,6 @@ func TestUnmarshalTraceRequestDirect_Complete(t *testing.T) {
 				require.NoError(t, err)
 				assert.NotNil(t, regularResult)
 
-				// TODO: Fix these bugs in the regular unmarshaling (traces.go):
-				// 1. Negative duration calculation causes unsigned integer overflow
-				//    - When endTime < startTime, should set duration_ms=0 and meta.invalid_duration=true
-				//    - Currently produces huge positive values like 1.8446744072845355e+13
-				// 2. Negative time_since_span_start calculation causes unsigned integer overflow
-				//    - When event time < span start time, should set time=0 and meta.invalid_time_since_span_start=true
-				//    - Currently produces huge positive values like 1.844674407360955e+13
-
 				// RequestSize will be different for JSON vs protobuf
 				if tc.contentType == "application/json" {
 					assert.Less(t, regularResult.RequestSize, result.RequestSize)
@@ -940,34 +932,17 @@ func TestUnmarshalTraceRequestDirect_Complete(t *testing.T) {
 								// Event struct's SampleRate field.
 								delete(regularEvent.Attributes, "sampleRate")
 
-								// Compare attributes
-								// Check for known discrepancies that are actually improvements in the direct implementation
-								if i == 0 && j == 5 { // First exception event
-									// The direct implementation correctly handles negative time_since_span_start
-									// Regular: meta.time_since_span_start_ms = 1.844674407360955e+13 (overflow)
-									// Direct: meta.time_since_span_start_ms = 0 + meta.invalid_time_since_span_start = true
+								if i == 0 && j == 5 { // First exception event, timestamped before its span
 									assert.Equal(t, float64(0), directEvent.Attributes["meta.time_since_span_start_ms"])
 									assert.Equal(t, true, directEvent.Attributes["meta.invalid_time_since_span_start"])
-									// Remove the fields that differ to check the rest
-									delete(regularEvent.Attributes, "meta.time_since_span_start_ms")
-									delete(directEvent.Attributes, "meta.time_since_span_start_ms")
-									delete(directEvent.Attributes, "meta.invalid_time_since_span_start")
 								}
 								if i == 0 && j == 8 { // Error span with negative duration
-									// The direct implementation correctly handles negative duration
-									// Regular: duration_ms = 1.8446744072845355e+13 (overflow)
-									// Direct: duration_ms = 0 + meta.invalid_duration = true
 									assert.Equal(t, float64(0), directEvent.Attributes["duration_ms"])
 									assert.Equal(t, true, directEvent.Attributes["meta.invalid_duration"])
-									// Remove the fields that differ to check the rest
-									delete(regularEvent.Attributes, "duration_ms")
-									delete(directEvent.Attributes, "duration_ms")
-									delete(directEvent.Attributes, "meta.invalid_duration")
 								}
 
-								// Now compare the remaining attributes
 								assert.Equal(t, regularEvent.Attributes, directEvent.Attributes,
-									"Batch %d Event %d attributes mismatch (after removing known improvements)", i, j)
+									"Batch %d Event %d attributes mismatch", i, j)
 							})
 						}
 					})
