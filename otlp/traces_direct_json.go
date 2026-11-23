@@ -356,7 +356,7 @@ func unmarshalAnyValueIntoAttrsJSON(
 				"kvlist_max_depth":          depth,
 			})
 
-			if depth < maxDepth {
+			if depth < maxKVListDepth {
 				// Flatten the kvlist
 				if err = unmarshalKvlistValueFlattenJSON(ctx, v, key, attrs, depth+1); err != nil {
 					return

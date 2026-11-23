@@ -7,6 +7,7 @@ import (
 	"io"
 	"math"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -18,6 +19,7 @@ import (
 	resource "go.opentelemetry.io/proto/otlp/resource/v1"
 	trace "go.opentelemetry.io/proto/otlp/trace/v1"
 	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/encoding/protowire"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -1087,8 +1089,8 @@ func createNestedMapWithAnyValue(depth int, leafValue *common.AnyValue) *common.
 func TestUnmarshalTraceRequestDirect_NestedMapAttributes(t *testing.T) {
 	// Test nested map attribute flattening at various depths
 	// Expected behavior:
-	// - Maps are flattened with dot notation up to maxDepth (5)
-	// - When a kvlist is encountered at depth >= maxDepth, it's JSON encoded
+	// - Maps are flattened with dot notation up to maxKVListDepth (5)
+	// - When a kvlist is encountered at depth >= maxKVListDepth, it's JSON encoded
 	// - This means we can have up to 6 segments in a flattened path (0-5 depth levels)
 	// - Example: map6.level6.level5.level4.level3.level2 is 6 segments (depths 0-5)
 	//   The value at level2 (a kvlist containing level1) is JSON encoded
@@ -2162,4 +2164,90 @@ func TestUnmarshalTraceRequestDirectMsgpHonorsClassicMigratedEnvironment(t *test
 	classic := RequestInfo{ApiKey: classicKey, EnvironmentName: "", Dataset: "", ContentType: "application/protobuf"}
 	_, err = UnmarshalTraceRequestDirectMsgp(context.Background(), nil, classic)
 	assert.EqualError(t, err, ErrMissingDatasetHeader.Error(), "classic env, no dataset header: translation still rejects")
+}
+
+// nestedAnyValue returns an AnyValue nested levels deep in arrays or kvlists
+// around a string leaf. It is written with protowire because proto.Marshal
+// recurses too, and the sizes are worked out first so the build is linear.
+func nestedAnyValue(levels int, kvlist bool) []byte {
+	leaf := protowire.AppendBytes(protowire.AppendTag(nil, 1, protowire.BytesType), []byte("leaf"))
+	key := protowire.AppendBytes(protowire.AppendTag(nil, 1, protowire.BytesType), []byte("k"))
+
+	// Array level: AnyValue{array_value(5): ArrayValue{values(1): inner}}.
+	// Kvlist level: AnyValue{kvlist_value(6): KeyValueList{values(1): KeyValue{key(1), value(2): inner}}}.
+	// headers[i] holds the (field, size) pairs that wrap level i's inner value, outermost first.
+	type header struct {
+		field protowire.Number
+		size  int
+	}
+	headers := make([][]header, levels)
+	size := len(leaf)
+	for i := levels - 1; i >= 0; i-- {
+		if kvlist {
+			kv := len(key) + 1 + protowire.SizeBytes(size)
+			list := 1 + protowire.SizeBytes(kv)
+			headers[i] = []header{{6, list}, {1, kv}, {2, size}}
+			size = 1 + protowire.SizeBytes(list)
+		} else {
+			arr := 1 + protowire.SizeBytes(size)
+			headers[i] = []header{{5, arr}, {1, size}}
+			size = 1 + protowire.SizeBytes(arr)
+		}
+	}
+
+	buf := make([]byte, 0, size)
+	for _, hs := range headers {
+		for j, h := range hs {
+			if kvlist && j == 2 {
+				buf = append(buf, key...)
+			}
+			buf = protowire.AppendTag(buf, h.field, protowire.BytesType)
+			buf = protowire.AppendVarint(buf, uint64(h.size))
+		}
+	}
+	return append(buf, leaf...)
+}
+
+func TestUnmarshalTraceRequestDirect_LimitsAttributeNesting(t *testing.T) {
+	span, err := proto.Marshal(&trace.Span{
+		TraceId: hexToBin("0102030405060708090a0b0c0d0e0f10"),
+		SpanId:  hexToBin("0102030405060708"),
+		Name:    "deep",
+	})
+	require.NoError(t, err)
+
+	request := func(value []byte) []byte {
+		kv := protowire.AppendBytes(protowire.AppendTag(nil, 1, protowire.BytesType), []byte("deep"))
+		kv = protowire.AppendBytes(protowire.AppendTag(kv, 2, protowire.BytesType), value)
+		s := protowire.AppendBytes(protowire.AppendTag(slices.Clone(span), 9, protowire.BytesType), kv)
+		scope := protowire.AppendBytes(protowire.AppendTag(nil, 2, protowire.BytesType), s)
+		rs := protowire.AppendBytes(protowire.AppendTag(nil, 2, protowire.BytesType), scope)
+		return protowire.AppendBytes(protowire.AppendTag(nil, 1, protowire.BytesType), rs)
+	}
+	ri := RequestInfo{
+		ApiKey:      "abc123DEF456ghi789jklm",
+		Dataset:     "test-dataset",
+		ContentType: "application/protobuf",
+	}
+
+	for _, kvlist := range []bool{false, true} {
+		t.Run(fmt.Sprintf("kvlist=%v", kvlist), func(t *testing.T) {
+			result, err := UnmarshalTraceRequestDirectMsgp(context.Background(), request(nestedAnyValue(maxAnyValueDepth, kvlist)), ri)
+			require.NoError(t, err)
+			require.Len(t, result.Batches, 1)
+			require.Len(t, result.Batches[0].Events, 1)
+			attrs := decodeMessagePackAttributes(t, result.Batches[0].Events[0].Attributes)
+			assert.Equal(t, "deep", attrs["name"])
+			var deep strings.Builder
+			for k, v := range attrs {
+				if strings.HasPrefix(k, "deep") {
+					fmt.Fprint(&deep, v)
+				}
+			}
+			assert.Contains(t, deep.String(), "leaf", "the whole nested value is kept")
+
+			_, err = UnmarshalTraceRequestDirectMsgp(context.Background(), request(nestedAnyValue(maxAnyValueDepth+1, kvlist)), ri)
+			assert.ErrorIs(t, err, errAnyValueTooDeep)
+		})
+	}
 }

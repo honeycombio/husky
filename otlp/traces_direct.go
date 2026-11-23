@@ -103,6 +103,8 @@ var (
 	ErrInvalidLength        = fmt.Errorf("proto: negative length found during unmarshaling")
 	ErrIntOverflow          = fmt.Errorf("proto: integer overflow")
 	ErrUnexpectedEndOfGroup = fmt.Errorf("proto: unexpected end of group")
+
+	errAnyValueTooDeep = fmt.Errorf("proto: attribute value nested more than %d levels", maxAnyValueDepth)
 )
 
 type TranslateOTLPRequestResultMsgp struct {
@@ -733,7 +735,7 @@ func processValueDirect(
 			"received_kvlist_attr_type": true,
 			"kvlist_max_depth":          depth,
 		})
-		if depth < maxDepth {
+		if depth < maxKVListDepth {
 			// Flatten the kvlist
 			for k, v := range v {
 				// Tricky: we can't just append to key, since key most likely
@@ -862,7 +864,7 @@ func unmarshalKeyValue(ctx context.Context, data []byte, attrs *msgpAttributes, 
 
 			default:
 				// For complex types (array, kvlist, bytes), fall back to unmarshalAnyValue
-				value, err := unmarshalAnyValue(ctx, valueBytes)
+				value, err := unmarshalAnyValue(ctx, valueBytes, 0)
 				if err != nil {
 					return err
 				}
@@ -876,8 +878,10 @@ func unmarshalKeyValue(ctx context.Context, data []byte, attrs *msgpAttributes, 
 	return nil
 }
 
-// unmarshalAnyValue parses an AnyValue message
-func unmarshalAnyValue(ctx context.Context, data []byte) (any, error) {
+// unmarshalAnyValue parses an AnyValue message. depth counts the arrays and
+// kvlists that enclose it; parsing fails once it reaches maxAnyValueDepth, so
+// crafted input cannot recurse until the stack overflows.
+func unmarshalAnyValue(ctx context.Context, data []byte, depth int) (any, error) {
 	l := len(data)
 	iNdEx := 0
 	var result any
@@ -928,8 +932,11 @@ func unmarshalAnyValue(ctx context.Context, data []byte) (any, error) {
 			if err != nil {
 				return nil, err
 			}
+			if depth >= maxAnyValueDepth {
+				return nil, errAnyValueTooDeep
+			}
 			// Parse ArrayValue message and return as []any
-			arr, err := unmarshalArrayValue(ctx, slice)
+			arr, err := unmarshalArrayValue(ctx, slice, depth+1)
 			if err != nil {
 				return nil, err
 			}
@@ -940,8 +947,11 @@ func unmarshalAnyValue(ctx context.Context, data []byte) (any, error) {
 			if err != nil {
 				return nil, err
 			}
+			if depth >= maxAnyValueDepth {
+				return nil, errAnyValueTooDeep
+			}
 			// Parse KeyValueList message and return as map[string]any
-			m, err := unmarshalKvlistValue(ctx, slice)
+			m, err := unmarshalKvlistValue(ctx, slice, depth+1)
 			if err != nil {
 				return nil, err
 			}
@@ -969,7 +979,7 @@ func unmarshalAnyValue(ctx context.Context, data []byte) (any, error) {
 }
 
 // unmarshalArrayValue parses an ArrayValue message and returns []any
-func unmarshalArrayValue(ctx context.Context, data []byte) ([]any, error) {
+func unmarshalArrayValue(ctx context.Context, data []byte, depth int) ([]any, error) {
 	var values []any
 	l := len(data)
 	iNdEx := 0
@@ -992,7 +1002,7 @@ func unmarshalArrayValue(ctx context.Context, data []byte) ([]any, error) {
 				return nil, err
 			}
 			// Parse AnyValue
-			val, err := unmarshalAnyValue(ctx, slice)
+			val, err := unmarshalAnyValue(ctx, slice, depth)
 			if err != nil {
 				return nil, err
 			}
@@ -1011,7 +1021,7 @@ func unmarshalArrayValue(ctx context.Context, data []byte) ([]any, error) {
 }
 
 // unmarshalKeyValueToMap parses a KeyValue message and adds it to a map
-func unmarshalKeyValueToMap(ctx context.Context, data []byte, result map[string]any) error {
+func unmarshalKeyValueToMap(ctx context.Context, data []byte, result map[string]any, depth int) error {
 	key, valueBytes, err := parseKeyValue(data)
 	if err != nil {
 		return err
@@ -1020,7 +1030,7 @@ func unmarshalKeyValueToMap(ctx context.Context, data []byte, result map[string]
 	// KeyValue messages should have both key and value
 	if len(key) > 0 && len(valueBytes) > 0 {
 		// Parse the value from bytes
-		value, err := unmarshalAnyValue(ctx, valueBytes)
+		value, err := unmarshalAnyValue(ctx, valueBytes, depth)
 		if err != nil {
 			return err
 		}
@@ -1032,7 +1042,7 @@ func unmarshalKeyValueToMap(ctx context.Context, data []byte, result map[string]
 }
 
 // unmarshalKvlistValue parses a KeyValueList message and returns map[string]any
-func unmarshalKvlistValue(ctx context.Context, data []byte) (map[string]any, error) {
+func unmarshalKvlistValue(ctx context.Context, data []byte, depth int) (map[string]any, error) {
 	result := make(map[string]any)
 	l := len(data)
 	iNdEx := 0
@@ -1055,7 +1065,7 @@ func unmarshalKvlistValue(ctx context.Context, data []byte) (map[string]any, err
 				return nil, err
 			}
 			// Parse KeyValue and add to map
-			if err := unmarshalKeyValueToMap(ctx, slice, result); err != nil {
+			if err := unmarshalKeyValueToMap(ctx, slice, result, depth); err != nil {
 				return nil, err
 			}
 
@@ -1652,7 +1662,7 @@ func parseExceptionAttributesForReturn(
 
 	if len(key) > 0 && len(valueBytes) > 0 {
 		// Parse the value from bytes
-		value, err := unmarshalAnyValue(ctx, valueBytes)
+		value, err := unmarshalAnyValue(ctx, valueBytes, 0)
 		if err != nil {
 			return err
 		}
