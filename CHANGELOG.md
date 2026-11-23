@@ -1,5 +1,11 @@
 # Husky Changelog
 
+## v0.47.2 2026-11-23
+
+### 🐛 Fixes
+
+- fix(otlp): limit attribute value nesting in direct trace parsing by @MikeGoldsmith in https://github.com/honeycombio/husky/pull/377
+
 ## v0.47.1 2026-11-19
 
 ### 🐛 Fixes
