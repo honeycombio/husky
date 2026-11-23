@@ -52,6 +52,11 @@ const (
 	// If the depth is exceeded, the attribute should be added as a JSON string instead.
 	maxDepth = 5
 
+	// maxAnyValueNesting is how deeply arrays and kvlists may nest inside an
+	// attribute value before the direct trace parser rejects the request. It
+	// matches the recursion limit of the protobuf library used for logs.
+	maxAnyValueNesting = 10000
+
 	defaultMaxRequestBodySize = 20 * 1024 * 1024 // 20MiB
 
 	// zstdMaxDecoderWindow is the largest zstd window a request may declare.
