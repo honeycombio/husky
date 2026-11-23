@@ -104,7 +104,7 @@ var (
 	ErrIntOverflow          = fmt.Errorf("proto: integer overflow")
 	ErrUnexpectedEndOfGroup = fmt.Errorf("proto: unexpected end of group")
 
-	errAnyValueTooDeep = fmt.Errorf("proto: attribute value nested more than %d levels", maxAnyValueNesting)
+	errAnyValueTooDeep = fmt.Errorf("proto: attribute value nested more than %d levels", maxAnyValueDepth)
 )
 
 type TranslateOTLPRequestResultMsgp struct {
@@ -735,7 +735,7 @@ func processValueDirect(
 			"received_kvlist_attr_type": true,
 			"kvlist_max_depth":          depth,
 		})
-		if depth < maxDepth {
+		if depth < maxKVListDepth {
 			// Flatten the kvlist
 			for k, v := range v {
 				// Tricky: we can't just append to key, since key most likely
@@ -879,7 +879,7 @@ func unmarshalKeyValue(ctx context.Context, data []byte, attrs *msgpAttributes, 
 }
 
 // unmarshalAnyValue parses an AnyValue message. depth counts the arrays and
-// kvlists that enclose it; parsing fails once it reaches maxAnyValueNesting, so
+// kvlists that enclose it; parsing fails once it reaches maxAnyValueDepth, so
 // crafted input cannot recurse until the stack overflows.
 func unmarshalAnyValue(ctx context.Context, data []byte, depth int) (any, error) {
 	l := len(data)
@@ -932,7 +932,7 @@ func unmarshalAnyValue(ctx context.Context, data []byte, depth int) (any, error)
 			if err != nil {
 				return nil, err
 			}
-			if depth >= maxAnyValueNesting {
+			if depth >= maxAnyValueDepth {
 				return nil, errAnyValueTooDeep
 			}
 			// Parse ArrayValue message and return as []any
@@ -947,7 +947,7 @@ func unmarshalAnyValue(ctx context.Context, data []byte, depth int) (any, error)
 			if err != nil {
 				return nil, err
 			}
-			if depth >= maxAnyValueNesting {
+			if depth >= maxAnyValueDepth {
 				return nil, errAnyValueTooDeep
 			}
 			// Parse KeyValueList message and return as map[string]any

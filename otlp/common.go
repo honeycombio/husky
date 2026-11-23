@@ -48,14 +48,14 @@ const (
 	attrResourceSchemaURL = "resource.schema_url"
 	attrScopeSchemaURL    = "scope.schema_url"
 
-	// maxDepth is the maximum depth of a nested kvlist attribute that will be flattened.
+	// maxKVListDepth is the maximum depth of a nested kvlist attribute that will be flattened.
 	// If the depth is exceeded, the attribute should be added as a JSON string instead.
-	maxDepth = 5
+	maxKVListDepth = 5
 
-	// maxAnyValueNesting is how deeply arrays and kvlists may nest inside an
+	// maxAnyValueDepth is how deeply arrays and kvlists may nest inside an
 	// attribute value before the direct trace parser rejects the request. It
 	// matches the recursion limit of the protobuf library used for logs.
-	maxAnyValueNesting = 10000
+	maxAnyValueDepth = 10000
 
 	defaultMaxRequestBodySize = 20 * 1024 * 1024 // 20MiB
 
@@ -398,7 +398,7 @@ func getValueFromMetadata(md metadata.MD, key string) string {
 
 // AddAttributesToMap adds attributes to a map, extracting the underlying attribute data type.
 // Supported types are string, bool, double, int, bytes, array, and kvlist.
-// kvlist attributes are flattened to a depth of (maxDepth), if the depth is exceeded, the attribute is added as a JSON string.
+// kvlist attributes are flattened to a depth of (maxKVListDepth), if the depth is exceeded, the attribute is added as a JSON string.
 // Bytes and array values are always added as JSON strings.
 func AddAttributesToMap(ctx context.Context, attrs map[string]interface{}, attributes []*common.KeyValue) {
 	for _, attr := range attributes {
@@ -538,7 +538,7 @@ func getMarshallableValue(value *common.AnyValue) interface{} {
 
 // addAttributeToMap adds an attribute to a map, extracting the underlying attribute data type.
 // Supported types are string, bool, double, int, bytes, array, and kvlist.
-// kvlist attributes are flattened to a depth of (maxDepth), if the depth is exceeded, the attribute is added as a JSON string.
+// kvlist attributes are flattened to a depth of (maxKVListDepth), if the depth is exceeded, the attribute is added as a JSON string.
 // Bytes and array values are always added as JSON strings.
 func addAttributeToMap(ctx context.Context, result map[string]interface{}, key string, value *common.AnyValue, depth int) {
 	if value == nil {
@@ -564,7 +564,7 @@ func addAttributeToMap(ctx context.Context, result map[string]interface{}, key s
 			"received_kvlist_attr_type": true,
 			"kvlist_max_depth":          depth,
 		})
-		if depth >= maxDepth {
+		if depth >= maxKVListDepth {
 			// If we've reached max depth, encode the entire kvlist as JSON
 			addAttributeToMapAsJson(result, key, value)
 		} else {

@@ -1089,8 +1089,8 @@ func createNestedMapWithAnyValue(depth int, leafValue *common.AnyValue) *common.
 func TestUnmarshalTraceRequestDirect_NestedMapAttributes(t *testing.T) {
 	// Test nested map attribute flattening at various depths
 	// Expected behavior:
-	// - Maps are flattened with dot notation up to maxDepth (5)
-	// - When a kvlist is encountered at depth >= maxDepth, it's JSON encoded
+	// - Maps are flattened with dot notation up to maxKVListDepth (5)
+	// - When a kvlist is encountered at depth >= maxKVListDepth, it's JSON encoded
 	// - This means we can have up to 6 segments in a flattened path (0-5 depth levels)
 	// - Example: map6.level6.level5.level4.level3.level2 is 6 segments (depths 0-5)
 	//   The value at level2 (a kvlist containing level1) is JSON encoded
@@ -2232,7 +2232,7 @@ func TestUnmarshalTraceRequestDirect_LimitsAttributeNesting(t *testing.T) {
 
 	for _, kvlist := range []bool{false, true} {
 		t.Run(fmt.Sprintf("kvlist=%v", kvlist), func(t *testing.T) {
-			result, err := UnmarshalTraceRequestDirectMsgp(context.Background(), request(nestedAnyValue(maxAnyValueNesting, kvlist)), ri)
+			result, err := UnmarshalTraceRequestDirectMsgp(context.Background(), request(nestedAnyValue(maxAnyValueDepth, kvlist)), ri)
 			require.NoError(t, err)
 			require.Len(t, result.Batches, 1)
 			require.Len(t, result.Batches[0].Events, 1)
@@ -2246,7 +2246,7 @@ func TestUnmarshalTraceRequestDirect_LimitsAttributeNesting(t *testing.T) {
 			}
 			assert.Contains(t, deep.String(), "leaf", "the whole nested value is kept")
 
-			_, err = UnmarshalTraceRequestDirectMsgp(context.Background(), request(nestedAnyValue(maxAnyValueNesting+1, kvlist)), ri)
+			_, err = UnmarshalTraceRequestDirectMsgp(context.Background(), request(nestedAnyValue(maxAnyValueDepth+1, kvlist)), ri)
 			assert.ErrorIs(t, err, errAnyValueTooDeep)
 		})
 	}
