@@ -999,6 +999,22 @@ func TestOTelSamplingThreshold(t *testing.T) {
 	}
 }
 
+func TestOTelSamplingThreshold_CapsHugeAdjustedCount(t *testing.T) {
+	// These thresholds sample far less than 1 in 2^31 events, so the
+	// adjusted count is larger than any int32 sample rate.
+	for _, traceState := range []string{
+		"ot=th:ffffffffffffff",
+		"ot=th:fffffffff",
+		"th=ffffffffffffff",
+	} {
+		t.Run(traceState, func(t *testing.T) {
+			sampleRate, ok := getSampleRateFromOTelSamplingThreshold(traceState)
+			assert.True(t, ok)
+			assert.Equal(t, int32(math.MaxInt32), sampleRate)
+		})
+	}
+}
+
 func TestOTelSamplingThreshold_NewFormat(t *testing.T) {
 	tests := []struct {
 		name        string

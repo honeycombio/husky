@@ -877,20 +877,27 @@ func getSampleRateFromOTelSamplingThreshold(traceState string) (int32, bool) {
 	// or 11 (with 80% probability).
 	// The net effect is that effective sample rate over a large number of samples will approximate
 	// the adjusted count.
-	locount := int32(math.Floor(t.AdjustedCount()))
+	adjustedCount := t.AdjustedCount()
+	// A threshold below 2^-31 gives an adjusted count that does not fit in
+	// an int32, and converting such a float is implementation defined (it
+	// yields the most negative int32 on amd64). Cap it instead.
+	if adjustedCount >= math.MaxInt32 {
+		return math.MaxInt32, true
+	}
+	locount := int32(math.Floor(adjustedCount))
 	// if we're over 100, we're within 1% of the adjusted count so don't bother
 	// doing the randomization. This is a performance optimization.
 	if locount > 100 {
 		return locount, true
 	}
-	hicount := int32(math.Ceil(t.AdjustedCount()))
+	hicount := int32(math.Ceil(adjustedCount))
 	// if hicount == locount, then we don't need to randomize
 	if hicount == locount {
 		return locount, true
 	}
 
 	// Calculate the probability of getting the higher count based on the adjusted count
-	prob := t.AdjustedCount() - float64(locount)
+	prob := adjustedCount - float64(locount)
 	// Generate a random number between 0 and 1
 	if rand.Float64() < prob {
 		// return the higher count
