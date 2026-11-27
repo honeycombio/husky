@@ -116,6 +116,14 @@ func TranslateTraceRequestFromReaderSizedWithMsgp(
 		}
 
 		reader = zstdReader
+	case "snappy":
+		snappyReader, err := newSnappyReader(reader, maxSize)
+		if err != nil {
+			return nil, fmt.Errorf("%w: %s", ErrFailedParseBody, err)
+		}
+		reader = snappyReader
+	case "x-snappy-framed":
+		reader = newSnappyFramedReader(reader)
 	case "":
 		// cool
 	default:

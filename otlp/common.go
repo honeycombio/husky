@@ -82,7 +82,7 @@ var (
 		"application/json",
 	}
 	// Incoming Content-Encodings we support. "" included as a stand in for "not given, assume uncompressed"
-	supportedContentEncodings = []string{"", "gzip", "zstd"}
+	supportedContentEncodings = []string{"", "gzip", "zstd", "snappy", "x-snappy-framed"}
 
 	// Use json-iterator for better performance
 	json = jsoniter.ConfigCompatibleWithStandardLibrary
@@ -642,6 +642,14 @@ func parseOtlpRequestBody(body io.ReadCloser, contentType string, contentEncodin
 		}
 		defer zstdReader.Close()
 		reader = zstdReader
+	case "snappy":
+		snappyReader, err := newSnappyReader(bodyReader, maxRequestBodySize)
+		if err != nil {
+			return err
+		}
+		reader = snappyReader
+	case "x-snappy-framed":
+		reader = newSnappyFramedReader(bodyReader)
 	default:
 		reader = bodyReader
 	}
