@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/klauspost/compress/snappy"
 	"github.com/klauspost/compress/zstd"
 	"github.com/stretchr/testify/require"
 	"github.com/tinylib/msgp/msgp"
@@ -62,6 +63,12 @@ func encodeBody(body []byte, encoding string) (string, error) {
 		w.Close()
 	case "zstd":
 		w, _ := zstd.NewWriter(encodedBytes)
+		w.Write(body)
+		w.Close()
+	case "snappy":
+		encodedBytes.Write(snappy.Encode(nil, body))
+	case "x-snappy-framed":
+		w := snappy.NewBufferedWriter(encodedBytes)
 		w.Write(body)
 		w.Close()
 	default:
